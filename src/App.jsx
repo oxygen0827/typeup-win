@@ -1,0 +1,752 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  Cloud,
+  Cpu,
+  FileText,
+  Languages,
+  Mic,
+  Pause,
+  Play,
+  RefreshCw,
+  Save,
+  Settings,
+  SlidersHorizontal,
+  Square,
+  WandSparkles,
+} from "lucide-react";
+import mark from "./assets/typeup-mark.svg";
+
+const STATUS_COPY = {
+  zh: {
+    stopped: { label: "已停止", title: "本地引擎已停止", detail: "点击启动后，TypeUp 会回到后台等待语音输入。", tone: "muted" },
+    stopping: { label: "停止中", title: "正在停止引擎", detail: "正在释放麦克风和键盘监听。", tone: "muted" },
+    starting: { label: "启动中", title: "正在启动本地引擎", detail: "正在加载语音、输入和 AI 编辑模块。", tone: "warn" },
+    listening: { label: "就绪", title: "按下 ALT 开始说话", detail: "松开后自动转写并输入到当前光标位置。", tone: "ok" },
+    transcribing: { label: "处理中", title: "正在转写或编辑", detail: "结果完成后会自动写入当前窗口。", tone: "active" },
+    needs_config: { label: "等待配置", title: "需要填写 STT Key", detail: "保存配置后会自动重启本地引擎。", tone: "warn" },
+    error: { label: "异常", title: "本地引擎遇到问题", detail: "查看日志定位错误，修复后可直接重启。", tone: "danger" },
+  },
+  en: {
+    stopped: { label: "Stopped", title: "Local engine is stopped", detail: "Start it to return TypeUp to background voice input.", tone: "muted" },
+    stopping: { label: "Stopping", title: "Stopping engine", detail: "Releasing microphone and keyboard hooks.", tone: "muted" },
+    starting: { label: "Starting", title: "Starting local engine", detail: "Loading speech, typing, and AI editing modules.", tone: "warn" },
+    listening: { label: "Ready", title: "Press ALT to speak", detail: "Release to transcribe and type at the current cursor.", tone: "ok" },
+    transcribing: { label: "Working", title: "Transcribing or editing", detail: "The result will be written into the active window.", tone: "active" },
+    needs_config: { label: "Setup", title: "STT key required", detail: "Save settings to restart the local engine.", tone: "warn" },
+    error: { label: "Error", title: "Local engine needs attention", detail: "Check logs, then restart after fixing the issue.", tone: "danger" },
+  },
+};
+
+const COPY = {
+  zh: {
+    subtitle: "Windows 本地语音输入与 AI 编辑",
+    language: "语言",
+    readyForWindows: "Windows 体验",
+    localEngine: "本地引擎",
+    voiceConsole: "语音控制台",
+    shortcuts: "快捷键",
+    usage: "用量趋势",
+    usageRange: "最近 7 天",
+    logs: "运行日志",
+    backend: "本地后端",
+    settings: "配置",
+    speechModel: "语音与模型",
+    cloud: "后端接口",
+    cloudSlot: "接口占位",
+    process: "进程",
+    listenMode: "监听模式",
+    stt: "STT",
+    typing: "输入方式",
+    notRunning: "未运行",
+    notConfigured: "未配置",
+    pushToTalk: "按键说话",
+    alwaysOn: "常开 VAD",
+    clipboard: "剪贴板",
+    unicode: "Unicode",
+    start: "启动",
+    stop: "停止",
+    restart: "重启",
+    microphone: "麦克风",
+    deviceFallback: "未发现输入设备",
+    configured: "本地 STT 配置已就绪。",
+    missingConfig: "STT 凭据未完成，本地引擎会启动，但不会发起转写。",
+    transcribedChars: "今日转写字数",
+    aiEditedChars: "今日 AI 编辑字数",
+    savedTime: "总节约时间",
+    successfulEvents: "历史成功事件",
+    noLogs: "暂无日志",
+    saveAndRestart: "保存并重启",
+    saving: "保存中",
+    saveCloud: "保存接口配置",
+    vad: "常开",
+    ptt: "按键",
+    original: "原生",
+    lightPolish: "微润色",
+    statusDockReady: "TypeUp 已接管预览页热键",
+    statusDockHint: "ALT 说话，ALT + SPACE 进行 AI 编辑，双击 ALT 切换润色模式",
+    shortcutSpeak: "开始说话",
+    shortcutSpeakDetail: "松开后转写到当前光标",
+    shortcutAi: "AI 编辑",
+    shortcutAiDetail: "按住组合键处理当前文字",
+    shortcutPolish: "切换润色模式",
+    shortcutPolishDetail: "原生与微润色之间切换",
+    modeDisplay: "润色模式",
+  },
+  en: {
+    subtitle: "Windows local voice input and AI editing",
+    language: "Language",
+    readyForWindows: "Windows experience",
+    localEngine: "Local Engine",
+    voiceConsole: "Voice Console",
+    shortcuts: "Shortcuts",
+    usage: "Usage Trend",
+    usageRange: "Last 7 days",
+    logs: "Runtime Logs",
+    backend: "Local Backend",
+    settings: "Settings",
+    speechModel: "Speech and Models",
+    cloud: "Backend",
+    cloudSlot: "Endpoint slot",
+    process: "Process",
+    listenMode: "Listen Mode",
+    stt: "STT",
+    typing: "Typing",
+    notRunning: "Not running",
+    notConfigured: "Not configured",
+    pushToTalk: "Push to talk",
+    alwaysOn: "Always-on VAD",
+    clipboard: "Clipboard",
+    unicode: "Unicode",
+    start: "Start",
+    stop: "Stop",
+    restart: "Restart",
+    microphone: "Microphone",
+    deviceFallback: "No input devices found",
+    configured: "Local STT configuration is ready.",
+    missingConfig: "STT credentials are incomplete. The engine can start, but transcription will be skipped.",
+    transcribedChars: "Transcribed Today",
+    aiEditedChars: "AI Edited Today",
+    savedTime: "Time Saved",
+    successfulEvents: "Successful Events",
+    noLogs: "No logs yet",
+    saveAndRestart: "Save and Restart",
+    saving: "Saving",
+    saveCloud: "Save Backend",
+    vad: "Always-on",
+    ptt: "Push",
+    original: "Original",
+    lightPolish: "Light Polish",
+    statusDockReady: "TypeUp is using the preview shortcuts",
+    statusDockHint: "ALT to speak, ALT + SPACE for AI editing, double ALT to switch polish mode",
+    shortcutSpeak: "Start Speaking",
+    shortcutSpeakDetail: "Release to type at the cursor",
+    shortcutAi: "AI Edit",
+    shortcutAiDetail: "Hold the combo to edit text",
+    shortcutPolish: "Switch Polish Mode",
+    shortcutPolishDetail: "Toggle original and light polish",
+    modeDisplay: "Polish Mode",
+  },
+};
+
+const EMPTY_SETTINGS = {
+  stt: { provider: "glm_asr_2512", api_key: "", model: "glm-asr-2512", language: "zh" },
+  audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2, ptt_key: "alt_l", ai_key: ["alt_l", "space"] },
+  typing: { method: "unicode" },
+  llm: { provider: "zhipuai", api_key: "", model: "glm-4-flash" },
+};
+
+export default function App() {
+  const [lang, setLang] = useState("zh");
+  const [apiBase, setApiBase] = useState("");
+  const [status, setStatus] = useState({ state: "starting" });
+  const [usage, setUsage] = useState(null);
+  const [logs, setLogs] = useState([]);
+  const [settings, setSettings] = useState(EMPTY_SETTINGS);
+  const [cloud, setCloud] = useState({ apiBaseUrl: "", workspaceId: "", authMode: "local" });
+  const [devices, setDevices] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadBase() {
+      const base = window.typeup ? await window.typeup.apiBase() : "";
+      if (mounted) setApiBase(base || "http://127.0.0.1:3000");
+    }
+    loadBase();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!apiBase) return undefined;
+    refreshAll(apiBase, { setStatus, setUsage, setLogs, setSettings, setCloud });
+    const timer = setInterval(() => {
+      refreshUsage(apiBase, setUsage);
+      refreshStatus(apiBase, setStatus);
+    }, 2200);
+    const events = new EventSource(`${apiBase}/api/events`);
+    events.addEventListener("status", (event) => setStatus(JSON.parse(event.data)));
+    events.addEventListener("log", (event) => {
+      const item = JSON.parse(event.data);
+      setLogs((current) => [item, ...current].slice(0, 120));
+    });
+    return () => {
+      clearInterval(timer);
+      events.close();
+    };
+  }, [apiBase]);
+
+  const text = COPY[lang];
+  const statusMeta = STATUS_COPY[lang][status.state] || STATUS_COPY[lang].stopped;
+  const today = usage?.today || {};
+  const totals = usage?.totals || {};
+  const days = usage?.days || [];
+  const activeChars = (today.transcribedChars || 0) + (today.aiEditedChars || 0);
+  const savedTime = formatSavedTime(activeChars, lang);
+
+  const peak = useMemo(() => {
+    return Math.max(1, ...days.map((day) => (day.transcribedChars || 0) + (day.aiEditedChars || 0)));
+  }, [days]);
+
+  const pttKey = settings.audio?.ptt_key || "alt_l";
+  const aiKey = settings.audio?.ai_key || ["alt_l", "space"];
+
+  async function agentAction(action) {
+    const next = await api(apiBase, `/api/agent/${action}`, { method: "POST" });
+    setStatus(next);
+    await refreshUsage(apiBase, setUsage);
+  }
+
+  async function saveSettings() {
+    setSaving(true);
+    try {
+      const next = await api(apiBase, "/api/settings?restart=1", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(settings),
+      });
+      setSettings(next);
+      await refreshStatus(apiBase, setStatus);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveCloud() {
+    const next = await api(apiBase, "/api/cloud", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(cloud),
+    });
+    setCloud(next);
+  }
+
+  async function listDevices() {
+    const result = await api(apiBase, "/api/devices");
+    setDevices(result.output || text.deviceFallback);
+  }
+
+  return (
+    <main className="app-shell">
+      <header className="app-titlebar">
+        <div className="brand">
+          <img src={mark} alt="" />
+          <div>
+            <h1>TypeUp</h1>
+            <p>{text.subtitle}</p>
+          </div>
+        </div>
+        <div className="titlebar-actions">
+          <div className="language-switch" aria-label={text.language}>
+            <Languages size={16} />
+            <button className={lang === "zh" ? "selected" : ""} onClick={() => setLang("zh")}>中文</button>
+            <button className={lang === "en" ? "selected" : ""} onClick={() => setLang("en")}>EN</button>
+          </div>
+          <div className={`status-pill ${statusMeta.tone}`}>
+            <span />
+            {statusMeta.label}
+          </div>
+        </div>
+      </header>
+
+      <section className="dashboard">
+        <div className="main-column">
+          <section className="voice-panel">
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">{text.localEngine}</p>
+                <h2>{text.voiceConsole}</h2>
+              </div>
+              <div className="windows-chip">{text.readyForWindows}</div>
+            </div>
+
+            <div className="voice-grid">
+              <div className={`voice-orb ${statusMeta.tone}`}>
+                <div className="orb-ring" />
+                <div className="orb-core">
+                  <Mic size={34} />
+                </div>
+                <div className="wave-lines" aria-hidden="true">
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+
+              <div className="voice-state">
+                <div className={`state-badge ${statusMeta.tone}`}>
+                  <span />
+                  {statusMeta.label}
+                </div>
+                <h3>{statusMeta.title}</h3>
+                <p>{statusMeta.detail}</p>
+                <div className="mode-card">
+                  <span>{text.modeDisplay}</span>
+                  <div>
+                    <strong>{text.original}</strong>
+                    <i />
+                    <strong>{text.lightPolish}</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div className="engine-card">
+                <InfoRow label={text.process} value={status.pid ? `PID ${status.pid}` : text.notRunning} />
+                <InfoRow label={text.listenMode} value={status.mode === "ptt" ? text.pushToTalk : text.alwaysOn} />
+                <InfoRow label={text.stt} value={status.provider || text.notConfigured} />
+                <InfoRow label={text.typing} value={status.typingMethod === "clip" ? text.clipboard : text.unicode} />
+              </div>
+            </div>
+
+            {status.lastError ? (
+              <div className="notice danger">
+                <AlertCircle size={18} />
+                <span>{status.lastError}</span>
+              </div>
+            ) : null}
+            {!status.configured ? (
+              <div className="notice warn">
+                <AlertCircle size={18} />
+                <span>{text.missingConfig}</span>
+              </div>
+            ) : (
+              <div className="notice ok">
+                <CheckCircle2 size={18} />
+                <span>{text.configured}</span>
+              </div>
+            )}
+
+            <div className="actions">
+              <button className="primary" onClick={() => agentAction("start")} disabled={!apiBase}>
+                <Play size={18} />
+                {text.start}
+              </button>
+              <button onClick={() => agentAction("stop")} disabled={!apiBase}>
+                <Square size={18} />
+                {text.stop}
+              </button>
+              <button onClick={() => agentAction("restart")} disabled={!apiBase}>
+                <RefreshCw size={18} />
+                {text.restart}
+              </button>
+              <button onClick={listDevices} disabled={!apiBase}>
+                <Mic size={18} />
+                {text.microphone}
+              </button>
+            </div>
+          </section>
+
+          <section className="shortcut-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">{text.shortcuts}</p>
+                <h2>{formatHotkey(pttKey, lang)} / {formatHotkey(aiKey, lang)} / {lang === "zh" ? "双击 ALT" : "Double ALT"}</h2>
+              </div>
+              <WandSparkles size={22} />
+            </div>
+            <div className="shortcut-grid">
+              <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang)} />
+              <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang)} />
+              <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={lang === "zh" ? "双击 ALT" : "Double ALT"} />
+            </div>
+          </section>
+
+          <section className="metrics-grid">
+            <Metric icon={<FileText />} label={text.transcribedChars} value={formatNumber(today.transcribedChars, lang)} accent="blue" />
+            <Metric icon={<WandSparkles />} label={text.aiEditedChars} value={formatNumber(today.aiEditedChars, lang)} accent="violet" />
+            <Metric icon={<Activity />} label={text.savedTime} value={savedTime} accent="cyan" />
+            <Metric icon={<CheckCircle2 />} label={text.successfulEvents} value={formatNumber(totals.successfulEvents, lang)} accent="green" />
+          </section>
+
+          <section className="usage-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">{text.usageRange}</p>
+                <h2>{text.usage}</h2>
+              </div>
+              <Activity size={22} />
+            </div>
+            <TrendChart days={days} peak={peak} lang={lang} />
+          </section>
+
+          <section className="log-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">{text.logs}</p>
+                <h2>{text.backend}</h2>
+              </div>
+              <Pause size={22} />
+            </div>
+            <div className="logs">
+              {logs.length ? logs.map((item) => (
+                <p key={`${item.ts}-${item.line}`}>
+                  <time>{formatTime(item.ts, lang)}</time>
+                  <span>{item.line}</span>
+                </p>
+              )) : <p className="empty-log">{text.noLogs}</p>}
+            </div>
+          </section>
+        </div>
+
+        <aside className="side-column">
+          <section className="settings-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">{text.settings}</p>
+                <h2>{text.speechModel}</h2>
+              </div>
+              <Settings size={22} />
+            </div>
+            <FormSelect
+              label="STT Provider"
+              value={settings.stt?.provider || ""}
+              onChange={(provider) => setNested(setSettings, ["stt", "provider"], provider)}
+              options={[
+                ["glm_asr_2512", "GLM-ASR-2512"],
+                ["openai", "OpenAI Whisper"],
+                ["zhipuai", "GLM-4-Voice"],
+                ["aliyun", "阿里云 NLS"],
+                ["volcengine", "火山 ASR"],
+                ["xunfei", "讯飞 IAT"],
+              ]}
+            />
+            <FormInput
+              label="STT API Key"
+              value={settings.stt?.api_key || ""}
+              type="password"
+              onChange={(value) => setNested(setSettings, ["stt", "api_key"], value)}
+            />
+            <FormInput
+              label="STT Model"
+              value={settings.stt?.model || ""}
+              onChange={(value) => setNested(setSettings, ["stt", "model"], value)}
+            />
+            <FormInput
+              label={text.microphone}
+              value={settings.audio?.device || "auto"}
+              onChange={(value) => setNested(setSettings, ["audio", "device"], value)}
+            />
+            <Segmented
+              label={text.listenMode}
+              value={settings.audio?.mode || "ptt"}
+              options={[
+                ["ptt", text.ptt],
+                ["vad", text.vad],
+              ]}
+              onChange={(value) => setNested(setSettings, ["audio", "mode"], value)}
+            />
+            <Range
+              label="VAD"
+              value={settings.audio?.vad_aggressiveness ?? 2}
+              onChange={(value) => setNested(setSettings, ["audio", "vad_aggressiveness"], Number(value))}
+            />
+            <Segmented
+              label={text.typing}
+              value={settings.typing?.method || "unicode"}
+              options={[
+                ["unicode", "Unicode"],
+                ["clip", text.clipboard],
+              ]}
+              onChange={(value) => setNested(setSettings, ["typing", "method"], value)}
+            />
+            <FormSelect
+              label="LLM Provider"
+              value={settings.llm?.provider || ""}
+              onChange={(provider) => setNested(setSettings, ["llm", "provider"], provider)}
+              options={[
+                ["zhipuai", "智谱 GLM"],
+                ["openai", "OpenAI"],
+                ["aliyun", "通义千问"],
+                ["volcengine", "豆包"],
+              ]}
+            />
+            <FormInput
+              label="LLM API Key"
+              value={settings.llm?.api_key || ""}
+              type="password"
+              onChange={(value) => setNested(setSettings, ["llm", "api_key"], value)}
+            />
+            <button className="save-button" onClick={saveSettings} disabled={saving || !apiBase}>
+              <Save size={18} />
+              {saving ? text.saving : text.saveAndRestart}
+            </button>
+          </section>
+
+          <section className="settings-panel">
+            <div className="panel-heading compact">
+              <div>
+                <p className="eyebrow">{text.cloud}</p>
+                <h2>{text.cloudSlot}</h2>
+              </div>
+              <Cloud size={22} />
+            </div>
+            <FormInput
+              label="API Base URL"
+              value={cloud.apiBaseUrl || ""}
+              onChange={(value) => setCloud((current) => ({ ...current, apiBaseUrl: value }))}
+            />
+            <FormInput
+              label="Workspace ID"
+              value={cloud.workspaceId || ""}
+              onChange={(value) => setCloud((current) => ({ ...current, workspaceId: value }))}
+            />
+            <button onClick={saveCloud} disabled={!apiBase}>
+              <SlidersHorizontal size={18} />
+              {text.saveCloud}
+            </button>
+          </section>
+
+          {devices ? (
+            <section className="devices-panel">
+              <pre>{devices}</pre>
+            </section>
+          ) : null}
+        </aside>
+      </section>
+
+      <div className={`status-dock ${statusMeta.tone}`}>
+        <span className="dock-dot" />
+        <div>
+          <strong>{text.statusDockReady}</strong>
+          <small>{text.statusDockHint}</small>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Shortcut({ label, detail, keys }) {
+  return (
+    <article className="shortcut-card">
+      <div className="keycap-row">
+        {String(keys).split("+").map((key) => (
+          <span className="keycap" key={key.trim()}>{key.trim()}</span>
+        ))}
+      </div>
+      <div>
+        <strong>{label}</strong>
+        <p>{detail}</p>
+      </div>
+    </article>
+  );
+}
+
+function Metric({ icon, label, value, accent }) {
+  return (
+    <article className={`metric-card ${accent}`}>
+      <div>{icon}</div>
+      <p>{label}</p>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function TrendChart({ days, peak, lang }) {
+  const points = days.length ? days : [];
+  const width = 680;
+  const height = 170;
+  const left = 22;
+  const right = 20;
+  const top = 16;
+  const bottom = 36;
+  const chartWidth = width - left - right;
+  const chartHeight = height - top - bottom;
+
+  const linePoints = points.map((day, index) => {
+    const value = (day.transcribedChars || 0) + (day.aiEditedChars || 0);
+    const x = left + (points.length <= 1 ? chartWidth : (index / (points.length - 1)) * chartWidth);
+    const y = top + chartHeight - (value / peak) * chartHeight;
+    return { x, y, value, label: day.label };
+  });
+
+  const polyline = linePoints.map((point) => `${point.x},${point.y}`).join(" ");
+  const area = linePoints.length
+    ? `${left},${height - bottom} ${polyline} ${width - right},${height - bottom}`
+    : "";
+
+  return (
+    <div className="trend-wrap">
+      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={COPY[lang].usage}>
+        <defs>
+          <linearGradient id="trendArea" x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor="#0f9fb1" stopOpacity="0.28" />
+            <stop offset="100%" stopColor="#0f9fb1" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+        {[0, 1, 2].map((row) => {
+          const y = top + (row / 2) * chartHeight;
+          return <line key={row} x1={left} x2={width - right} y1={y} y2={y} />;
+        })}
+        {area ? <polygon points={area} /> : null}
+        {polyline ? <polyline points={polyline} /> : null}
+        {linePoints.map((point) => (
+          <circle key={`${point.label}-${point.x}`} cx={point.x} cy={point.y} r="4.5" />
+        ))}
+        {linePoints.map((point) => (
+          <text key={`${point.label}-label`} x={point.x} y={height - 10}>{point.label}</text>
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+function InfoRow({ label, value }) {
+  return (
+    <div className="info-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function FormInput({ label, value, onChange, type = "text" }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <input type={type} value={value} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function FormSelect({ label, value, onChange, options }) {
+  return (
+    <label className="field">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map(([id, labelText]) => <option key={id} value={id}>{labelText}</option>)}
+      </select>
+    </label>
+  );
+}
+
+function Segmented({ label, value, onChange, options }) {
+  return (
+    <div className="field">
+      <span>{label}</span>
+      <div className="segmented">
+        {options.map(([id, labelText]) => (
+          <button key={id} className={value === id ? "selected" : ""} onClick={() => onChange(id)}>
+            {labelText}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Range({ label, value, onChange }) {
+  return (
+    <label className="field range-field">
+      <span>{label}</span>
+      <input min="0" max="3" step="1" type="range" value={value} onChange={(event) => onChange(event.target.value)} />
+      <strong>{value}</strong>
+    </label>
+  );
+}
+
+async function refreshAll(apiBase, setters) {
+  await Promise.all([
+    refreshStatus(apiBase, setters.setStatus),
+    refreshUsage(apiBase, setters.setUsage),
+    api(apiBase, "/api/logs").then((data) => setters.setLogs((data.logs || []).slice().reverse())),
+    api(apiBase, "/api/settings").then(setters.setSettings),
+    api(apiBase, "/api/cloud").then(setters.setCloud),
+  ]);
+}
+
+async function refreshStatus(apiBase, setStatus) {
+  const data = await api(apiBase, "/api/status");
+  setStatus(data);
+}
+
+async function refreshUsage(apiBase, setUsage) {
+  const data = await api(apiBase, "/api/usage");
+  setUsage(data);
+}
+
+async function api(apiBase, path, options) {
+  const response = await fetch(`${apiBase}${path}`, options);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || response.statusText);
+  }
+  return response.json();
+}
+
+function setNested(setter, path, value) {
+  setter((current) => {
+    const next = structuredClone(current);
+    let cursor = next;
+    for (let i = 0; i < path.length - 1; i += 1) {
+      cursor[path[i]] = cursor[path[i]] || {};
+      cursor = cursor[path[i]];
+    }
+    cursor[path[path.length - 1]] = value;
+    return next;
+  });
+}
+
+function formatHotkey(value, lang) {
+  const tokens = Array.isArray(value) ? value : [value];
+  return tokens
+    .map((token) => {
+      const text = String(token || "").toLowerCase();
+      if (text === "alt_l" || text === "alt_r" || text === "right_alt" || text === "left_alt") return "ALT";
+      if (text === "ctrl_l" || text === "ctrl_r" || text === "right_ctrl" || text === "left_ctrl") return "CTRL";
+      if (text === "space") return lang === "zh" ? "SPACE" : "SPACE";
+      if (text === "cmd_l" || text === "cmd_r") return "WIN";
+      return text.toUpperCase();
+    })
+    .join(" + ");
+}
+
+function formatNumber(value = 0, lang = "zh") {
+  return new Intl.NumberFormat(lang === "zh" ? "zh-CN" : "en-US").format(value || 0);
+}
+
+function formatSavedTime(chars = 0, lang = "zh") {
+  const seconds = Math.round((chars || 0) * 0.11);
+  if (seconds < 60) return lang === "zh" ? `${seconds} 秒` : `${seconds}s`;
+  if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    const rest = seconds % 60;
+    return lang === "zh" ? `${minutes} 分 ${rest} 秒` : `${minutes}m ${rest}s`;
+  }
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return lang === "zh" ? `${hours} 小时 ${minutes} 分` : `${hours}h ${minutes}m`;
+}
+
+function formatTime(ts, lang = "zh") {
+  return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(ts));
+}

@@ -1,0 +1,71 @@
+{
+  "name": "typeup",
+  "version": "0.1.7",
+  "private": true,
+  "description": "TypeUp Windows desktop client for always-on voice transcription.",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "electron": "cross-env NODE_ENV=development electron .",
+    "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:5173 && npm run electron\"",
+    "build": "vite build",
+    "build:win": "npm run build && electron-builder --win nsis",
+    "engine:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-engine.ps1",
+    "engine:build": "powershell -ExecutionPolicy Bypass -File scripts/build-engine.ps1",
+    "engine:run": "powershell -ExecutionPolicy Bypass -File scripts/run-engine.ps1"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
+    "lucide-react": "^0.561.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "cross-env": "^10.1.0",
+    "electron": "^39.2.6",
+    "electron-builder": "^26.0.12",
+    "vite": "^7.2.7",
+    "wait-on": "^9.0.3"
+  },
+  "build": {
+    "appId": "com.typeup.desktop",
+    "productName": "TypeUp",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "engine/voice-keyboard",
+        "to": "engine/voice-keyboard",
+        "filter": [
+          "**/*",
+          "!**/.git/**",
+          "!**/.venv/**",
+          "!build/**",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "include": "build/installer.nsh"
+    }
+  }
+}
