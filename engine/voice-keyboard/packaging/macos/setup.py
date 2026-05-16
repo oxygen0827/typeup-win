@@ -55,6 +55,7 @@ OPTIONS = {
         "agent",
         "sounddevice",
         "pynput",
+        "serial",
         "websocket",
         "yaml",
         "certifi",

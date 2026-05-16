@@ -10,7 +10,7 @@
     "start": "node node_modules/concurrently/dist/bin/concurrently.js -k \"npm run dev\" \"node node_modules/wait-on/bin/wait-on http://127.0.0.1:5173 && npm run electron\"",
     "build": "node node_modules/vite/bin/vite.js build",
     "build:win": "npm run build && node node_modules/electron-builder/cli.js --win nsis",
-    "build:mac": "npm run build && node node_modules/electron-builder/cli.js --mac dmg",
+    "build:mac": "npm run build && node node_modules/cross-env/dist/bin/cross-env.js npm_config_electron_mirror= NPM_CONFIG_ELECTRON_MIRROR= ELECTRON_MIRROR= ELECTRON_BUILDER_BINARIES_MIRROR=https://github.com/electron-userland/electron-builder-binaries/releases/download/ node node_modules/electron-builder/cli.js --mac dmg",
     "engine:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-engine.ps1",
     "engine:build": "powershell -ExecutionPolicy Bypass -File scripts/build-engine.ps1",
     "engine:run": "powershell -ExecutionPolicy Bypass -File scripts/run-engine.ps1",
@@ -51,12 +51,7 @@
         "from": "engine/voice-keyboard",
         "to": "engine/voice-keyboard",
         "filter": [
-          "**/*",
-          "!**/.git/**",
-          "!**/.venv/**",
-          "!build/**",
-          "!**/__pycache__/**",
-          "!**/*.pyc"
+          "dist/**/*"
         ]
       }
     ],
