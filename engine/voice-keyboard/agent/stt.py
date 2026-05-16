@@ -21,6 +21,7 @@ STT（语音转文字）客户端，支持多家云服务。
 import base64
 import io
 import json
+import pathlib
 import time
 import uuid
 import wave
@@ -359,6 +360,84 @@ class _GLMASR2512STT:
         return (result.get("text") or "").strip()
 
 
+# ── TypeUp 后端代理 ───────────────────────────────────────────────
+
+class _TypeUpBackendSTT:
+    """
+    通过 TypeUp 后端代理语音识别。
+
+    所需配置：
+      api_base_url   后端地址，默认 http://localhost:8000
+      access_token   登录后获得的 access token
+      refresh_token  可选，用于 access token 过期后刷新
+    """
+
+    def __init__(self, cfg: dict):
+        self._api_base_url = str(cfg.get("api_base_url") or cfg.get("base_url") or "http://localhost:8000").rstrip("/")
+        self._access_token = str(cfg.get("access_token") or cfg.get("api_key") or "").strip()
+        self._refresh_token = str(cfg.get("refresh_token") or "").strip()
+        self._cloud_bridge_path = str(cfg.get("cloud_bridge_path") or "").strip()
+        if not self._api_base_url:
+            raise RuntimeError("TypeUp 后端地址未配置")
+        if not self._access_token:
+            raise RuntimeError("请先登录 TypeUp 后端账号")
+
+    def transcribe(self, pcm: bytes) -> str:
+        wav = _pcm_to_wav(pcm)
+        resp = self._post_transcribe(wav)
+        if resp.status_code == 401 and self._refresh_token:
+            self._refresh_access_token()
+            resp = self._post_transcribe(wav)
+        if not resp.ok:
+            raise RuntimeError(self._error_message(resp, "TypeUp 后端 STT 请求失败"))
+        return (resp.json().get("text") or "").strip()
+
+    def _post_transcribe(self, wav: bytes):
+        return requests.post(
+            f"{self._api_base_url}/v1/stt/transcribe",
+            headers={"Authorization": f"Bearer {self._access_token}"},
+            files={"file": ("audio.wav", wav, "audio/wav")},
+            timeout=35,
+        )
+
+    def _refresh_access_token(self) -> None:
+        resp = requests.post(
+            f"{self._api_base_url}/v1/auth/refresh",
+            json={"refresh_token": self._refresh_token},
+            timeout=15,
+        )
+        if not resp.ok:
+            raise RuntimeError(self._error_message(resp, "TypeUp 后端登录已过期"))
+        data = resp.json()
+        self._access_token = data["access_token"]
+        self._refresh_token = data["refresh_token"]
+        self._persist_tokens()
+
+    def _persist_tokens(self) -> None:
+        if not self._cloud_bridge_path:
+            return
+        try:
+            path = pathlib.Path(self._cloud_bridge_path)
+            payload = {}
+            if path.exists():
+                payload = json.loads(path.read_text(encoding="utf-8") or "{}")
+            payload["accessToken"] = self._access_token
+            payload["refreshToken"] = self._refresh_token
+            payload["updatedAt"] = int(time.time() * 1000)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+        except Exception as e:
+            print(f"[stt] 同步后端登录凭证失败: {e}")
+
+    @staticmethod
+    def _error_message(resp, fallback: str) -> str:
+        try:
+            data = resp.json()
+            return data.get("error", {}).get("message") or data.get("detail") or fallback
+        except Exception:
+            return f"{fallback}: HTTP {resp.status_code} {resp.text}"
+
+
 # ── 科大讯飞语音听写（流式 WebSocket）────────────────────────────
 
 class _XunfeiSTT:
@@ -506,6 +585,7 @@ _PROVIDERS: dict[str, type] = {
     "zhipuai":    _ZhipuSTT,
     "glm_asr_2512": _GLMASR2512STT,
     "glm-asr-2512": _GLMASR2512STT,
+    "typeup_backend": _TypeUpBackendSTT,
     "xunfei":     _XunfeiSTT,
 }
 

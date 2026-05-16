@@ -6,6 +6,7 @@ let mainWindow;
 let localServer;
 
 const isDev = process.env.NODE_ENV === "development";
+const windowIcon = path.join(__dirname, "..", "build", "icon.ico");
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -14,6 +15,7 @@ async function createWindow() {
     minWidth: 980,
     minHeight: 640,
     title: "TypeUp",
+    icon: windowIcon,
     backgroundColor: "#f6f8fb",
     show: false,
     webPreferences: {

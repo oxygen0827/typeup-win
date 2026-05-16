@@ -5,11 +5,11 @@
   "description": "TypeUp Windows desktop client for always-on voice transcription.",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "electron": "cross-env NODE_ENV=development electron .",
-    "start": "concurrently -k \"npm run dev\" \"wait-on http://127.0.0.1:5173 && npm run electron\"",
-    "build": "vite build",
-    "build:win": "npm run build && electron-builder --win nsis",
+    "dev": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
+    "electron": "node node_modules/cross-env/dist/bin/cross-env.js NODE_ENV=development node node_modules/electron/cli.js .",
+    "start": "node node_modules/concurrently/dist/bin/concurrently.js -k \"npm run dev\" \"node node_modules/wait-on/bin/wait-on http://127.0.0.1:5173 && npm run electron\"",
+    "build": "node node_modules/vite/bin/vite.js build",
+    "build:win": "npm run build && node node_modules/electron-builder/cli.js --win nsis",
     "engine:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-engine.ps1",
     "engine:build": "powershell -ExecutionPolicy Bypass -File scripts/build-engine.ps1",
     "engine:run": "powershell -ExecutionPolicy Bypass -File scripts/run-engine.ps1"
@@ -57,6 +57,7 @@
       }
     ],
     "win": {
+      "icon": "build/icon.ico",
       "target": "nsis"
     },
     "nsis": {

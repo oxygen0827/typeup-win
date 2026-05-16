@@ -10,6 +10,196 @@ const {
   updateCloudBridge,
 } = require("./settings-store");
 
+const DEFAULT_BACKEND_URL = process.env.TYPEUP_BACKEND_URL || "http://localhost:8000";
+
+class BackendRequestError extends Error {
+  constructor(status, body) {
+    const message = body?.error?.message || body?.detail || body?.message || `Backend HTTP ${status}`;
+    super(message);
+    this.name = "BackendRequestError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function normalizeBackendUrl(value) {
+  const text = String(value || DEFAULT_BACKEND_URL).trim();
+  return text.replace(/\/+$/, "") || DEFAULT_BACKEND_URL;
+}
+
+function publicSession(cloud) {
+  return {
+    apiBaseUrl: normalizeBackendUrl(cloud.apiBaseUrl),
+    connected: Boolean(cloud.connected),
+    authenticated: Boolean(cloud.accessToken),
+    user: cloud.user || null,
+    entitlement: cloud.entitlement || null,
+    updatedAt: cloud.updatedAt || null,
+    path: cloud.path,
+  };
+}
+
+function applyBackendEngineConfig(cloud) {
+  const apiBaseUrl = normalizeBackendUrl(cloud.apiBaseUrl);
+  const accessToken = String(cloud.accessToken || "");
+  const refreshToken = String(cloud.refreshToken || "");
+  updateSettings({
+    stt: {
+      provider: "typeup_backend",
+      api_base_url: apiBaseUrl,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      cloud_bridge_path: cloud.path,
+      model: "glm-asr-2512",
+      language: "zh",
+    },
+    llm: {
+      provider: "typeup_backend",
+      api_base_url: apiBaseUrl,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      cloud_bridge_path: cloud.path,
+      model: "glm-4-flash",
+    },
+  });
+}
+
+function clearAuthSession(apiBaseUrl) {
+  const current = readCloudBridge();
+  const cloud = updateCloudBridge({
+    apiBaseUrl: apiBaseUrl || current.apiBaseUrl,
+    connected: false,
+    accessToken: "",
+    refreshToken: "",
+    user: null,
+    entitlement: null,
+  });
+  applyBackendEngineConfig(cloud);
+  return publicSession(cloud);
+}
+
+async function backendJson(apiBaseUrl, path, options = {}) {
+  const response = await fetch(`${normalizeBackendUrl(apiBaseUrl)}${path}`, {
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const text = await response.text();
+  const body = text ? safeJson(text) : null;
+  if (!response.ok) {
+    throw new BackendRequestError(response.status, body || { message: text });
+  }
+  return body;
+}
+
+function safeJson(text) {
+  try {
+    return JSON.parse(text);
+  } catch (_error) {
+    return { message: text };
+  }
+}
+
+async function fetchBackendMe(cloud) {
+  return backendJson(cloud.apiBaseUrl, "/v1/auth/me", {
+    headers: { Authorization: `Bearer ${cloud.accessToken}` },
+  });
+}
+
+async function persistAuthSession(apiBaseUrl, authPayload) {
+  let cloud = updateCloudBridge({
+    apiBaseUrl,
+    authMode: "backend",
+    connected: true,
+    accessToken: authPayload.access_token,
+    refreshToken: authPayload.refresh_token,
+    user: authPayload.user,
+    entitlement: null,
+  });
+  applyBackendEngineConfig(cloud);
+
+  const me = await fetchBackendMe(cloud);
+  cloud = updateCloudBridge({
+    apiBaseUrl,
+    connected: true,
+    user: me.user,
+    entitlement: me.entitlement,
+  });
+  applyBackendEngineConfig(cloud);
+  return publicSession(cloud);
+}
+
+async function refreshAuthSession() {
+  const cloud = readCloudBridge();
+  if (!cloud.refreshToken) {
+    throw new BackendRequestError(401, {
+      error: { code: "UNAUTHORIZED", message: "请先登录", status: 401 },
+    });
+  }
+  const auth = await backendJson(cloud.apiBaseUrl, "/v1/auth/refresh", {
+    method: "POST",
+    body: JSON.stringify({ refresh_token: cloud.refreshToken }),
+  });
+  return persistAuthSession(cloud.apiBaseUrl, auth);
+}
+
+async function authedBackendJson(path, options = {}) {
+  let cloud = readCloudBridge();
+  if (!cloud.accessToken) {
+    throw new BackendRequestError(401, {
+      error: { code: "UNAUTHORIZED", message: "请先登录", status: 401 },
+    });
+  }
+
+  try {
+    return await backendJson(cloud.apiBaseUrl, path, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${cloud.accessToken}`,
+        ...(options.headers || {}),
+      },
+    });
+  } catch (error) {
+    if (error.status === 403) {
+      clearAuthSession(cloud.apiBaseUrl);
+      throw error;
+    }
+    if (error.status !== 401 || !cloud.refreshToken) throw error;
+    try {
+      await refreshAuthSession();
+    } catch (refreshError) {
+      if (refreshError.status === 401 || refreshError.status === 403) {
+        clearAuthSession(cloud.apiBaseUrl);
+      }
+      throw refreshError;
+    }
+    cloud = readCloudBridge();
+    return backendJson(cloud.apiBaseUrl, path, {
+      ...options,
+      headers: {
+        Authorization: `Bearer ${cloud.accessToken}`,
+        ...(options.headers || {}),
+      },
+    });
+  }
+}
+
+function sendBackendError(res, error) {
+  if (error instanceof BackendRequestError) {
+    res.status(error.status).json(error.body);
+    return;
+  }
+  res.status(500).json({
+    error: {
+      code: "LOCAL_BRIDGE_ERROR",
+      message: error.message || "本地桥接服务错误",
+      status: 500,
+    },
+  });
+}
+
 function createLocalServer({ electronApp }) {
   const app = express();
   const server = http.createServer(app);
@@ -94,11 +284,134 @@ function createLocalServer({ electronApp }) {
   });
 
   app.get("/api/cloud", (_req, res) => {
-    res.json(readCloudBridge());
+    res.json(publicSession(readCloudBridge()));
   });
 
   app.put("/api/cloud", (req, res) => {
-    res.json(updateCloudBridge(req.body || {}));
+    const cloud = updateCloudBridge(req.body || {});
+    applyBackendEngineConfig(cloud);
+    res.json(publicSession(cloud));
+  });
+
+  app.get("/api/backend/health", async (req, res) => {
+    try {
+      const apiBaseUrl = normalizeBackendUrl(req.query.apiBaseUrl || readCloudBridge().apiBaseUrl);
+      res.json(await backendJson(apiBaseUrl, "/health"));
+    } catch (error) {
+      sendBackendError(res, error);
+    }
+  });
+
+  app.get("/api/auth/session", async (_req, res) => {
+    const cloud = readCloudBridge();
+    if (!cloud.accessToken) {
+      res.json(publicSession(cloud));
+      return;
+    }
+    try {
+      const me = await fetchBackendMe(cloud);
+      const next = updateCloudBridge({
+        apiBaseUrl: cloud.apiBaseUrl,
+        connected: true,
+        user: me.user,
+        entitlement: me.entitlement,
+      });
+      res.json(publicSession(next));
+    } catch (error) {
+      if (error.status === 401 && cloud.refreshToken) {
+        try {
+          res.json(await refreshAuthSession());
+          return;
+        } catch (_refreshError) {
+          res.json(clearAuthSession(cloud.apiBaseUrl));
+          return;
+        }
+      }
+      if (error.status === 403) {
+        res.json(clearAuthSession(cloud.apiBaseUrl));
+        return;
+      }
+      sendBackendError(res, error);
+    }
+  });
+
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const apiBaseUrl = normalizeBackendUrl(req.body?.apiBaseUrl);
+      const auth = await backendJson(apiBaseUrl, "/v1/auth/register", {
+        method: "POST",
+        body: JSON.stringify({ email: req.body?.email, password: req.body?.password }),
+      });
+      const session = await persistAuthSession(apiBaseUrl, auth);
+      await agent.restart();
+      res.json(session);
+    } catch (error) {
+      sendBackendError(res, error);
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const apiBaseUrl = normalizeBackendUrl(req.body?.apiBaseUrl);
+      const auth = await backendJson(apiBaseUrl, "/v1/auth/login", {
+        method: "POST",
+        body: JSON.stringify({ email: req.body?.email, password: req.body?.password }),
+      });
+      const session = await persistAuthSession(apiBaseUrl, auth);
+      await agent.restart();
+      res.json(session);
+    } catch (error) {
+      sendBackendError(res, error);
+    }
+  });
+
+  app.post("/api/auth/refresh", async (_req, res) => {
+    try {
+      res.json(await refreshAuthSession());
+    } catch (error) {
+      if (error.status === 401 || error.status === 403) {
+        res.json(clearAuthSession(readCloudBridge().apiBaseUrl));
+        return;
+      }
+      sendBackendError(res, error);
+    }
+  });
+
+  app.post("/api/auth/logout", async (_req, res) => {
+    const cloud = clearAuthSession(readCloudBridge().apiBaseUrl);
+    await agent.restart();
+    res.json(cloud);
+  });
+
+  app.get("/api/billing/plans", async (req, res) => {
+    try {
+      const apiBaseUrl = normalizeBackendUrl(req.query.apiBaseUrl || readCloudBridge().apiBaseUrl);
+      res.json(await backendJson(apiBaseUrl, "/v1/plans"));
+    } catch (error) {
+      sendBackendError(res, error);
+    }
+  });
+
+  app.post("/api/billing/orders", async (req, res) => {
+    try {
+      res.json(await authedBackendJson("/v1/orders", {
+        method: "POST",
+        body: JSON.stringify({
+          plan_id: req.body?.plan_id,
+          payment_method: req.body?.payment_method || "alipay",
+        }),
+      }));
+    } catch (error) {
+      sendBackendError(res, error);
+    }
+  });
+
+  app.get("/api/billing/orders/:orderId", async (req, res) => {
+    try {
+      res.json(await authedBackendJson(`/v1/orders/${encodeURIComponent(req.params.orderId)}`));
+    } catch (error) {
+      sendBackendError(res, error);
+    }
   });
 
   return new Promise((resolve, reject) => {

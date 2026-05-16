@@ -4,6 +4,16 @@ $root = Split-Path -Parent $PSScriptRoot
 $engine = Join-Path $root "engine\voice-keyboard"
 $venv = Join-Path $engine ".venv"
 $python = "python"
+$pipIndexUrl = if ($env:PIP_INDEX_URL) { $env:PIP_INDEX_URL } else { "https://pypi.tuna.tsinghua.edu.cn/simple" }
+$pipTrustedHost = if ($env:PIP_TRUSTED_HOST) { $env:PIP_TRUSTED_HOST } else { "pypi.tuna.tsinghua.edu.cn" }
+
+function Invoke-Checked {
+  param([scriptblock]$Command)
+  & $Command
+  if ($LASTEXITCODE -ne 0) {
+    throw "Command failed with exit code $LASTEXITCODE"
+  }
+}
 
 if (Get-Command py -ErrorAction SilentlyContinue) {
   try {
@@ -24,11 +34,11 @@ if (-not (Test-Path $venv)) {
 }
 
 $venvPython = Join-Path $venv "Scripts\python.exe"
-& $venvPython -m pip install --upgrade pip
-& $venvPython -m pip install -r requirements.txt
+Invoke-Checked { & $venvPython -m pip install --index-url $pipIndexUrl --trusted-host $pipTrustedHost --upgrade pip }
+Invoke-Checked { & $venvPython -m pip install --index-url $pipIndexUrl --trusted-host $pipTrustedHost -r requirements.txt }
 
 try {
-  & $venvPython -m pip install webrtcvad-wheels
+  Invoke-Checked { & $venvPython -m pip install --index-url $pipIndexUrl --trusted-host $pipTrustedHost webrtcvad-wheels }
 } catch {
   Write-Warning "webrtcvad-wheels install failed. Always-on VAD needs webrtcvad; retry with Python 3.12 if needed."
 }

@@ -12,6 +12,7 @@ Voice Keyboard Agent —— PC 端后台程序入口。
 
 import argparse
 import os
+import re
 import signal
 import sys
 import threading
@@ -92,6 +93,23 @@ _POLISH_SYSTEM = """你是文字润色助手。对用户说的话做最轻度的
 直接输出润色后的文字，不要任何解释、前缀或引号。"""
 
 
+_POLISH_LABEL_RE = re.compile(r"^(?:润色后|润色结果|修改后|修改结果|优化后|优化结果|结果|输出)\s*[:：]\s*")
+
+
+def _clean_polished_text(text: str) -> str:
+    cleaned = str(text or "").strip().strip("\"'“”")
+    cleaned = re.sub(r"^```(?:\w+)?\s*", "", cleaned).strip()
+    cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+    for _ in range(3):
+        before = cleaned
+        cleaned = _POLISH_LABEL_RE.sub("", cleaned).strip()
+        cleaned = re.sub(r"^#{1,6}\s*", "", cleaned).strip()
+        cleaned = re.sub(r"^[-*•]\s+", "", cleaned).strip()
+        if cleaned == before:
+            break
+    return cleaned.strip().strip("\"'“”")
+
+
 def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=None,
                            status_window=None, history: History | None = None):
     from agent.typer import type_text
@@ -118,7 +136,7 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             if status_window is not None:
                 status_window.set_state("polishing")
             try:
-                polished = editor.chat(_POLISH_SYSTEM, text).strip()
+                polished = _clean_polished_text(editor.chat(_POLISH_SYSTEM, text))
                 if polished:
                     print(f"[stt] 微润色 → {polished!r}")
                     text = polished
@@ -202,7 +220,10 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
                  history: History | None = None):
     stt_cfg = cfg.get("stt", {})
     provider = stt_cfg.get("provider", "")
-    _no_api_key_providers = {"volcengine", "aliyun"}
+    if provider == "typeup_backend" and not stt_cfg.get("access_token"):
+        print("[typeup-auth-required] 请先登录 TypeUp 后端账号，跳过音频 STT")
+        return None
+    _no_api_key_providers = {"volcengine", "aliyun", "typeup_backend"}
     if not stt_cfg.get("api_key") and provider not in _no_api_key_providers:
         print("[agent] 未配置 stt.api_key，跳过音频 STT")
         print("[agent] 提示: cp config.yaml.example config.yaml 然后填入 API Key")
@@ -222,7 +243,7 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
 
     editor = None
     llm_cfg = cfg.get("llm", {})
-    if llm_cfg.get("api_key"):
+    if _llm_configured(llm_cfg):
         try:
             from agent.llm_editor import LLMEditor
             editor = LLMEditor(llm_cfg)
@@ -297,6 +318,13 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
         )
         monitor.start()
         return monitor
+
+
+def _llm_configured(llm_cfg: dict) -> bool:
+    provider = llm_cfg.get("provider", "")
+    if provider == "typeup_backend":
+        return bool((llm_cfg.get("api_base_url") or llm_cfg.get("base_url")) and llm_cfg.get("access_token"))
+    return bool(llm_cfg.get("api_key"))
 
 
 # ── 入口 ───────────────────────────────────────────────────────────

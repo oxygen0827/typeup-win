@@ -4,17 +4,20 @@ import {
   AlertCircle,
   CheckCircle2,
   Cloud,
-  Cpu,
+  CreditCard,
+  ExternalLink,
   FileText,
   Languages,
+  LogIn,
+  LogOut,
   Mic,
   Pause,
   Play,
   RefreshCw,
   Save,
   Settings,
-  SlidersHorizontal,
   Square,
+  UserRound,
   WandSparkles,
 } from "lucide-react";
 import mark from "./assets/typeup-mark.svg";
@@ -52,10 +55,29 @@ const COPY = {
     usageRange: "最近 7 天",
     logs: "运行日志",
     backend: "本地后端",
+    account: "账号",
+    accountCenter: "账号与订阅",
+    backendUrl: "后端地址",
+    email: "邮箱",
+    password: "密码",
+    login: "登录",
+    register: "注册",
+    logout: "退出登录",
+    refreshAccount: "刷新账号",
+    signedInAs: "当前账号",
+    subscription: "订阅权益",
+    noSubscription: "未开通服务",
+    activeSubscription: "服务已开通",
+    sttQuota: "语音额度",
+    aiQuota: "AI 额度",
+    plans: "套餐",
+    createOrder: "购买",
+    openPayment: "打开支付",
+    pollOrder: "刷新订单",
+    orderStatus: "订单状态",
+    authHint: "登录后会自动把本地引擎切到后端代理，无需在本机保存模型 Key。",
     settings: "配置",
     speechModel: "语音与模型",
-    cloud: "后端接口",
-    cloudSlot: "接口占位",
     process: "进程",
     listenMode: "监听模式",
     stt: "STT",
@@ -80,7 +102,6 @@ const COPY = {
     noLogs: "暂无日志",
     saveAndRestart: "保存并重启",
     saving: "保存中",
-    saveCloud: "保存接口配置",
     vad: "常开",
     ptt: "按键",
     original: "原生",
@@ -106,10 +127,29 @@ const COPY = {
     usageRange: "Last 7 days",
     logs: "Runtime Logs",
     backend: "Local Backend",
+    account: "Account",
+    accountCenter: "Account and Plan",
+    backendUrl: "Backend URL",
+    email: "Email",
+    password: "Password",
+    login: "Login",
+    register: "Register",
+    logout: "Logout",
+    refreshAccount: "Refresh Account",
+    signedInAs: "Signed in as",
+    subscription: "Subscription",
+    noSubscription: "No active plan",
+    activeSubscription: "Plan active",
+    sttQuota: "STT quota",
+    aiQuota: "AI quota",
+    plans: "Plans",
+    createOrder: "Buy",
+    openPayment: "Open Payment",
+    pollOrder: "Refresh Order",
+    orderStatus: "Order Status",
+    authHint: "After login, the local engine uses the backend proxy. No model keys need to be stored locally.",
     settings: "Settings",
     speechModel: "Speech and Models",
-    cloud: "Backend",
-    cloudSlot: "Endpoint slot",
     process: "Process",
     listenMode: "Listen Mode",
     stt: "STT",
@@ -134,7 +174,6 @@ const COPY = {
     noLogs: "No logs yet",
     saveAndRestart: "Save and Restart",
     saving: "Saving",
-    saveCloud: "Save Backend",
     vad: "Always-on",
     ptt: "Push",
     original: "Original",
@@ -152,10 +191,18 @@ const COPY = {
 };
 
 const EMPTY_SETTINGS = {
-  stt: { provider: "glm_asr_2512", api_key: "", model: "glm-asr-2512", language: "zh" },
+  stt: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-asr-2512", language: "zh" },
   audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2, ptt_key: "alt_l", ai_key: ["alt_l", "space"] },
   typing: { method: "unicode" },
-  llm: { provider: "zhipuai", api_key: "", model: "glm-4-flash" },
+  llm: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-4-flash" },
+};
+
+const EMPTY_AUTH = {
+  apiBaseUrl: "http://localhost:8000",
+  connected: false,
+  authenticated: false,
+  user: null,
+  entitlement: null,
 };
 
 export default function App() {
@@ -165,7 +212,12 @@ export default function App() {
   const [usage, setUsage] = useState(null);
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState(EMPTY_SETTINGS);
-  const [cloud, setCloud] = useState({ apiBaseUrl: "", workspaceId: "", authMode: "local" });
+  const [auth, setAuth] = useState(EMPTY_AUTH);
+  const [authForm, setAuthForm] = useState({ mode: "login", apiBaseUrl: "http://localhost:8000", email: "", password: "" });
+  const [plans, setPlans] = useState([]);
+  const [accountBusy, setAccountBusy] = useState("");
+  const [accountError, setAccountError] = useState("");
+  const [lastOrder, setLastOrder] = useState(null);
   const [devices, setDevices] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -183,7 +235,8 @@ export default function App() {
 
   useEffect(() => {
     if (!apiBase) return undefined;
-    refreshAll(apiBase, { setStatus, setUsage, setLogs, setSettings, setCloud });
+    refreshAll(apiBase, { setStatus, setUsage, setLogs, setSettings });
+    refreshAccount(apiBase, { setAuth, setPlans, setAuthForm, setAccountError });
     const timer = setInterval(() => {
       refreshUsage(apiBase, setUsage);
       refreshStatus(apiBase, setStatus);
@@ -236,13 +289,100 @@ export default function App() {
     }
   }
 
-  async function saveCloud() {
-    const next = await api(apiBase, "/api/cloud", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(cloud),
-    });
-    setCloud(next);
+  async function submitAuth(event) {
+    event.preventDefault();
+    setAccountBusy(authForm.mode);
+    setAccountError("");
+    try {
+      const session = await api(apiBase, `/api/auth/${authForm.mode}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiBaseUrl: authForm.apiBaseUrl,
+          email: authForm.email,
+          password: authForm.password,
+        }),
+      });
+      setAuth(session);
+      setAuthForm((current) => ({ ...current, apiBaseUrl: session.apiBaseUrl, password: "" }));
+      setLastOrder(null);
+      await Promise.all([
+        refreshStatus(apiBase, setStatus),
+        refreshPlans(apiBase, setPlans, session.apiBaseUrl),
+      ]);
+    } catch (error) {
+      setAccountError(error.message);
+    } finally {
+      setAccountBusy("");
+    }
+  }
+
+  async function logout() {
+    setAccountBusy("logout");
+    setAccountError("");
+    try {
+      const session = await api(apiBase, "/api/auth/logout", { method: "POST" });
+      setAuth(session);
+      setLastOrder(null);
+      await refreshStatus(apiBase, setStatus);
+    } catch (error) {
+      setAccountError(error.message);
+    } finally {
+      setAccountBusy("");
+    }
+  }
+
+  async function reloadAccount() {
+    setAccountBusy("refresh");
+    setAccountError("");
+    try {
+      await refreshAccount(apiBase, { setAuth, setPlans, setAuthForm, setAccountError });
+    } finally {
+      setAccountBusy("");
+    }
+  }
+
+  async function createOrder(planId) {
+    setAccountBusy(`order:${planId}`);
+    setAccountError("");
+    try {
+      const order = await api(apiBase, "/api/billing/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan_id: planId, payment_method: "alipay" }),
+      });
+      setLastOrder(order);
+      if (order.pay_url) await openPayment(order.pay_url);
+    } catch (error) {
+      setAccountError(error.message);
+    } finally {
+      setAccountBusy("");
+    }
+  }
+
+  async function refreshOrder() {
+    if (!lastOrder?.id) return;
+    setAccountBusy("order-refresh");
+    setAccountError("");
+    try {
+      const order = await api(apiBase, `/api/billing/orders/${lastOrder.id}`);
+      setLastOrder(order);
+      if (order.status === "paid") {
+        await refreshAccount(apiBase, { setAuth, setPlans, setAuthForm, setAccountError });
+      }
+    } catch (error) {
+      setAccountError(error.message);
+    } finally {
+      setAccountBusy("");
+    }
+  }
+
+  async function openPayment(url) {
+    if (window.typeup?.openExternal) {
+      await window.typeup.openExternal(url);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function listDevices() {
@@ -415,6 +555,24 @@ export default function App() {
         </div>
 
         <aside className="side-column">
+          <AccountPanel
+            text={text}
+            auth={auth}
+            authForm={authForm}
+            setAuthForm={setAuthForm}
+            plans={plans}
+            lastOrder={lastOrder}
+            accountBusy={accountBusy}
+            accountError={accountError}
+            onSubmitAuth={submitAuth}
+            onLogout={logout}
+            onRefresh={reloadAccount}
+            onCreateOrder={createOrder}
+            onRefreshOrder={refreshOrder}
+            onOpenPayment={openPayment}
+            lang={lang}
+          />
+
           <section className="settings-panel">
             <div className="panel-heading compact">
               <div>
@@ -428,6 +586,7 @@ export default function App() {
               value={settings.stt?.provider || ""}
               onChange={(provider) => setNested(setSettings, ["stt", "provider"], provider)}
               options={[
+                ["typeup_backend", "TypeUp Backend"],
                 ["glm_asr_2512", "GLM-ASR-2512"],
                 ["openai", "OpenAI Whisper"],
                 ["zhipuai", "GLM-4-Voice"],
@@ -480,6 +639,7 @@ export default function App() {
               value={settings.llm?.provider || ""}
               onChange={(provider) => setNested(setSettings, ["llm", "provider"], provider)}
               options={[
+                ["typeup_backend", "TypeUp Backend"],
                 ["zhipuai", "智谱 GLM"],
                 ["openai", "OpenAI"],
                 ["aliyun", "通义千问"],
@@ -495,30 +655,6 @@ export default function App() {
             <button className="save-button" onClick={saveSettings} disabled={saving || !apiBase}>
               <Save size={18} />
               {saving ? text.saving : text.saveAndRestart}
-            </button>
-          </section>
-
-          <section className="settings-panel">
-            <div className="panel-heading compact">
-              <div>
-                <p className="eyebrow">{text.cloud}</p>
-                <h2>{text.cloudSlot}</h2>
-              </div>
-              <Cloud size={22} />
-            </div>
-            <FormInput
-              label="API Base URL"
-              value={cloud.apiBaseUrl || ""}
-              onChange={(value) => setCloud((current) => ({ ...current, apiBaseUrl: value }))}
-            />
-            <FormInput
-              label="Workspace ID"
-              value={cloud.workspaceId || ""}
-              onChange={(value) => setCloud((current) => ({ ...current, workspaceId: value }))}
-            />
-            <button onClick={saveCloud} disabled={!apiBase}>
-              <SlidersHorizontal size={18} />
-              {text.saveCloud}
             </button>
           </section>
 
@@ -554,6 +690,147 @@ function Shortcut({ label, detail, keys }) {
         <p>{detail}</p>
       </div>
     </article>
+  );
+}
+
+function AccountPanel({
+  text,
+  auth,
+  authForm,
+  setAuthForm,
+  plans,
+  lastOrder,
+  accountBusy,
+  accountError,
+  onSubmitAuth,
+  onLogout,
+  onRefresh,
+  onCreateOrder,
+  onRefreshOrder,
+  onOpenPayment,
+  lang,
+}) {
+  const entitlement = auth.entitlement || {};
+  const sttLimitSeconds = (entitlement.stt_minutes_limit || 0) * 60;
+  const sttText = `${formatDuration(entitlement.stt_seconds_used || 0, lang)} / ${formatDuration(sttLimitSeconds, lang)}`;
+  const aiText = `${formatNumber(entitlement.ai_requests_used || 0, lang)} / ${formatNumber(entitlement.ai_requests_limit || 0, lang)}`;
+
+  return (
+    <section className="account-panel">
+      <div className="panel-heading compact">
+        <div>
+          <p className="eyebrow">{text.account}</p>
+          <h2>{text.accountCenter}</h2>
+        </div>
+        <UserRound size={22} />
+      </div>
+
+      {!auth.authenticated ? (
+        <form className="account-form" onSubmit={onSubmitAuth}>
+          <FormInput
+            label={text.backendUrl}
+            value={authForm.apiBaseUrl}
+            onChange={(value) => setAuthForm((current) => ({ ...current, apiBaseUrl: value }))}
+          />
+          <div className="auth-mode">
+            <button type="button" className={authForm.mode === "login" ? "selected" : ""} onClick={() => setAuthForm((current) => ({ ...current, mode: "login" }))}>
+              {text.login}
+            </button>
+            <button type="button" className={authForm.mode === "register" ? "selected" : ""} onClick={() => setAuthForm((current) => ({ ...current, mode: "register" }))}>
+              {text.register}
+            </button>
+          </div>
+          <FormInput
+            label={text.email}
+            value={authForm.email}
+            onChange={(value) => setAuthForm((current) => ({ ...current, email: value }))}
+          />
+          <FormInput
+            label={text.password}
+            value={authForm.password}
+            type="password"
+            onChange={(value) => setAuthForm((current) => ({ ...current, password: value }))}
+          />
+          <p className="account-hint">{text.authHint}</p>
+          <button className="save-button" type="submit" disabled={Boolean(accountBusy)}>
+            <LogIn size={18} />
+            {accountBusy ? text.saving : authForm.mode === "register" ? text.register : text.login}
+          </button>
+        </form>
+      ) : (
+        <div className="account-summary">
+          <div className="signed-user">
+            <span>{text.signedInAs}</span>
+            <strong>{auth.user?.email || "-"}</strong>
+          </div>
+          <div className={`subscription-card ${entitlement.active ? "active" : "inactive"}`}>
+            <div>
+              <span>{text.subscription}</span>
+              <strong>{entitlement.active ? text.activeSubscription : text.noSubscription}</strong>
+            </div>
+            <CheckCircle2 size={20} />
+          </div>
+          <InfoRow label={text.sttQuota} value={sttText} />
+          <InfoRow label={text.aiQuota} value={aiText} />
+          <div className="account-actions">
+            <button type="button" onClick={onRefresh} disabled={Boolean(accountBusy)}>
+              <RefreshCw size={18} />
+              {text.refreshAccount}
+            </button>
+            <button type="button" onClick={onLogout} disabled={Boolean(accountBusy)}>
+              <LogOut size={18} />
+              {text.logout}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {accountError ? (
+        <div className="notice danger account-error">
+          <AlertCircle size={18} />
+          <span>{accountError}</span>
+        </div>
+      ) : null}
+
+      <div className="plans-block">
+        <div className="plans-heading">
+          <span>{text.plans}</span>
+          <Cloud size={16} />
+        </div>
+        {plans.length ? plans.map((plan) => (
+          <article className="plan-card" key={plan.id}>
+            <div>
+              <strong>{plan.name}</strong>
+              <span>{formatMoney(plan.price_cents, plan.currency, lang)} / {plan.duration_days}d</span>
+            </div>
+            <button type="button" onClick={() => onCreateOrder(plan.id)} disabled={!auth.authenticated || accountBusy === `order:${plan.id}`}>
+              <CreditCard size={16} />
+              {text.createOrder}
+            </button>
+          </article>
+        )) : (
+          <p className="account-hint">{auth.apiBaseUrl}</p>
+        )}
+      </div>
+
+      {lastOrder ? (
+        <div className="order-card">
+          <InfoRow label={text.orderStatus} value={lastOrder.status} />
+          <div className="account-actions">
+            {lastOrder.pay_url ? (
+              <button type="button" onClick={() => onOpenPayment(lastOrder.pay_url)}>
+                <ExternalLink size={18} />
+                {text.openPayment}
+              </button>
+            ) : null}
+            <button type="button" onClick={onRefreshOrder} disabled={accountBusy === "order-refresh"}>
+              <RefreshCw size={18} />
+              {text.pollOrder}
+            </button>
+          </div>
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -651,7 +928,7 @@ function Segmented({ label, value, onChange, options }) {
       <span>{label}</span>
       <div className="segmented">
         {options.map(([id, labelText]) => (
-          <button key={id} className={value === id ? "selected" : ""} onClick={() => onChange(id)}>
+          <button type="button" key={id} className={value === id ? "selected" : ""} onClick={() => onChange(id)}>
             {labelText}
           </button>
         ))}
@@ -676,8 +953,27 @@ async function refreshAll(apiBase, setters) {
     refreshUsage(apiBase, setters.setUsage),
     api(apiBase, "/api/logs").then((data) => setters.setLogs((data.logs || []).slice().reverse())),
     api(apiBase, "/api/settings").then(setters.setSettings),
-    api(apiBase, "/api/cloud").then(setters.setCloud),
   ]);
+}
+
+async function refreshAccount(apiBase, setters) {
+  try {
+    const session = await api(apiBase, "/api/auth/session");
+    setters.setAuth(session);
+    setters.setAuthForm((current) => ({
+      ...current,
+      apiBaseUrl: session.apiBaseUrl || current.apiBaseUrl || "http://localhost:8000",
+    }));
+    await refreshPlans(apiBase, setters.setPlans, session.apiBaseUrl);
+  } catch (error) {
+    setters.setAccountError(error.message);
+  }
+}
+
+async function refreshPlans(apiBase, setPlans, backendUrl) {
+  const query = backendUrl ? `?apiBaseUrl=${encodeURIComponent(backendUrl)}` : "";
+  const data = await api(apiBase, `/api/billing/plans${query}`);
+  setPlans(Array.isArray(data) ? data : []);
 }
 
 async function refreshStatus(apiBase, setStatus) {
@@ -692,11 +988,12 @@ async function refreshUsage(apiBase, setUsage) {
 
 async function api(apiBase, path, options) {
   const response = await fetch(`${apiBase}${path}`, options);
+  const contentType = response.headers.get("content-type") || "";
+  const body = contentType.includes("application/json") ? await response.json() : await response.text();
   if (!response.ok) {
-    const body = await response.text();
-    throw new Error(body || response.statusText);
+    throw new Error(formatApiError(body, response.statusText));
   }
-  return response.json();
+  return body;
 }
 
 function setNested(setter, path, value) {
@@ -728,6 +1025,31 @@ function formatHotkey(value, lang) {
 
 function formatNumber(value = 0, lang = "zh") {
   return new Intl.NumberFormat(lang === "zh" ? "zh-CN" : "en-US").format(value || 0);
+}
+
+function formatMoney(cents = 0, currency = "CNY", lang = "zh") {
+  return new Intl.NumberFormat(lang === "zh" ? "zh-CN" : "en-US", {
+    style: "currency",
+    currency: currency || "CNY",
+  }).format((cents || 0) / 100);
+}
+
+function formatDuration(seconds = 0, lang = "zh") {
+  const value = Math.max(0, Number(seconds) || 0);
+  if (value < 60) return lang === "zh" ? `${value} 秒` : `${value}s`;
+  const minutes = Math.floor(value / 60);
+  const rest = value % 60;
+  if (minutes < 60) return lang === "zh" ? `${minutes} 分 ${rest} 秒` : `${minutes}m ${rest}s`;
+  const hours = Math.floor(minutes / 60);
+  const minuteRest = minutes % 60;
+  return lang === "zh" ? `${hours} 小时 ${minuteRest} 分` : `${hours}h ${minuteRest}m`;
+}
+
+function formatApiError(body, fallback) {
+  if (body && typeof body === "object") {
+    return body.error?.message || body.detail || body.message || fallback;
+  }
+  return body || fallback;
 }
 
 function formatSavedTime(chars = 0, lang = "zh") {

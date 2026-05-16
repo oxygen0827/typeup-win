@@ -193,7 +193,12 @@ class AgentManager extends EventEmitter {
   }
 
   _inferState(line, isError) {
-    if (line.includes("未配置 stt") || line.includes("请编辑填入 API Key")) {
+    if (
+      line.includes("未配置 stt") ||
+      line.includes("请编辑填入 API Key") ||
+      line.includes("[typeup-auth-required]") ||
+      line.includes("请先登录 TypeUp")
+    ) {
       this._setState("needs_config");
       return;
     }

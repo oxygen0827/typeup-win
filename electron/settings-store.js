@@ -8,11 +8,14 @@ const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
 const TYPEUP_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");
 const CONFIG_VERSION = 2;
+const DEFAULT_BACKEND_URL = "http://localhost:8000";
 
 const DEFAULT_CONFIG = {
   stt: {
-    provider: "glm_asr_2512",
-    api_key: "",
+    provider: "typeup_backend",
+    api_base_url: DEFAULT_BACKEND_URL,
+    access_token: "",
+    refresh_token: "",
     model: "glm-asr-2512",
     language: "zh",
   },
@@ -27,8 +30,10 @@ const DEFAULT_CONFIG = {
     method: "unicode",
   },
   llm: {
-    provider: "zhipuai",
-    api_key: "",
+    provider: "typeup_backend",
+    api_base_url: DEFAULT_BACKEND_URL,
+    access_token: "",
+    refresh_token: "",
     model: "glm-4-flash",
   },
 };
@@ -112,30 +117,57 @@ function readCloudBridge() {
   fs.mkdirSync(TYPEUP_DIR, { recursive: true });
   if (!fs.existsSync(CLOUD_PATH)) {
     return {
-      apiBaseUrl: "",
+      apiBaseUrl: process.env.TYPEUP_BACKEND_URL || DEFAULT_BACKEND_URL,
       workspaceId: "",
-      authMode: "local",
+      authMode: "backend",
       connected: false,
+      accessToken: "",
+      refreshToken: "",
+      user: null,
+      entitlement: null,
       path: CLOUD_PATH,
     };
   }
   try {
     return {
+      apiBaseUrl: process.env.TYPEUP_BACKEND_URL || DEFAULT_BACKEND_URL,
+      workspaceId: "",
+      authMode: "backend",
+      connected: false,
+      accessToken: "",
+      refreshToken: "",
+      user: null,
+      entitlement: null,
       ...JSON.parse(fs.readFileSync(CLOUD_PATH, "utf8")),
       path: CLOUD_PATH,
     };
   } catch (_error) {
-    return { apiBaseUrl: "", workspaceId: "", authMode: "local", connected: false, path: CLOUD_PATH };
+    return {
+      apiBaseUrl: process.env.TYPEUP_BACKEND_URL || DEFAULT_BACKEND_URL,
+      workspaceId: "",
+      authMode: "backend",
+      connected: false,
+      accessToken: "",
+      refreshToken: "",
+      user: null,
+      entitlement: null,
+      path: CLOUD_PATH,
+    };
   }
 }
 
 function updateCloudBridge(patch) {
   const current = readCloudBridge();
   const next = {
-    apiBaseUrl: stringValue(patch.apiBaseUrl ?? current.apiBaseUrl),
+    apiBaseUrl: stringValue(patch.apiBaseUrl ?? current.apiBaseUrl) || DEFAULT_BACKEND_URL,
     workspaceId: stringValue(patch.workspaceId ?? current.workspaceId),
-    authMode: stringValue((patch.authMode ?? current.authMode) || "local"),
+    authMode: stringValue((patch.authMode ?? current.authMode) || "backend"),
     connected: Boolean(patch.connected ?? current.connected),
+    accessToken: patch.accessToken !== undefined ? stringValue(patch.accessToken) || "" : stringValue(current.accessToken) || "",
+    refreshToken: patch.refreshToken !== undefined ? stringValue(patch.refreshToken) || "" : stringValue(current.refreshToken) || "",
+    user: patch.user !== undefined ? patch.user : current.user || null,
+    entitlement: patch.entitlement !== undefined ? patch.entitlement : current.entitlement || null,
+    updatedAt: Date.now(),
   };
   fs.mkdirSync(TYPEUP_DIR, { recursive: true });
   fs.writeFileSync(CLOUD_PATH, JSON.stringify(next, null, 2), "utf8");
@@ -148,6 +180,10 @@ function normalizePatch(patch) {
     normalized.stt = {
       provider: stringValue(patch.stt.provider),
       api_key: stringValue(patch.stt.api_key),
+      api_base_url: stringValue(patch.stt.api_base_url),
+      access_token: stringValue(patch.stt.access_token),
+      refresh_token: stringValue(patch.stt.refresh_token),
+      cloud_bridge_path: stringValue(patch.stt.cloud_bridge_path),
       model: stringValue(patch.stt.model),
       language: stringValue(patch.stt.language),
       base_url: stringValue(patch.stt.base_url),
@@ -179,6 +215,10 @@ function normalizePatch(patch) {
     normalized.llm = {
       provider: stringValue(patch.llm.provider),
       api_key: stringValue(patch.llm.api_key),
+      api_base_url: stringValue(patch.llm.api_base_url),
+      access_token: stringValue(patch.llm.access_token),
+      refresh_token: stringValue(patch.llm.refresh_token),
+      cloud_bridge_path: stringValue(patch.llm.cloud_bridge_path),
       model: stringValue(patch.llm.model),
       base_url: stringValue(patch.llm.base_url),
     };
@@ -188,6 +228,9 @@ function normalizePatch(patch) {
 
 function isConfigured(config) {
   const stt = config.stt || {};
+  if (stt.provider === "typeup_backend") {
+    return hasRealValue(stt.api_base_url) && hasRealValue(stt.access_token);
+  }
   switch (stt.provider) {
     case "aliyun":
       return hasRealValue(stt.access_key_id) && hasRealValue(stt.access_key_secret) && hasRealValue(stt.app_key);

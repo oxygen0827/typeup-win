@@ -238,6 +238,7 @@ button:disabled {
 .shortcut-panel,
 .usage-panel,
 .log-panel,
+.account-panel,
 .settings-panel,
 .devices-panel {
   background: color-mix(in srgb, var(--surface) 95%, transparent);
@@ -254,6 +255,7 @@ button:disabled {
 }
 
 .settings-panel,
+.account-panel,
 .devices-panel {
   padding: 16px;
 }
@@ -786,6 +788,158 @@ button:disabled {
 .save-button,
 .settings-panel > button {
   width: 100%;
+}
+
+.account-form,
+.account-summary {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-mode,
+.account-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.auth-mode {
+  min-height: 38px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.auth-mode button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-weight: 850;
+}
+
+.auth-mode .selected {
+  background: var(--primary);
+  color: #fff;
+}
+
+.account-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.signed-user,
+.subscription-card,
+.plan-card,
+.order-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.signed-user,
+.subscription-card {
+  padding: 12px;
+}
+
+.signed-user span,
+.subscription-card span,
+.plans-heading,
+.plan-card span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.signed-user strong,
+.subscription-card strong {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.subscription-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.subscription-card.active {
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.subscription-card.inactive {
+  color: var(--orange);
+  background: var(--orange-soft);
+}
+
+.account-summary .info-row,
+.order-card .info-row {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.account-error {
+  margin-bottom: 12px;
+}
+
+.plans-block {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.plans-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.plan-card {
+  min-height: 64px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+}
+
+.plan-card strong,
+.plan-card span {
+  display: block;
+}
+
+.plan-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.plan-card span {
+  margin-top: 4px;
+}
+
+.plan-card button {
+  min-width: 86px;
+  padding: 0 10px;
+}
+
+.order-card {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px;
 }
 
 .devices-panel pre {
