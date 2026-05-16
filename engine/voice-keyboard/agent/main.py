@@ -370,6 +370,7 @@ def main():
     parser.add_argument("--port",         default=None,        help="指定串口路径")
     parser.add_argument("--no-serial",    action="store_true", help="不搜索 ESP32 串口（纯软件模式）")
     parser.add_argument("--list-devices", action="store_true", help="列出可用麦克风设备后退出")
+    parser.add_argument("--result-json",  default=None,        help="把一次性命令的 JSON 结果写入指定文件")
     parser.add_argument("--permissions-json", action="store_true", help="输出 macOS 权限状态 JSON 后退出")
     parser.add_argument("--request-accessibility", action="store_true", help="请求 macOS 辅助功能权限后退出")
     parser.add_argument("--request-input-monitoring", action="store_true", help="请求 macOS 输入监听权限后退出")
@@ -382,24 +383,34 @@ def main():
     if getattr(sys, "frozen", False):
         args.no_serial = True
 
+    def emit_json(payload):
+        text = json.dumps(payload, ensure_ascii=False)
+        if args.result_json:
+            try:
+                with open(args.result_json, "w", encoding="utf-8") as f:
+                    f.write(text)
+            except Exception as e:
+                print(f"[typeup] 写入 JSON 结果失败: {e}")
+        print(text)
+
     if args.list_devices:
         list_devices()
         return
     if args.permissions_json:
         from agent import permissions as _perm
-        print(json.dumps(_perm.all_status(), ensure_ascii=False))
+        emit_json(_perm.all_status())
         return
     if args.request_accessibility:
         from agent import permissions as _perm
-        print(json.dumps({"accessibility": _perm.request_accessibility()}, ensure_ascii=False))
+        emit_json({"accessibility": _perm.request_accessibility()})
         return
     if args.request_input_monitoring:
         from agent import permissions as _perm
-        print(json.dumps({"input_monitoring": _perm.request_input_monitoring()}, ensure_ascii=False))
+        emit_json({"input_monitoring": _perm.request_input_monitoring()})
         return
     if args.request_microphone:
         from agent import permissions as _perm
-        print(json.dumps({"microphone": _perm.request_microphone_sync()}, ensure_ascii=False))
+        emit_json({"microphone": _perm.request_microphone_sync()})
         return
     if args.install:
         install()

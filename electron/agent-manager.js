@@ -20,6 +20,7 @@ class AgentManager extends EventEmitter {
     this.exitedAt = null;
     this.logLines = [];
     this._macEngineAppPath = null;
+    this._activeLaunch = null;
   }
 
   engineDir() {
@@ -117,7 +118,14 @@ class AgentManager extends EventEmitter {
     });
 
     this.pid = this.child.pid;
+    this._activeLaunch = launch;
     this._appendLog(`[typeup] 启动语音引擎 PID=${this.pid}`);
+    if (launch.viaLaunchServices) {
+      this._appendLog(`[typeup] 通过 macOS 应用包启动: ${this.macEngineAppPath()}`);
+      setTimeout(() => {
+        if (this.child && this.state === "starting") this._setState("listening");
+      }, 1200);
+    }
 
     this.child.stdout.on("data", (chunk) => this._handleOutput(chunk));
     this.child.stderr.on("data", (chunk) => this._handleOutput(chunk, true));
@@ -129,6 +137,7 @@ class AgentManager extends EventEmitter {
     this.child.once("exit", (code, signal) => {
       this._appendLog(`[typeup] 引擎退出 code=${code ?? ""} signal=${signal ?? ""}`);
       this.child = null;
+      this._activeLaunch = null;
       this.pid = null;
       this.exitedAt = Date.now();
       if (this.state !== "stopping") {
@@ -151,10 +160,14 @@ class AgentManager extends EventEmitter {
     }
     this._setState("stopping");
     const child = this.child;
+    const launch = this._activeLaunch;
     let exited = false;
     await new Promise((resolve) => {
       const timer = setTimeout(() => {
-        if (!exited) child.kill("SIGKILL");
+        if (!exited) {
+          if (launch?.viaLaunchServices) this._terminateMacEngineApp();
+          child.kill("SIGKILL");
+        }
       }, 2500);
       const forceResolveTimer = setTimeout(resolve, 4000);
       child.once("exit", () => {
@@ -163,10 +176,12 @@ class AgentManager extends EventEmitter {
         clearTimeout(forceResolveTimer);
         resolve();
       });
+      if (launch?.viaLaunchServices) this._terminateMacEngineApp();
       child.kill("SIGTERM");
     });
     if (!exited && this.child === child) {
       this.child = null;
+      this._activeLaunch = null;
       this.pid = null;
     }
     return this.status();
@@ -212,8 +227,7 @@ class AgentManager extends EventEmitter {
         microphone: "granted",
       };
     }
-    const output = await this._runAgentCommand(["--permissions-json"]);
-    return parseLastJson(output) || {
+    return await this._permissionsFromTcc() || {
       accessibility: "unknown",
       input_monitoring: "unknown",
       microphone: "unknown",
@@ -222,17 +236,17 @@ class AgentManager extends EventEmitter {
 
   async requestMicrophone() {
     if (process.platform !== "darwin") return { microphone: "granted" };
-    await this._runMacEngineAppCommand(["--request-microphone"]);
+    await this._runMacEngineAppCommand(["--request-microphone"], { resultJson: true });
     return this.permissions();
   }
 
   async requestPermission(name) {
     if (name === "accessibility") {
-      await this._runMacEngineAppCommand(["--request-accessibility"]);
+      await this._runMacEngineAppCommand(["--request-accessibility"], { resultJson: true });
       return this.permissions();
     }
     if (name === "input_monitoring") {
-      await this._runMacEngineAppCommand(["--request-input-monitoring"]);
+      await this._runMacEngineAppCommand(["--request-input-monitoring"], { resultJson: true });
       return this.permissions();
     }
     if (name === "microphone") {
@@ -268,13 +282,18 @@ class AgentManager extends EventEmitter {
     });
   }
 
-  _runMacEngineAppCommand(extraArgs = []) {
+  _runMacEngineAppCommand(extraArgs = [], options = {}) {
     const appPath = this.macEngineAppPath();
     if (!appPath || !fs.existsSync(appPath)) {
       return Promise.reject(new Error(`找不到 TypeUp Engine.app: ${appPath}`));
     }
+    const resultPath = options.resultJson
+      ? path.join(os.tmpdir(), `typeup-engine-${process.pid}-${Date.now()}.json`)
+      : "";
+    const args = ["-n", "-W", appPath, "--args", ...extraArgs];
+    if (resultPath) args.push("--result-json", resultPath);
     return new Promise((resolve, reject) => {
-      const child = spawn("open", ["-n", "-W", appPath, "--args", ...extraArgs], {
+      const child = spawn("open", args, {
         windowsHide: true,
       });
       let output = "";
@@ -286,7 +305,15 @@ class AgentManager extends EventEmitter {
       });
       child.once("error", reject);
       child.once("exit", (code) => {
-        if (code === 0) resolve(output.trim());
+        if (code === 0) {
+          if (resultPath && fs.existsSync(resultPath)) {
+            const result = parseLastJson(fs.readFileSync(resultPath, "utf8"));
+            fs.rmSync(resultPath, { force: true });
+            resolve(result || output.trim());
+            return;
+          }
+          resolve(output.trim());
+        }
         else reject(new Error(output.trim() || `open exited with code ${code}`));
       });
     });
@@ -300,6 +327,13 @@ class AgentManager extends EventEmitter {
 
     if (process.platform === "darwin") {
       const appPath = this.macEngineAppPath();
+      if (this.electronApp.isPackaged && extraArgs.length === 0) {
+        return {
+          command: "open",
+          args: ["-n", "-W", appPath, "--args", "--no-serial", "--no-ui"],
+          viaLaunchServices: true,
+        };
+      }
       for (const executableName of ["TypeUp Engine", "Voice Keyboard"]) {
         const typeupAppExecutable = path.join(appPath, "Contents", "MacOS", executableName);
         if (fs.existsSync(typeupAppExecutable)) {
@@ -352,6 +386,60 @@ class AgentManager extends EventEmitter {
     fs.rmSync(targetPath, { recursive: true, force: true });
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.cpSync(sourcePath, targetPath, { recursive: true });
+  }
+
+  _terminateMacEngineApp() {
+    const appPath = this.macEngineAppPath();
+    for (const executableName of ["TypeUp Engine", "Voice Keyboard"]) {
+      const executablePath = path.join(appPath, "Contents", "MacOS", executableName);
+      if (!fs.existsSync(executablePath)) continue;
+      const child = spawn("pkill", ["-f", executablePath], { windowsHide: true });
+      child.on("error", (error) => this._appendLog(`[typeup] 停止 macOS 引擎失败: ${error.message}`));
+    }
+  }
+
+  async _permissionsFromTcc() {
+    const systemRows = await this._queryTccDatabase("/Library/Application Support/com.apple.TCC/TCC.db", [
+      "kTCCServiceAccessibility",
+      "kTCCServiceListenEvent",
+    ]);
+    const userRows = await this._queryTccDatabase(
+      path.join(os.homedir(), "Library", "Application Support", "com.apple.TCC", "TCC.db"),
+      ["kTCCServiceMicrophone"],
+    );
+    return {
+      accessibility: tccStatus(systemRows.kTCCServiceAccessibility),
+      input_monitoring: tccStatus(systemRows.kTCCServiceListenEvent),
+      microphone: tccStatus(userRows.kTCCServiceMicrophone, "not_determined"),
+    };
+  }
+
+  _queryTccDatabase(dbPath, services) {
+    if (!fs.existsSync(dbPath)) return Promise.resolve({});
+    const serviceList = services.map((item) => `'${item.replaceAll("'", "''")}'`).join(",");
+    const sql = [
+      "select service, auth_value from access",
+      "where client = 'com.typeup.engine'",
+      `and service in (${serviceList})`,
+      "order by last_modified asc;",
+    ].join(" ");
+    return new Promise((resolve) => {
+      const child = spawn("sqlite3", [dbPath, sql], { windowsHide: true });
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk.toString("utf8");
+      });
+      child.once("error", () => resolve({}));
+      child.once("exit", () => {
+        const rows = {};
+        for (const line of output.split(/\r?\n/)) {
+          const [service, value] = line.trim().split("|");
+          if (!service) continue;
+          rows[service] = Number(value);
+        }
+        resolve(rows);
+      });
+    });
   }
 
   _handleOutput(chunk, isError = false) {
@@ -443,6 +531,12 @@ function parseLastJson(output) {
     }
   }
   return null;
+}
+
+function tccStatus(value, missing = "denied") {
+  if (value === 2) return "granted";
+  if (value === undefined || Number.isNaN(value)) return missing;
+  return "denied";
 }
 
 module.exports = { AgentManager };
