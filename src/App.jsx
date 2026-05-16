@@ -46,10 +46,7 @@ const STATUS_COPY = {
 
 const COPY = {
   zh: {
-    subtitle: "Windows 本地语音输入与 AI 编辑",
     language: "语言",
-    readyForWindows: "Windows 体验",
-    readyForMac: "macOS 体验",
     localEngine: "本地引擎",
     voiceConsole: "语音控制台",
     shortcuts: "快捷键",
@@ -135,10 +132,7 @@ const COPY = {
     restartAfterGrant: "授权后请重启本地引擎。",
   },
   en: {
-    subtitle: "Windows local voice input and AI editing",
     language: "Language",
-    readyForWindows: "Windows experience",
-    readyForMac: "macOS experience",
     localEngine: "Local Engine",
     voiceConsole: "Voice Console",
     shortcuts: "Shortcuts",
@@ -492,7 +486,6 @@ export default function App() {
           <img src={mark} alt="" />
           <div>
             <h1>TypeUp</h1>
-            <p>{text.subtitle}</p>
           </div>
         </div>
         <div className="titlebar-actions">
@@ -516,7 +509,6 @@ export default function App() {
                 <p className="eyebrow">{text.localEngine}</p>
                 <h2>{text.voiceConsole}</h2>
               </div>
-              <div className="windows-chip">{platform === "darwin" ? text.readyForMac : text.readyForWindows}</div>
             </div>
 
             <div className="voice-grid">
@@ -1141,7 +1133,11 @@ async function refreshAccount(apiBase, setters) {
       ...current,
       apiBaseUrl: session.apiBaseUrl || current.apiBaseUrl || "http://localhost:8000",
     }));
-    await refreshPlans(apiBase, setters.setPlans, session.apiBaseUrl);
+    if (session.connected) {
+      await refreshPlans(apiBase, setters.setPlans, session.apiBaseUrl);
+    } else {
+      setters.setPlans([]);
+    }
   } catch (error) {
     setters.setAccountError(error.message);
   }

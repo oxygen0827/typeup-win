@@ -103,7 +103,7 @@ async function backendJson(apiBaseUrl, path, options = {}) {
     throw new BackendRequestError(502, {
       error: {
         code: timedOut ? "BACKEND_TIMEOUT" : "BACKEND_UNAVAILABLE",
-        message: timedOut ? "后端请求超时，请检查服务是否可用" : "无法连接后端服务，请检查后端地址",
+        message: timedOut ? "TypeUp 后端请求超时，请确认服务是否可用" : "无法连接 TypeUp 后端，请确认服务已启动或后端地址正确",
         status: 502,
       },
     });
@@ -443,6 +443,15 @@ function createLocalServer({ electronApp }) {
       }
       if (error.status === 403) {
         res.json(clearAuthSession(cloud.apiBaseUrl));
+        return;
+      }
+      if (error.status >= 500) {
+        const next = updateCloudBridge({
+          apiBaseUrl: cloud.apiBaseUrl,
+          connected: false,
+          entitlement: null,
+        });
+        res.json(publicSession(next));
         return;
       }
       sendBackendError(res, error);

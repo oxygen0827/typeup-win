@@ -292,19 +292,6 @@ button:disabled {
   text-transform: uppercase;
 }
 
-.windows-chip {
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0 10px;
-  color: var(--primary);
-  background: var(--primary-soft);
-  font-size: 12px;
-  font-weight: 800;
-}
-
 .voice-grid {
   display: grid;
   grid-template-columns: 250px minmax(0, 1fr) 260px;
