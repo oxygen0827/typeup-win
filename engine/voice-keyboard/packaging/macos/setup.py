@@ -35,6 +35,7 @@ OPTIONS = {
         "agent.history",
         "agent.permissions",
         "agent.log_setup",
+        "wave",
     ],
     "plist": {
         "CFBundleName":              "Voice Keyboard",

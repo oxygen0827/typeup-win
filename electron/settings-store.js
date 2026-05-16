@@ -5,7 +5,7 @@ const YAML = require("yaml");
 
 const USER_DIR = path.join(os.homedir(), ".voice-keyboard");
 const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
-const TYPEUP_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "TypeUp");
+const TYPEUP_DIR = path.join(resolveAppDataDir(), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");
 const CONFIG_VERSION = 2;
 const DEFAULT_BACKEND_URL = "http://localhost:8000";
@@ -37,6 +37,17 @@ const DEFAULT_CONFIG = {
     model: "glm-4-flash",
   },
 };
+
+function resolveAppDataDir() {
+  if (process.env.TYPEUP_APP_DATA_DIR) return process.env.TYPEUP_APP_DATA_DIR;
+  if (process.platform === "win32") {
+    return process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  }
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support");
+  }
+  return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+}
 
 function ensureDefaultConfig() {
   fs.mkdirSync(USER_DIR, { recursive: true });

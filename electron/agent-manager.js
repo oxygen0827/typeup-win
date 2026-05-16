@@ -118,17 +118,24 @@ class AgentManager extends EventEmitter {
     }
     this._setState("stopping");
     const child = this.child;
+    let exited = false;
     await new Promise((resolve) => {
       const timer = setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
-        resolve();
+        if (!exited) child.kill("SIGKILL");
       }, 2500);
+      const forceResolveTimer = setTimeout(resolve, 4000);
       child.once("exit", () => {
+        exited = true;
         clearTimeout(timer);
+        clearTimeout(forceResolveTimer);
         resolve();
       });
       child.kill("SIGTERM");
     });
+    if (!exited && this.child === child) {
+      this.child = null;
+      this.pid = null;
+    }
     return this.status();
   }
 
