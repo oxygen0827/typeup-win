@@ -2,6 +2,8 @@
 
 TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启动本地 Node server 和内嵌 Python engine，React UI 通过本地 server 控制引擎、展示用量，并接入后端账号、订阅和模型代理。
 
+仓库职责边界见 [docs/repository-boundaries.md](docs/repository-boundaries.md)。当前仓库负责桌面端 UI、本地 bridge、打包与内嵌 engine 集成；通用语音输入 engine 以上游 `wangqioo/voice-keyboard` 为准，云端账号/支付/模型代理由 `typeup-backend` 负责。
+
 ## 当前架构
 
 ```text

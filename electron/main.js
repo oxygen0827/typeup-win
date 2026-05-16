@@ -6,7 +6,7 @@ let mainWindow;
 let localServer;
 
 const isDev = process.env.NODE_ENV === "development";
-const windowIcon = path.join(__dirname, "..", "build", "icon.ico");
+const windowIcon = path.join(__dirname, "..", "build", process.platform === "darwin" ? "icon.png" : "icon.ico");
 
 async function createWindow() {
   mainWindow = new BrowserWindow({

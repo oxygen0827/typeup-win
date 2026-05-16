@@ -11,6 +11,7 @@ const {
 } = require("./settings-store");
 
 const DEFAULT_BACKEND_URL = process.env.TYPEUP_BACKEND_URL || "http://localhost:8000";
+const DEFAULT_BACKEND_TIMEOUT_MS = 30000;
 const LOCAL_RENDERER_PORTS = new Set(["5173", "4173"]);
 const LOCAL_RENDERER_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
@@ -81,13 +82,26 @@ function clearAuthSession(apiBaseUrl) {
 }
 
 async function backendJson(apiBaseUrl, path, options = {}) {
-  const response = await fetch(`${normalizeBackendUrl(apiBaseUrl)}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.headers || {}),
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${normalizeBackendUrl(apiBaseUrl)}${path}`, {
+      ...options,
+      signal: options.signal || AbortSignal.timeout(options.timeoutMs || DEFAULT_BACKEND_TIMEOUT_MS),
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  } catch (error) {
+    const timedOut = error.name === "TimeoutError" || error.name === "AbortError";
+    throw new BackendRequestError(502, {
+      error: {
+        code: timedOut ? "BACKEND_TIMEOUT" : "BACKEND_UNAVAILABLE",
+        message: timedOut ? "后端请求超时，请检查服务是否可用" : "无法连接后端服务，请检查后端地址",
+        status: 502,
+      },
+    });
+  }
   const text = await response.text();
   const body = text ? safeJson(text) : null;
   if (!response.ok) {

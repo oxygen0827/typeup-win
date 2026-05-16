@@ -164,6 +164,20 @@ class AgentManager extends EventEmitter {
       return { command: explicitExe, args: ["--no-serial", "--no-ui", ...extraArgs] };
     }
 
+    if (process.platform === "darwin") {
+      const typeupAppExecutable = path.join(engineDir, "dist", "Voice Keyboard.app", "Contents", "MacOS", "Voice Keyboard");
+      if (fs.existsSync(typeupAppExecutable)) {
+        return { command: typeupAppExecutable, args: ["--no-serial", "--no-ui", ...extraArgs] };
+      }
+
+      const venvPython = path.join(engineDir, ".venv", "bin", "python");
+      const python = fs.existsSync(venvPython) ? venvPython : (process.env.TYPEUP_PYTHON || "python3");
+      return {
+        command: python,
+        args: ["-u", "-m", "agent.main", "--no-serial", "--no-ui", ...extraArgs],
+      };
+    }
+
     const typeupExe = path.join(engineDir, "dist", "TypeUpAgent", "TypeUpAgent.exe");
     if (fs.existsSync(typeupExe)) {
       return { command: typeupExe, args: ["--no-serial", "--no-ui", ...extraArgs] };
