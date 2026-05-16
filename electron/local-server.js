@@ -360,6 +360,18 @@ function createLocalServer({ electronApp }) {
     }
   });
 
+  app.post("/api/permissions/:name/request", async (req, res) => {
+    if (process.platform !== "darwin") {
+      res.json({ [req.params.name]: "granted" });
+      return;
+    }
+    try {
+      res.json(await agent.requestPermission(req.params.name));
+    } catch (error) {
+      res.status(500).json({ error: { code: "PERMISSION_REQUEST_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
   app.post("/api/permissions/microphone/request", async (_req, res) => {
     try {
       res.json(await agent.requestMicrophone());

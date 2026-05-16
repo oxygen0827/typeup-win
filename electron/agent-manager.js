@@ -213,6 +213,21 @@ class AgentManager extends EventEmitter {
     return parseLastJson(output) || { microphone: "unknown" };
   }
 
+  async requestPermission(name) {
+    if (name === "accessibility") {
+      const output = await this._runAgentCommand(["--request-accessibility"]);
+      return parseLastJson(output) || { accessibility: "unknown" };
+    }
+    if (name === "input_monitoring") {
+      const output = await this._runAgentCommand(["--request-input-monitoring"]);
+      return parseLastJson(output) || { input_monitoring: "unknown" };
+    }
+    if (name === "microphone") {
+      return this.requestMicrophone();
+    }
+    throw new Error(`Unsupported permission: ${name}`);
+  }
+
   _runAgentCommand(extraArgs = []) {
     const engineDir = this.engineDir();
     const launch = this._resolveLaunch(engineDir, extraArgs);

@@ -32,6 +32,7 @@ def accessibility() -> str:
 
 
 _iokit_check = None
+_iokit_request = None
 
 
 def _load_iokit_check():
@@ -54,6 +55,26 @@ def _load_iokit_check():
         return None
 
 
+def _load_iokit_request():
+    global _iokit_request
+    if _iokit_request is not None:
+        return _iokit_request
+    try:
+        import ctypes
+        import ctypes.util
+        path = ctypes.util.find_library("IOKit")
+        if not path:
+            return None
+        lib = ctypes.CDLL(path)
+        fn = lib.IOHIDRequestAccess
+        fn.argtypes = [ctypes.c_uint]
+        fn.restype = ctypes.c_uint
+        _iokit_request = fn
+        return fn
+    except Exception:
+        return None
+
+
 def input_monitoring() -> str:
     """输入监听权限——pynput 全局键盘监听需要这个。"""
     if not _DARWIN:
@@ -68,6 +89,33 @@ def input_monitoring() -> str:
         return {0: "granted", 1: "denied", 2: "not_determined"}.get(access, "unknown")
     except Exception:
         return "unknown"
+
+
+def request_accessibility() -> str:
+    """主动触发辅助功能授权提示/登记。"""
+    if not _DARWIN:
+        return "granted"
+    try:
+        import HIServices  # type: ignore
+        from Foundation import NSDictionary
+        opts = NSDictionary.dictionaryWithObject_forKey_(True, "AXTrustedCheckOptionPrompt")
+        return "granted" if HIServices.AXIsProcessTrustedWithOptions(opts) else accessibility()
+    except Exception:
+        return accessibility()
+
+
+def request_input_monitoring() -> str:
+    """主动触发输入监听授权提示/登记。"""
+    if not _DARWIN:
+        return "granted"
+    fn = _load_iokit_request()
+    if fn is None:
+        return input_monitoring()
+    try:
+        access = fn(1)  # kIOHIDRequestTypeListenEvent
+        return {0: "granted", 1: "denied", 2: "not_determined"}.get(access, input_monitoring())
+    except Exception:
+        return input_monitoring()
 
 
 def microphone() -> str:

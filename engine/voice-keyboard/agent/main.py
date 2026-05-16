@@ -371,6 +371,8 @@ def main():
     parser.add_argument("--no-serial",    action="store_true", help="不搜索 ESP32 串口（纯软件模式）")
     parser.add_argument("--list-devices", action="store_true", help="列出可用麦克风设备后退出")
     parser.add_argument("--permissions-json", action="store_true", help="输出 macOS 权限状态 JSON 后退出")
+    parser.add_argument("--request-accessibility", action="store_true", help="请求 macOS 辅助功能权限后退出")
+    parser.add_argument("--request-input-monitoring", action="store_true", help="请求 macOS 输入监听权限后退出")
     parser.add_argument("--request-microphone", action="store_true", help="请求 macOS 麦克风权限后退出")
     parser.add_argument("--install",      action="store_true", help="注册开机自启动")
     parser.add_argument("--uninstall",    action="store_true", help="移除开机自启动")
@@ -386,6 +388,14 @@ def main():
     if args.permissions_json:
         from agent import permissions as _perm
         print(json.dumps(_perm.all_status(), ensure_ascii=False))
+        return
+    if args.request_accessibility:
+        from agent import permissions as _perm
+        print(json.dumps({"accessibility": _perm.request_accessibility()}, ensure_ascii=False))
+        return
+    if args.request_input_monitoring:
+        from agent import permissions as _perm
+        print(json.dumps({"input_monitoring": _perm.request_input_monitoring()}, ensure_ascii=False))
         return
     if args.request_microphone:
         from agent import permissions as _perm

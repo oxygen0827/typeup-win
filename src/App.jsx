@@ -129,6 +129,7 @@ const COPY = {
     permissionPending: "未决定",
     permissionUnknown: "未知",
     openSystemSettings: "打开系统设置",
+    requestPermission: "请求权限",
     requestMic: "请求麦克风",
     recheck: "重新检查",
     restartAfterGrant: "授权后请重启本地引擎。",
@@ -217,6 +218,7 @@ const COPY = {
     permissionPending: "Not decided",
     permissionUnknown: "Unknown",
     openSystemSettings: "Open Settings",
+    requestPermission: "Request",
     requestMic: "Request Mic",
     recheck: "Recheck",
     restartAfterGrant: "Restart the local engine after granting permissions.",
@@ -464,6 +466,11 @@ export default function App() {
     await api(apiBase, `/api/permissions/${name}/open`, { method: "POST" });
   }
 
+  async function requestPermission(name) {
+    await api(apiBase, `/api/permissions/${name}/request`, { method: "POST" });
+    await refreshPermissions(apiBase, setPermissions);
+  }
+
   async function requestMicPermission() {
     await api(apiBase, "/api/permissions/microphone/request", { method: "POST" });
     await refreshPermissions(apiBase, setPermissions);
@@ -666,6 +673,7 @@ export default function App() {
               permissions={permissions.permissions}
               engineAppPath={permissions.engineAppPath}
               onOpen={openPermission}
+              onRequest={requestPermission}
               onRequestMic={requestMicPermission}
               onRecheck={recheckPermissions}
               onRevealTarget={revealPermissionTarget}
@@ -793,7 +801,7 @@ function Shortcut({ label, detail, keys }) {
   );
 }
 
-function PermissionsPanel({ text, permissions, engineAppPath, onOpen, onRequestMic, onRecheck, onRevealTarget, disabled }) {
+function PermissionsPanel({ text, permissions, engineAppPath, onOpen, onRequest, onRequestMic, onRecheck, onRevealTarget, disabled }) {
   const rows = [
     ["accessibility", text.accessibility],
     ["input_monitoring", text.inputMonitoring],
@@ -829,6 +837,10 @@ function PermissionsPanel({ text, permissions, engineAppPath, onOpen, onRequestM
             <button type="button" onClick={() => onOpen(key)} disabled={disabled}>
               <ExternalLink size={15} />
               {text.openSystemSettings}
+            </button>
+            <button type="button" onClick={() => onRequest(key)} disabled={disabled}>
+              <ShieldCheck size={15} />
+              {text.requestPermission}
             </button>
           </div>
         ))}
