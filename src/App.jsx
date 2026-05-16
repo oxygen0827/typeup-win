@@ -28,7 +28,7 @@ const STATUS_COPY = {
     stopped: { label: "已停止", title: "本地引擎已停止", detail: "点击启动后，TypeUp 会回到后台等待语音输入。", tone: "muted" },
     stopping: { label: "停止中", title: "正在停止引擎", detail: "正在释放麦克风和键盘监听。", tone: "muted" },
     starting: { label: "启动中", title: "正在启动本地引擎", detail: "正在加载语音、输入和 AI 编辑模块。", tone: "warn" },
-    listening: { label: "就绪", title: "按下 ALT 开始说话", detail: "松开后自动转写并输入到当前光标位置。", tone: "ok" },
+    listening: { label: "就绪", title: "按住右 Shift 开始说话", detail: "松开后自动转写并输入到当前光标位置。", tone: "ok" },
     transcribing: { label: "处理中", title: "正在转写或编辑", detail: "结果完成后会自动写入当前窗口。", tone: "active" },
     needs_config: { label: "等待配置", title: "需要填写 STT Key", detail: "保存配置后会自动重启本地引擎。", tone: "warn" },
     error: { label: "异常", title: "本地引擎遇到问题", detail: "查看日志定位错误，修复后可直接重启。", tone: "danger" },
@@ -37,7 +37,7 @@ const STATUS_COPY = {
     stopped: { label: "Stopped", title: "Local engine is stopped", detail: "Start it to return TypeUp to background voice input.", tone: "muted" },
     stopping: { label: "Stopping", title: "Stopping engine", detail: "Releasing microphone and keyboard hooks.", tone: "muted" },
     starting: { label: "Starting", title: "Starting local engine", detail: "Loading speech, typing, and AI editing modules.", tone: "warn" },
-    listening: { label: "Ready", title: "Press ALT to speak", detail: "Release to transcribe and type at the current cursor.", tone: "ok" },
+    listening: { label: "Ready", title: "Hold Right Shift to speak", detail: "Release to transcribe and type at the current cursor.", tone: "ok" },
     transcribing: { label: "Working", title: "Transcribing or editing", detail: "The result will be written into the active window.", tone: "active" },
     needs_config: { label: "Setup", title: "STT key required", detail: "Save settings to restart the local engine.", tone: "warn" },
     error: { label: "Error", title: "Local engine needs attention", detail: "Check logs, then restart after fixing the issue.", tone: "danger" },
@@ -109,7 +109,7 @@ const COPY = {
     original: "原生",
     lightPolish: "微润色",
     statusDockReady: "TypeUp 已接管预览页热键",
-    statusDockHint: "ALT 说话，ALT + SPACE 进行 AI 编辑，双击 ALT 切换润色模式",
+    statusDockHint: "右 Shift 说话，右 Option 进行 AI 编辑，双击右 Shift 切换润色模式",
     shortcutSpeak: "开始说话",
     shortcutSpeakDetail: "松开后转写到当前光标",
     shortcutAi: "AI 编辑",
@@ -198,7 +198,7 @@ const COPY = {
     original: "Original",
     lightPolish: "Light Polish",
     statusDockReady: "TypeUp is using the preview shortcuts",
-    statusDockHint: "ALT to speak, ALT + SPACE for AI editing, double ALT to switch polish mode",
+    statusDockHint: "Right Shift to speak, Right Option for AI editing, double Right Shift to switch polish mode",
     shortcutSpeak: "Start Speaking",
     shortcutSpeakDetail: "Release to type at the cursor",
     shortcutAi: "AI Edit",
@@ -227,7 +227,7 @@ const COPY = {
 
 const EMPTY_SETTINGS = {
   stt: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-asr-2512", language: "zh" },
-  audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2, ptt_key: "alt_l", ai_key: ["alt_l", "space"] },
+  audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2, ptt_key: "shift_r", ai_key: "alt_r" },
   typing: { method: "unicode" },
   llm: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-4-flash" },
 };
@@ -337,8 +337,9 @@ export default function App() {
     return Math.max(1, ...days.map((day) => (day.transcribedChars || 0) + (day.aiEditedChars || 0)));
   }, [days]);
 
-  const pttKey = settings.audio?.ptt_key || "alt_l";
-  const aiKey = settings.audio?.ai_key || ["alt_l", "space"];
+  const pttKey = settings.audio?.ptt_key || "shift_r";
+  const aiKey = settings.audio?.ai_key || "alt_r";
+  const polishKey = `${lang === "zh" ? "双击" : "Double"} ${formatHotkey(pttKey, lang, platform)}`;
 
   async function agentAction(action) {
     const next = await api(apiBase, `/api/agent/${action}`, { method: "POST" });
@@ -600,14 +601,14 @@ export default function App() {
             <div className="panel-heading compact">
               <div>
                 <p className="eyebrow">{text.shortcuts}</p>
-                <h2>{formatHotkey(pttKey, lang)} / {formatHotkey(aiKey, lang)} / {lang === "zh" ? "双击 ALT" : "Double ALT"}</h2>
+                <h2>{formatHotkey(pttKey, lang, platform)} / {formatHotkey(aiKey, lang, platform)} / {polishKey}</h2>
               </div>
               <WandSparkles size={22} />
             </div>
             <div className="shortcut-grid">
-              <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang)} />
-              <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang)} />
-              <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={lang === "zh" ? "双击 ALT" : "Double ALT"} />
+              <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang, platform)} />
+              <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang, platform)} />
+              <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={polishKey} />
             </div>
           </section>
 
@@ -1185,15 +1186,18 @@ function setNested(setter, path, value) {
   });
 }
 
-function formatHotkey(value, lang) {
+function formatHotkey(value, lang, platform = "") {
   const tokens = Array.isArray(value) ? value : [value];
   return tokens
     .map((token) => {
       const text = String(token || "").toLowerCase();
-      if (text === "alt_l" || text === "alt_r" || text === "right_alt" || text === "left_alt") return "ALT";
+      if (text === "alt_l" || text === "left_alt") return platform === "darwin" ? (lang === "zh" ? "左 OPTION" : "LEFT OPTION") : "ALT";
+      if (text === "alt_r" || text === "right_alt") return platform === "darwin" ? (lang === "zh" ? "右 OPTION" : "RIGHT OPTION") : "RIGHT ALT";
       if (text === "ctrl_l" || text === "ctrl_r" || text === "right_ctrl" || text === "left_ctrl") return "CTRL";
       if (text === "space") return lang === "zh" ? "SPACE" : "SPACE";
-      if (text === "cmd_l" || text === "cmd_r") return "WIN";
+      if (text === "shift_l" || text === "left_shift") return lang === "zh" ? "左 SHIFT" : "LEFT SHIFT";
+      if (text === "shift_r" || text === "right_shift") return lang === "zh" ? "右 SHIFT" : "RIGHT SHIFT";
+      if (text === "cmd_l" || text === "cmd_r") return platform === "darwin" ? "COMMAND" : "WIN";
       return text.toUpperCase();
     })
     .join(" + ");
