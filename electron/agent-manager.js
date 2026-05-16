@@ -19,6 +19,7 @@ class AgentManager extends EventEmitter {
     this.startedAt = null;
     this.exitedAt = null;
     this.logLines = [];
+    this._macEngineAppPath = null;
   }
 
   engineDir() {
@@ -29,9 +30,21 @@ class AgentManager extends EventEmitter {
   }
 
   macEngineAppPath() {
-    const typeupEngine = path.join(this.engineDir(), "dist", "TypeUp Engine.app");
-    if (fs.existsSync(typeupEngine)) return typeupEngine;
-    return path.join(this.engineDir(), "dist", "Voice Keyboard.app");
+    if (process.platform !== "darwin") return "";
+    if (this._macEngineAppPath && fs.existsSync(this._macEngineAppPath)) {
+      return this._macEngineAppPath;
+    }
+
+    const bundledAppPath = this._bundledMacEngineAppPath();
+    if (!this.electronApp.isPackaged || !fs.existsSync(bundledAppPath)) {
+      this._macEngineAppPath = bundledAppPath;
+      return bundledAppPath;
+    }
+
+    const installedAppPath = path.join(os.homedir(), "Library", "Application Support", "TypeUp", "TypeUp Engine.app");
+    this._installMacEngineApp(bundledAppPath, installedAppPath);
+    this._macEngineAppPath = installedAppPath;
+    return installedAppPath;
   }
 
   engineUserDir() {
@@ -209,18 +222,18 @@ class AgentManager extends EventEmitter {
 
   async requestMicrophone() {
     if (process.platform !== "darwin") return { microphone: "granted" };
-    const output = await this._runAgentCommand(["--request-microphone"]);
-    return parseLastJson(output) || { microphone: "unknown" };
+    await this._runMacEngineAppCommand(["--request-microphone"]);
+    return this.permissions();
   }
 
   async requestPermission(name) {
     if (name === "accessibility") {
-      const output = await this._runAgentCommand(["--request-accessibility"]);
-      return parseLastJson(output) || { accessibility: "unknown" };
+      await this._runMacEngineAppCommand(["--request-accessibility"]);
+      return this.permissions();
     }
     if (name === "input_monitoring") {
-      const output = await this._runAgentCommand(["--request-input-monitoring"]);
-      return parseLastJson(output) || { input_monitoring: "unknown" };
+      await this._runMacEngineAppCommand(["--request-input-monitoring"]);
+      return this.permissions();
     }
     if (name === "microphone") {
       return this.requestMicrophone();
@@ -252,6 +265,30 @@ class AgentManager extends EventEmitter {
       });
       child.once("error", reject);
       child.once("exit", () => resolve(output.trim()));
+    });
+  }
+
+  _runMacEngineAppCommand(extraArgs = []) {
+    const appPath = this.macEngineAppPath();
+    if (!appPath || !fs.existsSync(appPath)) {
+      return Promise.reject(new Error(`找不到 TypeUp Engine.app: ${appPath}`));
+    }
+    return new Promise((resolve, reject) => {
+      const child = spawn("open", ["-n", "-W", appPath, "--args", ...extraArgs], {
+        windowsHide: true,
+      });
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk.toString("utf8");
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk.toString("utf8");
+      });
+      child.once("error", reject);
+      child.once("exit", (code) => {
+        if (code === 0) resolve(output.trim());
+        else reject(new Error(output.trim() || `open exited with code ${code}`));
+      });
     });
   }
 
@@ -294,6 +331,27 @@ class AgentManager extends EventEmitter {
       command: python,
       args: ["-u", "-m", "agent.main", "--no-serial", "--no-ui", ...extraArgs],
     };
+  }
+
+  _bundledMacEngineAppPath() {
+    const typeupEngine = path.join(this.engineDir(), "dist", "TypeUp Engine.app");
+    if (fs.existsSync(typeupEngine)) return typeupEngine;
+    return path.join(this.engineDir(), "dist", "Voice Keyboard.app");
+  }
+
+  _installMacEngineApp(sourcePath, targetPath) {
+    const sourceInfo = path.join(sourcePath, "Contents", "Info.plist");
+    const targetInfo = path.join(targetPath, "Contents", "Info.plist");
+    if (!fs.existsSync(sourceInfo)) return;
+
+    const targetExists = fs.existsSync(targetInfo);
+    const sourceMtime = fs.statSync(sourceInfo).mtimeMs;
+    const targetMtime = targetExists ? fs.statSync(targetInfo).mtimeMs : 0;
+    if (targetExists && targetMtime >= sourceMtime) return;
+
+    fs.rmSync(targetPath, { recursive: true, force: true });
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.cpSync(sourcePath, targetPath, { recursive: true });
   }
 
   _handleOutput(chunk, isError = false) {

@@ -10,6 +10,19 @@ from typing import Optional
 _DARWIN = sys.platform == "darwin"
 
 
+def activate_app_for_permission_prompt() -> None:
+    """让 macOS 以应用身份处理后续 TCC 弹窗。"""
+    if not _DARWIN:
+        return
+    try:
+        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+        app = NSApplication.sharedApplication()
+        app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        app.activateIgnoringOtherApps_(True)
+    except Exception:
+        pass
+
+
 # 状态：granted / denied / not_determined / unknown
 def accessibility() -> str:
     """辅助功能权限——typer.py 通过 Quartz 发按键需要这个。"""
@@ -95,6 +108,7 @@ def request_accessibility() -> str:
     """主动触发辅助功能授权提示/登记。"""
     if not _DARWIN:
         return "granted"
+    activate_app_for_permission_prompt()
     try:
         import HIServices  # type: ignore
         from Foundation import NSDictionary
@@ -108,6 +122,7 @@ def request_input_monitoring() -> str:
     """主动触发输入监听授权提示/登记。"""
     if not _DARWIN:
         return "granted"
+    activate_app_for_permission_prompt()
     fn = _load_iokit_request()
     if fn is None:
         return input_monitoring()
@@ -137,6 +152,7 @@ def request_microphone(callback=None):
     """主动请求麦克风权限。系统弹窗在主线程调用最稳。"""
     if not _DARWIN:
         return
+    activate_app_for_permission_prompt()
     try:
         import AVFoundation  # type: ignore
         media = AVFoundation.AVMediaTypeAudio
