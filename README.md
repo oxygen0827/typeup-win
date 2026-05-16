@@ -120,6 +120,14 @@ npm.cmd run start
 - 微润色模式会清理模型偶发返回的 Markdown/标签前缀，例如开头 `#`、`润色结果：`、代码围栏等。
 - 未登录时启动 engine 会进入 `needs_config` 状态，提示先登录后端账号。
 
+## 正式支付切换说明
+
+当前桌面端购买链路按 `DEV_MOCK_PAYMENTS=true` 联调：用户注册/登录、获取套餐、创建订单、打开 mock 支付链接、刷新权益都已经跑通。
+
+真实支付宝收款不需要改桌面端代码，但需要后端先完成正式支付配置。项目组长需要使用自己的支付宝商家主体开通“电脑网站支付”，并生成自己的 `APPID`、应用私钥、应用公钥和支付宝公钥。后端 `.env` 配好正式 `ALIPAY_APP_ID`、`ALIPAY_PRIVATE_KEY`、`ALIPAY_PUBLIC_KEY`、`ALIPAY_GATEWAY` 和公网 HTTPS `APP_BASE_URL` 后，再把 `DEV_MOCK_PAYMENTS=false`。
+
+注意：桌面端和前端 UI 不接触支付宝应用私钥，也不保存模型服务密钥；用户只拿 TypeUp 后端 token，STT/LLM 和支付状态都由后端统一处理。
+
 已知问题和修复记录在 [docs/known-issues.md](docs/known-issues.md)。
 
 已验证通过的本地回归：
