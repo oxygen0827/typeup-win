@@ -3,7 +3,7 @@ const os = require("node:os");
 const path = require("node:path");
 const YAML = require("yaml");
 
-const USER_DIR = path.join(os.homedir(), ".voice-keyboard");
+const USER_DIR = path.join(resolveAppDataDir(), "TypeUp", "engine");
 const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
 const TYPEUP_DIR = path.join(resolveAppDataDir(), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");

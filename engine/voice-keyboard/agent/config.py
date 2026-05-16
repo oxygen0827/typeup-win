@@ -23,7 +23,7 @@ import sys
 import yaml
 
 _ROOT = pathlib.Path(__file__).parent.parent
-_USER_DIR = pathlib.Path.home() / ".voice-keyboard"
+_USER_DIR = pathlib.Path(os.getenv("TYPEUP_ENGINE_USER_DIR", "")).expanduser() if os.getenv("TYPEUP_ENGINE_USER_DIR") else pathlib.Path.home() / ".voice-keyboard"
 # 优先从用户目录读取（打包成 .app 后的标准路径），其次从源码目录（开发模式）
 _USER_CONFIG = _USER_DIR / "config.yaml"
 _USER_ENV    = _USER_DIR / ".env"

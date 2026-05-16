@@ -6,12 +6,14 @@
 """
 
 import json
+import os
 import threading
 import time
 from pathlib import Path
 from typing import Callable, Optional
 
-_PATH = Path.home() / ".voice-keyboard" / "history.jsonl"
+_USER_DIR = Path(os.getenv("TYPEUP_ENGINE_USER_DIR", "")).expanduser() if os.getenv("TYPEUP_ENGINE_USER_DIR") else Path.home() / ".voice-keyboard"
+_PATH = _USER_DIR / "history.jsonl"
 _MAX_KEEP = 500  # 超过这个条数时压缩到一半
 
 

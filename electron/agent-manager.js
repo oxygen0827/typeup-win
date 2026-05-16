@@ -29,7 +29,20 @@ class AgentManager extends EventEmitter {
   }
 
   macEngineAppPath() {
+    const typeupEngine = path.join(this.engineDir(), "dist", "TypeUp Engine.app");
+    if (fs.existsSync(typeupEngine)) return typeupEngine;
     return path.join(this.engineDir(), "dist", "Voice Keyboard.app");
+  }
+
+  engineUserDir() {
+    if (process.env.TYPEUP_ENGINE_USER_DIR) return process.env.TYPEUP_ENGINE_USER_DIR;
+    if (process.platform === "darwin") {
+      return path.join(os.homedir(), "Library", "Application Support", "TypeUp", "engine");
+    }
+    if (process.platform === "win32") {
+      return path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "TypeUp", "engine");
+    }
+    return path.join(process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "TypeUp", "engine");
   }
 
   async ensureConfig() {
@@ -47,8 +60,10 @@ class AgentManager extends EventEmitter {
       lastError: this.lastError,
       configured: settings.configured,
       configPath: settings.configPath,
-      historyPath: path.join(os.homedir(), ".voice-keyboard", "history.jsonl"),
-      logPath: path.join(os.homedir(), ".voice-keyboard", "agent.log"),
+      historyPath: path.join(this.engineUserDir(), "history.jsonl"),
+      logPath: process.platform === "darwin"
+        ? path.join(os.homedir(), "Library", "Logs", "TypeUp", "engine.log")
+        : path.join(this.engineUserDir(), "agent.log"),
       engineDir: this.engineDir(),
       mode: settings.audio?.mode || "vad",
       provider: settings.stt?.provider || "",
@@ -84,6 +99,7 @@ class AgentManager extends EventEmitter {
         PYTHONIOENCODING: "utf-8",
         PYTHONUTF8: "1",
         TYPEUP_DESKTOP: "1",
+        TYPEUP_ENGINE_USER_DIR: this.engineUserDir(),
       },
     });
 
@@ -155,7 +171,13 @@ class AgentManager extends EventEmitter {
       const child = spawn(launch.command, launch.args, {
         cwd: engineDir,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: "utf-8",
+          PYTHONUTF8: "1",
+          TYPEUP_DESKTOP: "1",
+          TYPEUP_ENGINE_USER_DIR: this.engineUserDir(),
+        },
       });
       let output = "";
       child.stdout.on("data", (chunk) => {
@@ -198,7 +220,13 @@ class AgentManager extends EventEmitter {
       const child = spawn(launch.command, launch.args, {
         cwd: engineDir,
         windowsHide: true,
-        env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+        env: {
+          ...process.env,
+          PYTHONIOENCODING: "utf-8",
+          PYTHONUTF8: "1",
+          TYPEUP_DESKTOP: "1",
+          TYPEUP_ENGINE_USER_DIR: this.engineUserDir(),
+        },
       });
       let output = "";
       child.stdout.on("data", (chunk) => {
@@ -219,9 +247,12 @@ class AgentManager extends EventEmitter {
     }
 
     if (process.platform === "darwin") {
-      const typeupAppExecutable = path.join(this.macEngineAppPath(), "Contents", "MacOS", "Voice Keyboard");
-      if (fs.existsSync(typeupAppExecutable)) {
-        return { command: typeupAppExecutable, args: ["--no-serial", "--no-ui", ...extraArgs] };
+      const appPath = this.macEngineAppPath();
+      for (const executableName of ["TypeUp Engine", "Voice Keyboard"]) {
+        const typeupAppExecutable = path.join(appPath, "Contents", "MacOS", executableName);
+        if (fs.existsSync(typeupAppExecutable)) {
+          return { command: typeupAppExecutable, args: ["--no-serial", "--no-ui", ...extraArgs] };
+        }
       }
 
       const venvPython = path.join(engineDir, ".venv", "bin", "python");

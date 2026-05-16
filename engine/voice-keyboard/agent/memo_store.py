@@ -4,6 +4,7 @@
 """
 
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Optional
@@ -11,7 +12,8 @@ from typing import Optional
 
 class MemoStore:
     def __init__(self, path: Optional[Path] = None):
-        self._path = path or Path.home() / ".voice-keyboard" / "memos.json"
+        user_dir = Path(os.getenv("TYPEUP_ENGINE_USER_DIR", "")).expanduser() if os.getenv("TYPEUP_ENGINE_USER_DIR") else Path.home() / ".voice-keyboard"
+        self._path = path or user_dir / "memos.json"
         self._lock = threading.Lock()
         self._data: dict[str, str] = {}
         self._load()

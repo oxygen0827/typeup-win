@@ -257,6 +257,7 @@ function createLocalServer({ electronApp }) {
   const server = http.createServer(app);
   const agent = new AgentManager({ electronApp });
   const sseClients = new Set();
+  applyBackendEngineConfig(readCloudBridge());
 
   function publish(event, payload) {
     const body = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;

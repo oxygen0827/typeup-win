@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 
-const HISTORY_PATH = path.join(os.homedir(), ".voice-keyboard", "history.jsonl");
+const HISTORY_PATH = path.join(resolveAppDataDir(), "TypeUp", "engine", "history.jsonl");
 
 const DICTATION_MODES = new Set(["dictate", "polish"]);
 const AI_OUTPUT_MODES = new Set(["ai_edit", "ai_write", "ai_chat", "ai_memo", "ai_output"]);
@@ -101,6 +101,17 @@ function startOfToday() {
 
 function countChars(text) {
   return Array.from(String(text || "").replace(/\s/g, "")).length;
+}
+
+function resolveAppDataDir() {
+  if (process.env.TYPEUP_APP_DATA_DIR) return process.env.TYPEUP_APP_DATA_DIR;
+  if (process.platform === "win32") {
+    return process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  }
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support");
+  }
+  return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
 }
 
 module.exports = { readUsage };

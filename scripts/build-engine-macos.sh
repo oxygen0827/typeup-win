@@ -11,6 +11,7 @@ fi
 
 cd "$ENGINE"
 "$VENV/bin/python" -m pip install py2app
+rm -rf "$ENGINE/build" "$ENGINE/dist"
 "$VENV/bin/python" packaging/macos/setup.py py2app
 
-echo "TypeUp macOS agent app: $ENGINE/dist/Voice Keyboard.app"
+echo "TypeUp macOS agent app: $ENGINE/dist/TypeUp Engine.app"
