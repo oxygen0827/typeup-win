@@ -215,8 +215,16 @@ class AgentManager extends EventEmitter {
       this._setState("listening");
       return;
     }
-    if (line.includes("识别中") || line.startsWith("[stt]")) {
+    if (line.includes("已同步最新后端登录凭证")) {
+      this._setState("listening");
+      return;
+    }
+    if (line.includes("识别中") || line.includes("解析AI指令") || line.includes("解析编辑指令")) {
       this._setState("transcribing");
+      return;
+    }
+    if (line.startsWith("[stt]")) {
+      this._setState("listening");
       return;
     }
     if (isError || line.includes("失败") || line.includes("错误") || line.toLowerCase().includes("error")) {

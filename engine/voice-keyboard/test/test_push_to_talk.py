@@ -1,8 +1,12 @@
 import sys
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from pynput import keyboard as kb
 
 from agent.push_to_talk import PushToTalk
 
@@ -63,7 +67,7 @@ class PushToTalkStatusTests(unittest.TestCase):
 
         self.assertEqual(status.states[-1], "polish_recording")
 
-    def test_mid_sentence_result_does_not_restore_status_after_key_release(self):
+    def test_mid_sentence_result_marks_complete_after_key_release(self):
         status = _StatusRecorder()
 
         def on_utterance(_pcm, _polish=False, _clear_status=True, _progress_status=True):
@@ -75,7 +79,7 @@ class PushToTalkStatusTests(unittest.TestCase):
 
         ptt._run_mid_sentence_utterance(b"pcm", False)
 
-        self.assertEqual(status.states, [])
+        self.assertEqual(status.states, ["idle"])
 
     def test_audio_callback_updates_voice_level_for_speech(self):
         status = _StatusRecorder()
@@ -107,6 +111,51 @@ class PushToTalkStatusTests(unittest.TestCase):
         ptt._audio_callback(_pcm(6000), 512, None, None)
 
         self.assertEqual(status.levels[-1], 0.0)
+
+    def test_combo_recording_stops_only_after_all_trigger_keys_release(self):
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_l", ai_key=["alt_l", "space"])
+        stopped = []
+        ptt._active_key = "ai"
+        ptt._active_trigger = (kb.Key.alt_l, kb.Key.space)
+        ptt._pressed_keys = {kb.Key.alt_l, kb.Key.space}
+        ptt._stop_recording = lambda *, mode: stopped.append(mode)
+
+        ptt._on_release(kb.Key.space)
+        self.assertEqual(stopped, [])
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt_l, kb.Key.space))
+
+        ptt._on_release(kb.Key.alt_l)
+        self.assertEqual(stopped, ["ai"])
+        self.assertIsNone(ptt._active_trigger)
+
+    def test_release_after_mid_sentence_outputs_completion_marker(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_l", status_window=status)
+        ptt._vad = _FakeVad(False)
+        ptt._vad_sent_count = 1
+
+        out = StringIO()
+        with redirect_stdout(out):
+            ptt._stop_recording("dictate")
+
+        self.assertEqual(status.states[-1], "idle")
+        self.assertIn("[typeup] 输入完成", out.getvalue())
+
+    def test_mid_sentence_worker_outputs_completion_after_key_release(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm, _polish=False, _clear_status=True, _progress_status=True: None,
+            ptt_key="alt_l",
+            status_window=status,
+        )
+        ptt._active_key = None
+
+        out = StringIO()
+        with redirect_stdout(out):
+            ptt._run_mid_sentence_utterance(b"pcm", False)
+
+        self.assertEqual(status.states[-1], "idle")
+        self.assertIn("[typeup] 输入完成", out.getvalue())
 
 
 if __name__ == "__main__":

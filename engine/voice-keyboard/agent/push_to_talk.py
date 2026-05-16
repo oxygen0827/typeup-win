@@ -224,6 +224,10 @@ class PushToTalk:
         if self._status is not None:
             self._status.set_state(state)
 
+    def _mark_input_complete(self) -> None:
+        self._set_status("idle")
+        print("[typeup] 输入完成")
+
     def _set_audio_level(self, level: float) -> None:
         if self._status is not None and hasattr(self._status, "set_audio_level"):
             self._status.set_audio_level(level)
@@ -318,6 +322,8 @@ class PushToTalk:
                 return
 
         if self._active_trigger is None or key not in self._active_trigger:
+            return
+        if any(trigger_key in self._pressed_keys for trigger_key in self._active_trigger):
             return
         if self._active_key == "dictate":
             self._stop_recording(mode="dictate")
@@ -417,7 +423,10 @@ class PushToTalk:
         try:
             self._on_utterance(pcm, polish, False, False)
         finally:
-            self._restore_recording_status_if_active()
+            if self._active_key == "dictate":
+                self._restore_recording_status_if_active()
+            elif self._active_key is None:
+                self._mark_input_complete()
 
     # ── Windows 系统级热键拦截 ─────────────────────────────────────
 
@@ -597,7 +606,7 @@ class PushToTalk:
                         name="PTT-dictate",
                     ).start()
             else:
-                self._set_status("idle")
+                self._mark_input_complete()
             self._buf = []
             return
 

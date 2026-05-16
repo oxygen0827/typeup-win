@@ -27,8 +27,8 @@ _CLASSIFY_SYSTEM = """你是语音键盘助手的意图分类器。根据用户�
 判断依据是用户说的话，而不是是否有选中文字。有选中文字只是上下文参考。
 
 本软件的功能：
-- 按住 Option 键说话：语音转文字，原样打入当前输入框
-- 按住 Command 键说话，有以下几种模式：
+- 按住 ALT 键说话：语音转文字，原样打入当前输入框
+- 按住 ALT + SPACE 说话，有以下几种模式：
   * 快捷键：说出操作名称直接执行系统快捷键
   * 编辑：修改/润色/删除当前段落或选中的文字
   * 写作：给出主题或要求，AI 帮你写内容并逐句打入
@@ -71,6 +71,31 @@ _EDIT_HINTS = (
 
 def _looks_like_edit_instruction(text: str) -> bool:
     return any(hint in text for hint in _EDIT_HINTS)
+
+
+def _parse_intent_result(raw: str) -> dict:
+    text = str(raw or "").strip()
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines:
+            lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        text = "\n".join(lines).strip()
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end >= start:
+        text = text[start:end + 1]
+    result = json.loads(text)
+    if not isinstance(result, dict):
+        raise ValueError("intent result is not an object")
+    return result
+
+
+def _fallback_intent_after_classification_error(text: str, selected: str, context: str) -> dict:
+    if _looks_like_edit_instruction(text) and (selected or context):
+        return {"type": "edit"}
+    return {"type": "chat", "reply": ""}
 
 
 class AIHandler:
@@ -136,6 +161,7 @@ class AIHandler:
         finally:
             if self._status is not None and not keep_status:
                 self._status.set_state("idle")
+            print("[typeup] 输入完成")
 
     def _run_inner(self, pcm: bytes) -> None:
         # 0. 删掉上一条 AI 文字（此时 Command 已松开，不会触发 Cmd+Backspace）
@@ -188,14 +214,13 @@ class AIHandler:
         # 4. LLM 意图分类
         try:
             raw    = self._llm.chat(_CLASSIFY_SYSTEM, user_msg)
-            raw    = raw.strip().lstrip("```json").lstrip("```").rstrip("```").strip()
-            result = json.loads(raw)
+            result = _parse_intent_result(raw)
         except Exception as e:
-            print(f"[ai] 意图分类失败: {e}，回退到聊天")
             self._record("ai", text, "error", f"LLM: {e}")
-            if self._status is not None:
+            result = _fallback_intent_after_classification_error(text, selected, context)
+            print(f"[ai] 意图分类失败: {e}，回退到 {result.get('type', 'chat')}")
+            if self._status is not None and result.get("type") != "edit":
                 self._status.set_state("error_llm")
-            result = {"type": "chat", "reply": "没听清楚，请再说一次"}
 
         intent = result.get("type", "chat")
         # 有选中文字时，短指令如“润色一下”“帮我翻译成英文”经常会被模型误判成 chat/write，

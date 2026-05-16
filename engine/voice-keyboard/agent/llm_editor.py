@@ -47,6 +47,7 @@ class _TypeUpBackendLLM:
         self._access_token = str(cfg.get("access_token") or cfg.get("api_key") or "").strip()
         self._refresh_token = str(cfg.get("refresh_token") or "").strip()
         self._cloud_bridge_path = str(cfg.get("cloud_bridge_path") or "").strip()
+        self._reload_tokens_from_bridge()
         if not self._api_base_url:
             raise RuntimeError("TypeUp 后端地址未配置")
         if not self._access_token:
@@ -54,6 +55,8 @@ class _TypeUpBackendLLM:
 
     def chat(self, messages: list[dict], max_tokens: int = 1000) -> str:
         resp = self._post_chat(messages, max_tokens=max_tokens)
+        if resp.status_code == 401 and self._reload_tokens_from_bridge():
+            resp = self._post_chat(messages, max_tokens=max_tokens)
         if resp.status_code == 401 and self._refresh_token:
             self._refresh_access_token()
             resp = self._post_chat(messages, max_tokens=max_tokens)
@@ -81,6 +84,34 @@ class _TypeUpBackendLLM:
         self._access_token = data["access_token"]
         self._refresh_token = data["refresh_token"]
         self._persist_tokens()
+
+    def _reload_tokens_from_bridge(self) -> bool:
+        if not self._cloud_bridge_path:
+            return False
+        try:
+            path = pathlib.Path(self._cloud_bridge_path)
+            if not path.exists():
+                return False
+            payload = json.loads(path.read_text(encoding="utf-8") or "{}")
+            changed = False
+            api_base_url = str(payload.get("apiBaseUrl") or "").strip().rstrip("/")
+            access_token = str(payload.get("accessToken") or "").strip()
+            refresh_token = str(payload.get("refreshToken") or "").strip()
+            if api_base_url and api_base_url != self._api_base_url:
+                self._api_base_url = api_base_url
+                changed = True
+            if access_token and access_token != self._access_token:
+                self._access_token = access_token
+                changed = True
+            if refresh_token and refresh_token != self._refresh_token:
+                self._refresh_token = refresh_token
+                changed = True
+            if changed:
+                print("[llm] 已同步最新后端登录凭证")
+            return changed
+        except Exception as e:
+            print(f"[llm] 读取后端登录凭证失败: {e}")
+            return False
 
     def _persist_tokens(self) -> None:
         if not self._cloud_bridge_path:

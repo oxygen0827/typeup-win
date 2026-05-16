@@ -28,11 +28,13 @@ _WM_APP_STATE = 0x8001
 _WM_APP_STOP = 0x8002
 _WM_APP_MESSAGE = 0x8003
 _WM_APP_AUDIO_LEVEL = 0x8004
+_WM_ERASEBKGND = 0x0014
 _TIMER_POLL = 1
 _TIMER_HIDE = 2
 _SPI_GETWORKAREA = 0x0030
 _HWND_TOPMOST = wintypes.HWND(-1)
 _SWP_NOACTIVATE = 0x0010
+_SRCCOPY = 0x00CC0020
 _BOTTOM_MARGIN = 18
 _CORNER_RADIUS = 30
 
@@ -54,6 +56,7 @@ _kernel32 = ctypes.windll.kernel32
 HICON = getattr(wintypes, "HICON", wintypes.HANDLE)
 HCURSOR = getattr(wintypes, "HCURSOR", wintypes.HANDLE)
 HBRUSH = getattr(wintypes, "HBRUSH", wintypes.HANDLE)
+HBITMAP = getattr(wintypes, "HBITMAP", wintypes.HANDLE)
 HRGN = getattr(wintypes, "HRGN", wintypes.HANDLE)
 ATOM = getattr(wintypes, "ATOM", ctypes.c_ushort)
 
@@ -94,8 +97,26 @@ _gdi32.CreateSolidBrush.argtypes = [ctypes.c_uint]
 _gdi32.CreateSolidBrush.restype = HBRUSH
 _gdi32.CreatePen.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint]
 _gdi32.CreatePen.restype = wintypes.HANDLE
+_gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+_gdi32.CreateCompatibleDC.restype = wintypes.HDC
+_gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+_gdi32.CreateCompatibleBitmap.restype = HBITMAP
 _gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HANDLE]
 _gdi32.SelectObject.restype = wintypes.HANDLE
+_gdi32.BitBlt.argtypes = [
+    wintypes.HDC,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    ctypes.c_int,
+    wintypes.HDC,
+    ctypes.c_int,
+    ctypes.c_int,
+    wintypes.DWORD,
+]
+_gdi32.BitBlt.restype = wintypes.BOOL
+_gdi32.DeleteDC.argtypes = [wintypes.HDC]
+_gdi32.DeleteDC.restype = wintypes.BOOL
 _gdi32.DeleteObject.argtypes = [wintypes.HANDLE]
 _gdi32.DeleteObject.restype = wintypes.BOOL
 _gdi32.SetBkMode.argtypes = [wintypes.HDC, ctypes.c_int]
@@ -164,6 +185,28 @@ class SIZE(ctypes.Structure):
     _fields_ = [("cx", ctypes.c_long), ("cy", ctypes.c_long)]
 
 
+_user32.InvalidateRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT), wintypes.BOOL]
+_user32.InvalidateRect.restype = wintypes.BOOL
+
+
+_RECORDING_STATES = {"recording", "polish_recording", "ai_recording"}
+
+
+def _clamp_level(level: float) -> float:
+    return max(0.0, min(1.0, float(level or 0.0)))
+
+
+def _smooth_audio_level(current: float, target: float) -> float:
+    current = _clamp_level(current)
+    target = _clamp_level(target)
+    if target <= 0.0:
+        faded = current * 0.68
+        return 0.0 if faded < 0.018 else faded
+    if target >= current:
+        return current * 0.35 + target * 0.65
+    return current * 0.78 + target * 0.22
+
+
 WNDPROC = ctypes.WINFUNCTYPE(
     ctypes.c_ssize_t,
     wintypes.HWND,
@@ -201,6 +244,8 @@ class StatusWindow:
         self._audio_phase = 0
         self._message_token = 0
         self._width_text = ""
+        self._visible = False
+        self._window_size: tuple[int, int] | None = None
         self._wndproc = WNDPROC(self._handle_message)
         self._hinst = _kernel32.GetModuleHandleW(None)
         self._class_name = "VoiceKeyboardStatusWindow"
@@ -225,9 +270,10 @@ class StatusWindow:
         timer.daemon = True
         timer.start()
 
-    def show_typing_message(self, text: str, seconds: float = 6.0, interval: float = 0.006) -> None:
+    def show_typing_message(self, text: str, seconds: float = 6.0, interval: float = 0.018) -> None:
         self._message_token += 1
         token = self._message_token
+        interval = max(0.018, float(interval or 0.018))
 
         def run() -> None:
             step = max(1, len(text) // 36)
@@ -303,11 +349,14 @@ class StatusWindow:
         if msg == 0x000F:
             self._paint(hwnd)
             return 0
+        if msg == _WM_ERASEBKGND:
+            return 1
         if msg == 0x0113:
             if wparam == _TIMER_POLL:
                 self._poll()
             elif wparam == _TIMER_HIDE:
                 _user32.KillTimer(hwnd, _TIMER_HIDE)
+                self._visible = False
                 _user32.ShowWindow(hwnd, 0)
             return 0
         if msg == _WM_APP_STATE:
@@ -355,17 +404,27 @@ class StatusWindow:
             self._state = "idle"
             self._width_text = ""
             self._audio_level = 0.0
+            self._visible = False
             _user32.ShowWindow(self._hwnd, 0)
             return
+        same_visual = (
+            self._visible
+            and self._state == state
+            and self._text == info[0]
+            and self._subtext == info[1]
+            and self._color == info[2]
+        )
         self._state = state
         self._width_text = ""
         self._text, self._subtext, self._color = info
-        if state not in {"recording", "polish_recording", "ai_recording"}:
+        if state not in _RECORDING_STATES:
             self._audio_level = 0.0
         _user32.KillTimer(self._hwnd, _TIMER_HIDE)
-        self._position()
-        _user32.ShowWindow(self._hwnd, 8)
-        _user32.InvalidateRect(self._hwnd, None, True)
+        if not same_visual:
+            self._position()
+            _user32.ShowWindow(self._hwnd, 8)
+            self._visible = True
+            self._invalidate()
         if state in _ERROR_STATES:
             _user32.SetTimer(self._hwnd, _TIMER_HIDE, 1700, None)
 
@@ -381,7 +440,8 @@ class StatusWindow:
         _user32.KillTimer(self._hwnd, _TIMER_HIDE)
         self._position()
         _user32.ShowWindow(self._hwnd, 8)
-        _user32.InvalidateRect(self._hwnd, None, True)
+        self._visible = True
+        self._invalidate()
 
     def _hide_message_now(self, token: int) -> None:
         if not self._hwnd or token != self._message_token or self._state != "message":
@@ -389,15 +449,20 @@ class StatusWindow:
         self._state = "idle"
         self._width_text = ""
         self._audio_level = 0.0
+        self._visible = False
         _user32.ShowWindow(self._hwnd, 0)
 
     def _apply_audio_level(self, level: float) -> None:
-        if self._state not in {"recording", "polish_recording", "ai_recording"}:
+        if self._state not in _RECORDING_STATES:
             return
-        self._audio_level = max(0.0, min(1.0, level))
+        self._audio_level = _smooth_audio_level(self._audio_level, level)
         self._audio_phase = (self._audio_phase + 1) % 5
         if self._hwnd:
-            _user32.InvalidateRect(self._hwnd, None, True)
+            self._invalidate()
+
+    def _invalidate(self) -> None:
+        if self._hwnd:
+            _user32.InvalidateRect(self._hwnd, None, False)
 
     def _position(self) -> None:
         hdc = _user32.GetDC(self._hwnd)
@@ -419,9 +484,11 @@ class StatusWindow:
             y = int(screen_h - height - _BOTTOM_MARGIN)
         if not _user32.SetWindowPos(self._hwnd, _HWND_TOPMOST, x, y, width, height, _SWP_NOACTIVATE):
             raise ctypes.WinError()
-        region = _gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, _CORNER_RADIUS, _CORNER_RADIUS)
-        if region:
-            _user32.SetWindowRgn(self._hwnd, region, True)
+        if self._window_size != (width, height):
+            region = _gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, _CORNER_RADIUS, _CORNER_RADIUS)
+            if region:
+                _user32.SetWindowRgn(self._hwnd, region, False)
+                self._window_size = (width, height)
 
     def _measure_text(self, hdc, text: str, size: int, weight: int) -> int:
         if not text:
@@ -439,15 +506,30 @@ class StatusWindow:
         hdc = _user32.BeginPaint(hwnd, ctypes.byref(ps))
         rect = RECT()
         _user32.GetClientRect(hwnd, ctypes.byref(rect))
+        width = max(1, int(rect.right - rect.left))
+        height = max(1, int(rect.bottom - rect.top))
 
+        memdc = _gdi32.CreateCompatibleDC(hdc)
+        bitmap = _gdi32.CreateCompatibleBitmap(hdc, width, height) if memdc else None
+        if memdc and bitmap:
+            old_bitmap = _gdi32.SelectObject(memdc, bitmap)
+            self._paint_content(memdc, rect)
+            _gdi32.BitBlt(hdc, 0, 0, width, height, memdc, 0, 0, _SRCCOPY)
+            _gdi32.SelectObject(memdc, old_bitmap)
+            _gdi32.DeleteObject(bitmap)
+            _gdi32.DeleteDC(memdc)
+        else:
+            self._paint_content(hdc, rect)
+
+        _user32.EndPaint(hwnd, ctypes.byref(ps))
+
+    def _paint_content(self, hdc, rect: RECT) -> None:
         bg = _gdi32.CreateSolidBrush(_BG)
         _user32.FillRect(hdc, ctypes.byref(rect), bg)
         _gdi32.DeleteObject(bg)
 
         self._paint_accent(hdc, rect)
         self._paint_text(hdc, rect)
-
-        _user32.EndPaint(hwnd, ctypes.byref(ps))
 
     def _paint_accent(self, hdc, rect: RECT) -> None:
         brush = _gdi32.CreateSolidBrush(self._color)

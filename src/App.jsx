@@ -205,10 +205,26 @@ const EMPTY_AUTH = {
   entitlement: null,
 };
 
+const STATUS_KEYS = [
+  "state",
+  "pid",
+  "startedAt",
+  "exitedAt",
+  "lastError",
+  "configured",
+  "configPath",
+  "historyPath",
+  "logPath",
+  "engineDir",
+  "mode",
+  "provider",
+  "typingMethod",
+];
+
 export default function App() {
   const [lang, setLang] = useState("zh");
   const [apiBase, setApiBase] = useState("");
-  const [status, setStatus] = useState({ state: "starting" });
+  const [status, setStatusState] = useState({ state: "starting" });
   const [usage, setUsage] = useState(null);
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState(EMPTY_SETTINGS);
@@ -220,6 +236,10 @@ export default function App() {
   const [lastOrder, setLastOrder] = useState(null);
   const [devices, setDevices] = useState("");
   const [saving, setSaving] = useState(false);
+
+  function setStatus(next) {
+    setStatusState((current) => (sameStatus(current, next) ? current : next));
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -1021,6 +1041,11 @@ function formatHotkey(value, lang) {
       return text.toUpperCase();
     })
     .join(" + ");
+}
+
+function sameStatus(left, right) {
+  if (!left || !right) return left === right;
+  return STATUS_KEYS.every((key) => left[key] === right[key]);
 }
 
 function formatNumber(value = 0, lang = "zh") {

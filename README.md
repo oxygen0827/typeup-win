@@ -116,11 +116,14 @@ npm.cmd run start
 - 已支持获取套餐、创建订单、打开 mock 支付链接、刷新订单和权益。
 - 登录成功后会自动写入 `%APPDATA%\TypeUp\cloud-bridge.json` 和 `%USERPROFILE%\.voice-keyboard\config.yaml`。
 - Python engine 的 STT/LLM provider 会切到 `typeup_backend`，并调用后端 `/v1/stt/transcribe`、`/v1/llm/chat`。
-- engine 刷新后端 token 后会把新 token 同步回 `cloud-bridge.json`，避免 UI 和 engine 登录态分叉。
+- engine 启动、STT/LLM 请求遇到 `401`、以及刷新后端 token 后，都会优先同步 `%APPDATA%\TypeUp\cloud-bridge.json` 和 `%USERPROFILE%\.voice-keyboard\config.yaml`，避免 UI 与 engine 登录态分叉导致“刷新凭证无效”。
 - 后端返回 `401` 或 `403` 时，本地 server 会清空登录态，并同步清掉 Python engine 配置里的 access/refresh token。
 - `typeup_backend` 模式下，LLM 会使用后端 token 初始化，因此 `ALT + SPACE` AI 编辑热键会被正确注册和拦截。
 - 语音输入会在最终打字前清理 STT/LLM 偶发生成的开头 Markdown/井号标记，例如 `#`、`＃`、`润色结果：`、代码围栏等，避免正文前多出井号。
-- Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时自动回到静止状态。
+- Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时通过平滑衰减回到静止状态。
+- Windows 悬浮状态框已改为双缓冲绘制，并禁止音量条刷新时擦除背景，减少透明窗口闪烁；React 底部状态栏也会去重相同状态更新，避免“处理中/就绪”反复重绘。
+- 本地 server 会把启动日志、凭证同步日志和 STT 结果日志区分开：只有“识别中/解析指令”才进入 `transcribing`，避免启动后误停在“处理中”。
+- 已知可继续优化项：原生 Win32 圆角裁剪仍可能在个别屏幕缩放下出现轻微边缘毛刺，后续可改成 per-pixel alpha layered window 继续打磨。
 - 未登录时启动 engine 会进入 `needs_config` 状态，提示先登录后端账号。
 
 ## 正式支付切换说明
@@ -222,7 +225,7 @@ POST /v1/llm/chat
 POST /v1/auth/refresh
 ```
 
-后端 refresh token 是旋转式的。engine 如果刷新 token，会把新 token 同步回 `cloud-bridge.json`，避免 UI 和 engine 登录态分叉。
+后端 refresh token 是旋转式的。engine 启动时会读取 `cloud-bridge.json` 中的最新凭证；STT/LLM 请求遇到 `401` 时，会先从 `cloud-bridge.json` 重新同步一次 access/refresh token 再重试，只有仍失败时才调用 `/v1/auth/refresh`。engine 如果刷新 token，会把新 token 同步回 `cloud-bridge.json`，避免 UI 和 engine 登录态分叉。
 
 如果后端返回 `401` 或 `403`，Electron 本地 server 会清空 `cloud-bridge.json` 中的登录态，并把 engine 配置中的 `access_token` / `refresh_token` 清空；用户需要重新登录后端账号。`403` 通常表示账号已被禁用。
 
@@ -234,7 +237,7 @@ TypeUp 默认 Windows 快捷键：
 - `ALT + SPACE`：按住进行 AI 编辑。
 - 双击 `ALT`：切换原生/微润色模式。
 
-按住 `ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。
+按住 `ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。音量条刷新使用平滑衰减和双缓冲绘制，减少闪烁；如果只剩轻微边缘毛刺，属于后续视觉优化项。
 
 ## 构建
 
@@ -329,6 +332,8 @@ python -m pip install -r requirements.txt
 确认 `stt.provider` 和 `llm.provider` 都是 `typeup_backend`，并且 `access_token` 不为空。也可以在 TypeUp 中退出登录后重新登录。
 
 如果后端账号被禁用，TypeUp 会在刷新 session 时清空登录态；重新登录前 STT/LLM 会进入未配置状态。
+
+如果日志出现 `[stt] 请求失败: 刷新凭证无效`，通常是 `cloud-bridge.json` 已经有新 token，但 engine 配置还留着旧 token。当前版本会在 engine 启动和 401 重试前自动同步两处凭证；仍异常时，先在 TypeUp 里点击刷新账号或退出后重新登录，再重启本地引擎。
 
 ### mock 支付打开后订单没有变 paid
 

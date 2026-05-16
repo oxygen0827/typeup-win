@@ -349,6 +349,7 @@ function createLocalServer({ electronApp }) {
         user: me.user,
         entitlement: me.entitlement,
       });
+      applyBackendEngineConfig(next);
       res.json(publicSession(next));
     } catch (error) {
       if (error.status === 401 && cloud.refreshToken) {

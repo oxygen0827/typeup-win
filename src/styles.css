@@ -956,7 +956,7 @@ button:disabled {
   position: fixed;
   left: 50%;
   bottom: 18px;
-  transform: translateX(-50%);
+  transform: translate3d(-50%, 0, 0);
   width: min(560px, calc(100vw - 32px));
   min-height: 58px;
   border: 1px solid var(--line);
@@ -965,9 +965,11 @@ button:disabled {
   align-items: center;
   gap: 12px;
   padding: 9px 18px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.98);
   box-shadow: 0 18px 42px rgba(29, 52, 82, 0.17);
-  backdrop-filter: blur(16px);
+  overflow: hidden;
+  backface-visibility: hidden;
+  will-change: transform;
   z-index: 10;
 }
 
