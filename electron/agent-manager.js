@@ -42,7 +42,7 @@ class AgentManager extends EventEmitter {
       return bundledAppPath;
     }
 
-    const installedAppPath = path.join(os.homedir(), "Library", "Application Support", "TypeUp", "TypeUp Engine.app");
+    const installedAppPath = path.join(this.electronApp.getPath("userData"), "TypeUp Engine.app");
     this._installMacEngineApp(bundledAppPath, installedAppPath);
     this._macEngineAppPath = installedAppPath;
     return installedAppPath;

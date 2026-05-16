@@ -163,19 +163,46 @@ def request_microphone(callback=None):
         print(f"[perm] 请求麦克风权限失败: {e}")
 
 
+def request_microphone_by_capture() -> None:
+    """通过短暂打开音频输入流触发 CoreAudio/TCC 麦克风登记。"""
+    if not _DARWIN:
+        return
+    try:
+        import sounddevice as sd
+        with sd.InputStream(channels=1, samplerate=16000, blocksize=1024):
+            sd.sleep(250)
+    except Exception as e:
+        print(f"[perm] 触发麦克风输入失败: {e}")
+
+
 def request_microphone_sync(timeout: float = 20.0) -> str:
     """请求麦克风权限并等待系统回调，供打包后的命令行入口调用。"""
     if not _DARWIN:
         return "granted"
-    done = threading.Event()
+    if microphone() == "granted":
+        return "granted"
+
     result = {"granted": False}
 
     def _callback(granted):
         result["granted"] = bool(granted)
-        done.set()
+        try:
+            from PyObjCTools import AppHelper
+            AppHelper.stopEventLoop()
+        except Exception:
+            pass
 
     request_microphone(_callback)
-    done.wait(timeout)
+    try:
+        from PyObjCTools import AppHelper
+        AppHelper.callLater(timeout, AppHelper.stopEventLoop)
+        AppHelper.runConsoleEventLoop()
+    except Exception:
+        done = threading.Event()
+        request_microphone(lambda granted: (result.update({"granted": bool(granted)}), done.set()))
+        done.wait(timeout)
+    if not result["granted"]:
+        request_microphone_by_capture()
     return "granted" if result["granted"] else microphone()
 
 

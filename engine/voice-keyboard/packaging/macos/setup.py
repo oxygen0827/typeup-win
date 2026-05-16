@@ -54,6 +54,7 @@ OPTIONS = {
     # 显式打包，避免 py2app 漏掉动态导入的模块
     "packages": [
         "agent",
+        "numpy",
         "sounddevice",
         "pynput",
         "serial",

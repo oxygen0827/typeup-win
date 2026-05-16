@@ -10,6 +10,7 @@ if [[ ! -x "$VENV/bin/python" ]]; then
 fi
 
 cd "$ENGINE"
+"$VENV/bin/python" -m pip install -r requirements.txt
 "$VENV/bin/python" -m pip install py2app
 rm -rf "$ENGINE/build" "$ENGINE/dist"
 "$VENV/bin/python" packaging/macos/setup.py py2app
