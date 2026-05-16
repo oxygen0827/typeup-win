@@ -120,6 +120,7 @@ npm.cmd run start
 - 后端返回 `401` 或 `403` 时，本地 server 会清空登录态，并同步清掉 Python engine 配置里的 access/refresh token。
 - `typeup_backend` 模式下，LLM 会使用后端 token 初始化，因此 `ALT + SPACE` AI 编辑热键会被正确注册和拦截。
 - 语音输入会在最终打字前清理 STT/LLM 偶发生成的开头 Markdown/井号标记，例如 `#`、`＃`、`润色结果：`、代码围栏等，避免正文前多出井号。
+- Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时自动回到静止状态。
 - 未登录时启动 engine 会进入 `needs_config` 状态，提示先登录后端账号。
 
 ## 正式支付切换说明
@@ -232,6 +233,8 @@ TypeUp 默认 Windows 快捷键：
 - `ALT`：按住说话，松开后转写到当前光标。
 - `ALT + SPACE`：按住进行 AI 编辑。
 - 双击 `ALT`：切换原生/微润色模式。
+
+按住 `ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。
 
 ## 构建
 

@@ -22,6 +22,8 @@ from agent.audio_monitor import find_device, FRAME_BYTES, SILENCE_FRAMES, MIN_SP
 import agent.typer as _typer
 
 SAMPLE_RATE = 16000
+_LEVEL_UPDATE_INTERVAL = 0.04
+_SPEECH_LEVEL_THRESHOLD = 0.025
 
 try:
     import webrtcvad as _webrtcvad
@@ -67,6 +69,28 @@ def _hotkey_tokens(key_input) -> list[tuple[str, ...]]:
 
 def _format_hotkey(hotkey: tuple) -> str:
     return "+".join(str(k) for k in hotkey)
+
+
+def _pcm_level(pcm: bytes) -> float:
+    if not pcm:
+        return 0.0
+    try:
+        samples = memoryview(pcm).cast("h")
+    except (TypeError, ValueError):
+        return 0.0
+    if not samples:
+        return 0.0
+    step = max(1, len(samples) // 320)
+    total = 0
+    count = 0
+    for idx in range(0, len(samples), step):
+        sample = int(samples[idx])
+        total += sample * sample
+        count += 1
+    if count == 0:
+        return 0.0
+    rms = (total / count) ** 0.5
+    return max(0.0, min(1.0, rms / 12000.0))
 
 
 def _win32_key_token(data) -> str:
@@ -158,6 +182,7 @@ class PushToTalk:
         self._vad_in_speech                  = False
         self._vad_silent_count               = 0
         self._vad_sent_count                 = 0  # 本次按键已分句发出的数量
+        self._last_level_update_at           = 0.0
 
     def start(self):
         self._device_idx = find_device(self._device_hint)
@@ -198,6 +223,21 @@ class PushToTalk:
     def _set_status(self, state: str) -> None:
         if self._status is not None:
             self._status.set_state(state)
+
+    def _set_audio_level(self, level: float) -> None:
+        if self._status is not None and hasattr(self._status, "set_audio_level"):
+            self._status.set_audio_level(level)
+
+    def _publish_audio_level(self, data: bytes, is_speech: bool | None = None) -> None:
+        if self._active_key is None:
+            return
+        now = time.monotonic()
+        if (now - self._last_level_update_at) < _LEVEL_UPDATE_INTERVAL:
+            return
+        self._last_level_update_at = now
+        level = _pcm_level(data)
+        speaking = is_speech if is_speech is not None else level >= _SPEECH_LEVEL_THRESHOLD
+        self._set_audio_level(level if speaking and level >= _SPEECH_LEVEL_THRESHOLD else 0.0)
 
     # ── 键盘事件 ─────────────────────────────────────────────────
 
@@ -450,6 +490,8 @@ class PushToTalk:
         if self._active_key == "dictate" and self._vad is not None:
             self._vad_raw.extend(data)
             self._process_vad()
+        else:
+            self._publish_audio_level(data)
 
     def _process_vad(self):
         """消费 _vad_raw 中所有完整的 30ms 帧，检测句子边界。"""
@@ -458,6 +500,7 @@ class PushToTalk:
             del self._vad_raw[:FRAME_BYTES]
 
             is_speech = self._vad.is_speech(frame, SAMPLE_RATE)
+            self._publish_audio_level(frame, is_speech)
 
             if is_speech:
                 self._vad_in_speech    = True
@@ -493,6 +536,7 @@ class PushToTalk:
         self._vad_in_speech     = False
         self._vad_silent_count  = 0
         self._vad_sent_count    = 0
+        self._set_audio_level(0.0)
         self._stream = sd.RawInputStream(
             samplerate=SAMPLE_RATE,
             channels=1,
@@ -518,6 +562,7 @@ class PushToTalk:
 
     def _stop_recording(self, mode: str):
         self._active_key = None
+        self._set_audio_level(0.0)
         self._close_stream()
 
         if mode == "dictate" and self._vad is not None:

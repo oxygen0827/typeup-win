@@ -27,6 +27,7 @@ _ERROR_STATES = {"error_stt", "error_typing", "error_llm", "error_perm", "empty_
 _WM_APP_STATE = 0x8001
 _WM_APP_STOP = 0x8002
 _WM_APP_MESSAGE = 0x8003
+_WM_APP_AUDIO_LEVEL = 0x8004
 _TIMER_POLL = 1
 _TIMER_HIDE = 2
 _SPI_GETWORKAREA = 0x0030
@@ -196,6 +197,8 @@ class StatusWindow:
         self._text = ""
         self._subtext = ""
         self._color = 0xB19F0F
+        self._audio_level = 0.0
+        self._audio_phase = 0
         self._message_token = 0
         self._width_text = ""
         self._wndproc = WNDPROC(self._handle_message)
@@ -206,6 +209,11 @@ class StatusWindow:
         self._q.put(("state", state))
         if self._hwnd:
             _user32.PostMessageW(self._hwnd, _WM_APP_STATE, 0, 0)
+
+    def set_audio_level(self, level: float) -> None:
+        self._q.put(("audio_level", max(0.0, min(1.0, float(level or 0.0)))))
+        if self._hwnd:
+            _user32.PostMessageW(self._hwnd, _WM_APP_AUDIO_LEVEL, 0, 0)
 
     def show_message(self, text: str, seconds: float = 6.0) -> None:
         self._message_token += 1
@@ -308,6 +316,9 @@ class StatusWindow:
         if msg == _WM_APP_MESSAGE:
             self._poll()
             return 0
+        if msg == _WM_APP_AUDIO_LEVEL:
+            self._poll()
+            return 0
         if msg == _WM_APP_STOP:
             _user32.DestroyWindow(hwnd)
             return 0
@@ -324,6 +335,9 @@ class StatusWindow:
                     _, text, token, *rest = item
                     width_text = rest[0] if rest else text
                     self._apply_message(text, token, width_text)
+                elif isinstance(item, tuple) and item and item[0] == "audio_level":
+                    _, level = item
+                    self._apply_audio_level(float(level))
                 elif isinstance(item, tuple) and item and item[0] == "hide_message":
                     _, token = item
                     self._hide_message_now(token)
@@ -340,11 +354,14 @@ class StatusWindow:
         if info is None or state == "idle":
             self._state = "idle"
             self._width_text = ""
+            self._audio_level = 0.0
             _user32.ShowWindow(self._hwnd, 0)
             return
         self._state = state
         self._width_text = ""
         self._text, self._subtext, self._color = info
+        if state not in {"recording", "polish_recording", "ai_recording"}:
+            self._audio_level = 0.0
         _user32.KillTimer(self._hwnd, _TIMER_HIDE)
         self._position()
         _user32.ShowWindow(self._hwnd, 8)
@@ -360,6 +377,7 @@ class StatusWindow:
         self._subtext = ""
         self._width_text = width_text or text
         self._color = 0xB19F0F
+        self._audio_level = 0.0
         _user32.KillTimer(self._hwnd, _TIMER_HIDE)
         self._position()
         _user32.ShowWindow(self._hwnd, 8)
@@ -370,7 +388,16 @@ class StatusWindow:
             return
         self._state = "idle"
         self._width_text = ""
+        self._audio_level = 0.0
         _user32.ShowWindow(self._hwnd, 0)
+
+    def _apply_audio_level(self, level: float) -> None:
+        if self._state not in {"recording", "polish_recording", "ai_recording"}:
+            return
+        self._audio_level = max(0.0, min(1.0, level))
+        self._audio_phase = (self._audio_phase + 1) % 5
+        if self._hwnd:
+            _user32.InvalidateRect(self._hwnd, None, True)
 
     def _position(self) -> None:
         hdc = _user32.GetDC(self._hwnd)
@@ -432,7 +459,7 @@ class StatusWindow:
 
         center = int((rect.bottom - rect.top) / 2)
         start_x = max(290, rect.right - 84)
-        for idx, bar_h in enumerate((12, 22, 32, 20, 14)):
+        for idx, bar_h in enumerate(self._voice_bar_heights()):
             x = start_x + idx * 12
             y1 = center - int(bar_h / 2)
             y2 = center + int(bar_h / 2)
@@ -442,6 +469,18 @@ class StatusWindow:
         _gdi32.SelectObject(hdc, old_brush)
         _gdi32.DeleteObject(pen)
         _gdi32.DeleteObject(brush)
+
+    def _voice_bar_heights(self) -> tuple[int, int, int, int, int]:
+        if self._state not in {"recording", "polish_recording", "ai_recording"} or self._audio_level <= 0.0:
+            return (12, 22, 32, 20, 14)
+        weights = (0.42, 0.72, 1.0, 0.78, 0.52)
+        phase_boosts = (0.0, 0.16, 0.32, 0.16, 0.0)
+        heights = []
+        for idx, weight in enumerate(weights):
+            phase = phase_boosts[(idx + self._audio_phase) % len(phase_boosts)]
+            dynamic = self._audio_level * (weight + phase)
+            heights.append(max(8, min(38, int(8 + dynamic * 32))))
+        return tuple(heights)
 
     def _paint_text(self, hdc, rect: RECT) -> None:
         _gdi32.SetBkMode(hdc, _TRANSPARENT)

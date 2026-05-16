@@ -10,9 +10,25 @@ from agent.push_to_talk import PushToTalk
 class _StatusRecorder:
     def __init__(self):
         self.states = []
+        self.levels = []
 
     def set_state(self, state: str) -> None:
         self.states.append(state)
+
+    def set_audio_level(self, level: float) -> None:
+        self.levels.append(level)
+
+
+def _pcm(sample: int, count: int = 512) -> bytes:
+    return int(sample).to_bytes(2, "little", signed=True) * count
+
+
+class _FakeVad:
+    def __init__(self, speech: bool):
+        self.speech = speech
+
+    def is_speech(self, _frame, _sample_rate):
+        return self.speech
 
 
 class PushToTalkStatusTests(unittest.TestCase):
@@ -60,6 +76,37 @@ class PushToTalkStatusTests(unittest.TestCase):
         ptt._run_mid_sentence_utterance(b"pcm", False)
 
         self.assertEqual(status.states, [])
+
+    def test_audio_callback_updates_voice_level_for_speech(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_l", status_window=status)
+        ptt._active_key = "dictate"
+        ptt._last_level_update_at = -999.0
+
+        ptt._audio_callback(_pcm(6000), 512, None, None)
+
+        self.assertGreater(status.levels[-1], 0.0)
+
+    def test_audio_callback_keeps_voice_level_zero_for_quiet_audio(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_l", status_window=status)
+        ptt._active_key = "dictate"
+        ptt._last_level_update_at = -999.0
+
+        ptt._audio_callback(_pcm(20), 512, None, None)
+
+        self.assertEqual(status.levels[-1], 0.0)
+
+    def test_vad_can_keep_voice_level_zero_for_loud_non_speech(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_l", status_window=status)
+        ptt._active_key = "dictate"
+        ptt._vad = _FakeVad(False)
+        ptt._last_level_update_at = -999.0
+
+        ptt._audio_callback(_pcm(6000), 512, None, None)
+
+        self.assertEqual(status.levels[-1], 0.0)
 
 
 if __name__ == "__main__":
