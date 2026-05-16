@@ -120,6 +120,8 @@ const COPY = {
     permissions: "权限",
     permissionCenter: "macOS 权限",
     permissionHint: "参考轻量版 Voice Keyboard：授权后才能监听热键、录音并输入文字。",
+    permissionTarget: "需要授权的是内嵌 Voice Keyboard 引擎，不是旧版独立应用。",
+    revealPermissionTarget: "显示授权对象",
     accessibility: "辅助功能",
     inputMonitoring: "输入监控",
     permissionGranted: "已授权",
@@ -206,6 +208,8 @@ const COPY = {
     permissions: "Permissions",
     permissionCenter: "macOS Permissions",
     permissionHint: "Mirrors the lightweight Voice Keyboard app: required for hotkeys, recording, and typing.",
+    permissionTarget: "Grant permissions to the embedded Voice Keyboard engine, not an old standalone app.",
+    revealPermissionTarget: "Show Target",
     accessibility: "Accessibility",
     inputMonitoring: "Input Monitoring",
     permissionGranted: "Granted",
@@ -469,6 +473,10 @@ export default function App() {
     await refreshPermissions(apiBase, setPermissions);
   }
 
+  async function revealPermissionTarget() {
+    await api(apiBase, "/api/permissions/engine/reveal", { method: "POST" });
+  }
+
   return (
     <main className="app-shell">
       <header className="app-titlebar">
@@ -656,9 +664,11 @@ export default function App() {
             <PermissionsPanel
               text={text}
               permissions={permissions.permissions}
+              engineAppPath={permissions.engineAppPath}
               onOpen={openPermission}
               onRequestMic={requestMicPermission}
               onRecheck={recheckPermissions}
+              onRevealTarget={revealPermissionTarget}
               disabled={!apiBase}
             />
           ) : null}
@@ -783,7 +793,7 @@ function Shortcut({ label, detail, keys }) {
   );
 }
 
-function PermissionsPanel({ text, permissions, onOpen, onRequestMic, onRecheck, disabled }) {
+function PermissionsPanel({ text, permissions, engineAppPath, onOpen, onRequestMic, onRecheck, onRevealTarget, disabled }) {
   const rows = [
     ["accessibility", text.accessibility],
     ["input_monitoring", text.inputMonitoring],
@@ -799,6 +809,14 @@ function PermissionsPanel({ text, permissions, onOpen, onRequestMic, onRecheck, 
         <ShieldCheck size={22} />
       </div>
       <p className="permission-hint">{text.permissionHint}</p>
+      <div className="permission-target">
+        <span>{text.permissionTarget}</span>
+        <button type="button" onClick={onRevealTarget} disabled={disabled}>
+          <ExternalLink size={15} />
+          {text.revealPermissionTarget}
+        </button>
+        {engineAppPath ? <code>{engineAppPath}</code> : null}
+      </div>
       <div className="permission-list">
         {rows.map(([key, label]) => (
           <div className="permission-row" key={key}>

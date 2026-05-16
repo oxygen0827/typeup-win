@@ -28,6 +28,10 @@ class AgentManager extends EventEmitter {
     return path.join(this.electronApp.getAppPath(), "engine", "voice-keyboard");
   }
 
+  macEngineAppPath() {
+    return path.join(this.engineDir(), "dist", "Voice Keyboard.app");
+  }
+
   async ensureConfig() {
     ensureDefaultConfig();
     return readSettings();
@@ -215,7 +219,7 @@ class AgentManager extends EventEmitter {
     }
 
     if (process.platform === "darwin") {
-      const typeupAppExecutable = path.join(engineDir, "dist", "Voice Keyboard.app", "Contents", "MacOS", "Voice Keyboard");
+      const typeupAppExecutable = path.join(this.macEngineAppPath(), "Contents", "MacOS", "Voice Keyboard");
       if (fs.existsSync(typeupAppExecutable)) {
         return { command: typeupAppExecutable, args: ["--no-serial", "--no-ui", ...extraArgs] };
       }

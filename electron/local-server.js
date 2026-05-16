@@ -324,10 +324,24 @@ function createLocalServer({ electronApp }) {
     try {
       res.json({
         platform: process.platform,
+        engineAppPath: process.platform === "darwin" ? agent.macEngineAppPath() : "",
         permissions: await agent.permissions(),
       });
     } catch (error) {
       res.status(500).json({ error: { code: "PERMISSION_CHECK_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
+  app.post("/api/permissions/engine/reveal", async (_req, res) => {
+    if (process.platform !== "darwin") {
+      res.status(400).json({ error: { code: "UNSUPPORTED_PLATFORM", message: "仅 macOS 支持显示授权对象", status: 400 } });
+      return;
+    }
+    try {
+      await revealInFinder(agent.macEngineAppPath());
+      res.json({ ok: true, path: agent.macEngineAppPath() });
+    } catch (error) {
+      res.status(500).json({ error: { code: "REVEAL_ENGINE_FAILED", message: error.message, status: 500 } });
     }
   });
 
@@ -524,6 +538,17 @@ function openMacSettings(url) {
     child.once("exit", (code) => {
       if (code === 0) resolve();
       else reject(new Error(`open exited with code ${code}`));
+    });
+  });
+}
+
+function revealInFinder(targetPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("open", ["-R", targetPath], { windowsHide: true });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`open -R exited with code ${code}`));
     });
   });
 }
