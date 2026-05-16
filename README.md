@@ -81,15 +81,16 @@ http://localhost:8000/docs
 ```powershell
 cd C:\Users\Administrator\Desktop\ai_deploy\typeup-win
 npm.cmd install
-npm run engine:setup
+npm.cmd run engine:setup
 $env:TYPEUP_BACKEND_URL="http://localhost:8000"
-npm run start
+npm.cmd run start
 ```
 
-如果 PowerShell 禁止运行 `npm.ps1`，使用 `npm.cmd`：
+在 PowerShell 中建议使用 `npm.cmd`。Windows 同时提供 `npm.cmd` 和 `npm.ps1` 两个入口，直接运行 `npm` 时可能命中 `npm.ps1`，被 PowerShell 执行策略拦截；`npm.cmd` 会走 Windows 命令脚本入口，更稳定。
 
 ```powershell
 npm.cmd install
+npm.cmd run engine:setup
 npm.cmd run start
 ```
 
@@ -245,8 +246,8 @@ npm.cmd run build
 Windows 安装包：
 
 ```powershell
-npm run engine:build
-npm run build:win
+npm.cmd run engine:build
+npm.cmd run build:win
 ```
 
 安装包输出到：
@@ -282,7 +283,7 @@ npm.cmd install
 npm.cmd run build:win
 ```
 
-### npm run build 找不到 vite
+### npm.cmd run build 找不到 vite
 
 当前脚本已经直接调用 `node_modules/vite/bin/vite.js`。如果仍然失败，说明 `node_modules` 没安装完整，重新执行：
 
@@ -303,7 +304,7 @@ npm.cmd run build
 执行：
 
 ```powershell
-npm run engine:setup
+npm.cmd run engine:setup
 ```
 
 或进入 engine 目录安装：
