@@ -110,6 +110,7 @@ npm.cmd run start
 当前前端已经接入 `voice-keyboard-backend` 的账号、订阅、权益和模型代理链路：
 
 - React UI 通过 Electron 本地 server 调用后端，不直接保存模型 API Key。
+- Electron 本地 server 已限制跨源访问，只接受 Electron/file、本机开发端口和无 Origin 的本地调用。
 - 已支持注册、登录、刷新 session、退出登录。
 - 已支持获取套餐、创建订单、打开 mock 支付链接、刷新订单和权益。
 - 登录成功后会自动写入 `%APPDATA%\TypeUp\cloud-bridge.json` 和 `%USERPROFILE%\.voice-keyboard\config.yaml`。
@@ -151,6 +152,8 @@ React UI 只请求 Electron 本地 server。Electron 启动后会通过 preload 
 ```js
 const apiBase = await window.typeup.apiBase();
 ```
+
+本地 server 仅监听 `127.0.0.1` 随机端口，并对 `Origin` 做白名单校验。允许来源为 Electron/file 页面、本机开发/预览端口 `5173`、`4173`，以及无 `Origin` 的本地调用；其它网页来源会收到 `403 FORBIDDEN_ORIGIN`。
 
 主要本地接口：
 

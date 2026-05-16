@@ -11,6 +11,8 @@ const {
 } = require("./settings-store");
 
 const DEFAULT_BACKEND_URL = process.env.TYPEUP_BACKEND_URL || "http://localhost:8000";
+const LOCAL_RENDERER_PORTS = new Set(["5173", "4173"]);
+const LOCAL_RENDERER_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 class BackendRequestError extends Error {
   constructor(status, body) {
@@ -100,6 +102,36 @@ function safeJson(text) {
   } catch (_error) {
     return { message: text };
   }
+}
+
+function isAllowedLocalOrigin(origin) {
+  if (!origin || origin === "null" || origin === "file://") return true;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol === "file:") return true;
+    if (parsed.protocol !== "http:") return false;
+    return LOCAL_RENDERER_HOSTS.has(parsed.hostname) && LOCAL_RENDERER_PORTS.has(parsed.port);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function localCorsOrigin(origin, callback) {
+  callback(null, isAllowedLocalOrigin(origin) ? origin || true : false);
+}
+
+function enforceLocalOrigin(req, res, next) {
+  if (isAllowedLocalOrigin(req.get("origin"))) {
+    next();
+    return;
+  }
+  res.status(403).json({
+    error: {
+      code: "FORBIDDEN_ORIGIN",
+      message: "跨源请求被本地服务拒绝",
+      status: 403,
+    },
+  });
 }
 
 async function fetchBackendMe(cloud) {
@@ -217,7 +249,8 @@ function createLocalServer({ electronApp }) {
   agent.on("log", (payload) => publish("log", payload));
   agent.on("exit", (payload) => publish("exit", payload));
 
-  app.use(cors({ origin: true }));
+  app.use(cors({ origin: localCorsOrigin }));
+  app.use(enforceLocalOrigin);
   app.use(express.json({ limit: "256kb" }));
 
   app.get("/api/health", (_req, res) => {
@@ -430,4 +463,4 @@ function createLocalServer({ electronApp }) {
   });
 }
 
-module.exports = { createLocalServer };
+module.exports = { createLocalServer, isAllowedLocalOrigin };
