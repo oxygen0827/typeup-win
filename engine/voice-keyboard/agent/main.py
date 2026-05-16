@@ -94,26 +94,44 @@ _POLISH_SYSTEM = """你是文字润色助手。对用户说的话做最轻度的
 
 
 _POLISH_LABEL_RE = re.compile(r"^(?:润色后|润色结果|修改后|修改结果|优化后|优化结果|结果|输出)\s*[:：]\s*")
+_LEADING_INVISIBLE_RE = re.compile(r"^[\s\ufeff\u200b\u200c\u200d]+")
+_LEADING_HASH_MARK_RE = re.compile(r"^[#＃]{1,6}[\s:：、，。,.!?！？;；-]*")
 
 
-def _clean_polished_text(text: str) -> str:
+def _clean_generated_text(text: str) -> str:
     cleaned = str(text or "").strip().strip("\"'“”")
-    cleaned = re.sub(r"^```(?:\w+)?\s*", "", cleaned).strip()
-    cleaned = re.sub(r"\s*```$", "", cleaned).strip()
-    for _ in range(3):
+    for _ in range(4):
         before = cleaned
-        cleaned = _POLISH_LABEL_RE.sub("", cleaned).strip()
-        cleaned = re.sub(r"^#{1,6}\s*", "", cleaned).strip()
-        cleaned = re.sub(r"^[-*•]\s+", "", cleaned).strip()
+        cleaned = _LEADING_INVISIBLE_RE.sub("", cleaned)
+        cleaned = _LEADING_HASH_MARK_RE.sub("", cleaned).strip()
         if cleaned == before:
             break
     return cleaned.strip().strip("\"'“”")
 
 
+def _clean_polished_text(text: str) -> str:
+    cleaned = _clean_generated_text(text)
+    cleaned = re.sub(r"^```(?:\w+)?\s*", "", cleaned).strip()
+    cleaned = re.sub(r"\s*```$", "", cleaned).strip()
+    for _ in range(3):
+        before = cleaned
+        cleaned = _POLISH_LABEL_RE.sub("", cleaned).strip()
+        cleaned = _clean_generated_text(cleaned)
+        cleaned = re.sub(r"^[-*•]\s+", "", cleaned).strip()
+        if cleaned == before:
+            break
+    return _clean_generated_text(cleaned)
+
+
 def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=None,
                            status_window=None, history: History | None = None):
     from agent.typer import type_text
-    def on_utterance(pcm: bytes, polish: bool = False):
+    def on_utterance(
+        pcm: bytes,
+        polish: bool = False,
+        clear_status: bool = True,
+        progress_status: bool = True,
+    ):
         mode = "polish" if polish else "dictate"
         try:
             text = stt_client.transcribe(pcm)
@@ -121,19 +139,20 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             print(f"[stt] 请求失败: {e}")
             if history is not None:
                 history.append(mode, "", "error", f"STT: {e}")
-            if status_window is not None:
+            if status_window is not None and progress_status:
                 status_window.set_state("error_stt")
             return
+        text = _clean_generated_text(text)
         if not text:
             print("[stt] 识别结果为空")
             if history is not None:
                 history.append(mode, "", "empty")
-            if status_window is not None:
+            if status_window is not None and progress_status:
                 status_window.set_state("empty_stt")
             return
         print(f"[stt] {text!r}")
         if polish and editor is not None:
-            if status_window is not None:
+            if status_window is not None and progress_status:
                 status_window.set_state("polishing")
             try:
                 polished = _clean_polished_text(editor.chat(_POLISH_SYSTEM, text))
@@ -147,7 +166,7 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             buf.push(text)
         except Exception as e:
             print(f"[stt] 打字失败: {e}")
-            if status_window is not None:
+            if status_window is not None and progress_status:
                 status_window.set_state("error_typing")
             if history is not None:
                 history.append(mode, text, "error", f"typing: {e}")
@@ -156,8 +175,10 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             history.append(mode, text, "ok")
         if kbd_mon is not None:
             kbd_mon.notify_voice_output()
-        if status_window is not None:
+        if status_window is not None and clear_status:
             status_window.set_state("idle")
+        if clear_status:
+            print("[typeup] 输入完成")
     return on_utterance
 
 

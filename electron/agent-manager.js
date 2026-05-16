@@ -202,7 +202,12 @@ class AgentManager extends EventEmitter {
       this._setState("needs_config");
       return;
     }
-    if (line.includes("开始监听") || line.includes("等待语音") || line.includes("Voice Keyboard Agent 启动")) {
+    if (
+      line.includes("开始监听") ||
+      line.includes("等待语音") ||
+      line.includes("Voice Keyboard Agent 启动") ||
+      line.includes("[typeup] 输入完成")
+    ) {
       this._setState("listening");
       return;
     }

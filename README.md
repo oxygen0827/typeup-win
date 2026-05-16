@@ -117,7 +117,7 @@ npm.cmd run start
 - engine 刷新后端 token 后会把新 token 同步回 `cloud-bridge.json`，避免 UI 和 engine 登录态分叉。
 - 后端返回 `401` 或 `403` 时，本地 server 会清空登录态，并同步清掉 Python engine 配置里的 access/refresh token。
 - `typeup_backend` 模式下，LLM 会使用后端 token 初始化，因此 `ALT + SPACE` AI 编辑热键会被正确注册和拦截。
-- 微润色模式会清理模型偶发返回的 Markdown/标签前缀，例如开头 `#`、`润色结果：`、代码围栏等。
+- 语音输入会在最终打字前清理 STT/LLM 偶发生成的开头 Markdown/井号标记，例如 `#`、`＃`、`润色结果：`、代码围栏等，避免正文前多出井号。
 - 未登录时启动 engine 会进入 `needs_config` 状态，提示先登录后端账号。
 
 ## 正式支付切换说明

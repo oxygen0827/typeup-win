@@ -106,9 +106,9 @@ def _win32_key_token(data) -> str:
 class PushToTalk:
     def __init__(
         self,
-        on_utterance:      Callable[[bytes], None],
-        on_edit_utterance: Optional[Callable[[bytes], None]] = None,
-        on_ai_utterance:   Optional[Callable[[bytes], None]] = None,
+        on_utterance:      Callable[..., None],
+        on_edit_utterance: Optional[Callable[..., None]] = None,
+        on_ai_utterance:   Optional[Callable[..., None]] = None,
         on_ai_key_down:    Optional[Callable[[], None]] = None,
         ptt_key:           str = "right_alt",
         edit_key:          str = "right_ctrl",
@@ -366,6 +366,19 @@ class PushToTalk:
             self._set_status("recording")
             print("[ptt] 升级为编辑指令录音... ", end="\r", flush=True)
 
+    def _dictate_recording_state(self) -> str:
+        return "polish_recording" if self._polish_mode else "recording"
+
+    def _restore_recording_status_if_active(self) -> None:
+        if self._active_key == "dictate":
+            self._set_status(self._dictate_recording_state())
+
+    def _run_mid_sentence_utterance(self, pcm: bytes, polish: bool) -> None:
+        try:
+            self._on_utterance(pcm, polish, False, False)
+        finally:
+            self._restore_recording_status_if_active()
+
     # ── Windows 系统级热键拦截 ─────────────────────────────────────
 
     def _win32_event_filter(self, msg, data):
@@ -464,7 +477,7 @@ class PushToTalk:
             n = self._vad_sent_count
             print(f"[ptt] 分句{n} 识别中...    ", end="\r", flush=True)
             threading.Thread(
-                target=self._on_utterance,
+                target=self._run_mid_sentence_utterance,
                 args=(pcm, self._polish_mode),
                 daemon=True,
                 name=f"PTT-mid-{n}",
@@ -492,10 +505,9 @@ class PushToTalk:
         if self._active_key == "dictate":
             if self._polish_mode:
                 label = "微润色 录音中"
-                self._set_status("polish_recording")
             else:
                 label = "录音中"
-                self._set_status("recording")
+            self._set_status(self._dictate_recording_state())
         elif self._active_key == "ai":
             label = "AI 指令录音中"
             self._set_status("ai_recording")
