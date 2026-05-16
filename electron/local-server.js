@@ -1,4 +1,5 @@
 const http = require("node:http");
+const { spawn } = require("node:child_process");
 const express = require("express");
 const cors = require("cors");
 const { AgentManager } = require("./agent-manager");
@@ -14,6 +15,11 @@ const DEFAULT_BACKEND_URL = process.env.TYPEUP_BACKEND_URL || "http://localhost:
 const DEFAULT_BACKEND_TIMEOUT_MS = 30000;
 const LOCAL_RENDERER_PORTS = new Set(["5173", "4173"]);
 const LOCAL_RENDERER_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const MAC_PERMISSION_URLS = {
+  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  input_monitoring: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+  microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+};
 
 class BackendRequestError extends Error {
   constructor(status, body) {
@@ -314,6 +320,39 @@ function createLocalServer({ electronApp }) {
     }
   });
 
+  app.get("/api/permissions", async (_req, res) => {
+    try {
+      res.json({
+        platform: process.platform,
+        permissions: await agent.permissions(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: { code: "PERMISSION_CHECK_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
+  app.post("/api/permissions/:name/open", async (req, res) => {
+    const url = MAC_PERMISSION_URLS[req.params.name];
+    if (process.platform !== "darwin" || !url) {
+      res.status(400).json({ error: { code: "UNSUPPORTED_PERMISSION", message: "不支持的权限项", status: 400 } });
+      return;
+    }
+    try {
+      await openMacSettings(url);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: { code: "OPEN_SETTINGS_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
+  app.post("/api/permissions/microphone/request", async (_req, res) => {
+    try {
+      res.json(await agent.requestMicrophone());
+    } catch (error) {
+      res.status(500).json({ error: { code: "MICROPHONE_REQUEST_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
   app.get("/api/usage", (_req, res) => {
     res.json(readUsage());
   });
@@ -474,6 +513,17 @@ function createLocalServer({ electronApp }) {
           await new Promise((done) => server.close(done));
         },
       });
+    });
+  });
+}
+
+function openMacSettings(url) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("open", [url], { windowsHide: true });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`open exited with code ${code}`));
     });
   });
 }

@@ -239,6 +239,7 @@ button:disabled {
 .usage-panel,
 .log-panel,
 .account-panel,
+.permissions-panel,
 .settings-panel,
 .devices-panel {
   background: color-mix(in srgb, var(--surface) 95%, transparent);
@@ -256,6 +257,7 @@ button:disabled {
 
 .settings-panel,
 .account-panel,
+.permissions-panel,
 .devices-panel {
   padding: 16px;
 }
@@ -830,6 +832,76 @@ button:disabled {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.permission-hint,
+.permission-footer {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.permission-footer {
+  margin: 10px 0 0;
+}
+
+.permission-list {
+  display: grid;
+  gap: 8px;
+}
+
+.permission-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-height: 54px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.permission-row strong,
+.permission-row span {
+  display: block;
+}
+
+.permission-state {
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.permission-state.ok {
+  color: var(--green);
+}
+
+.permission-state.warn {
+  color: var(--orange);
+}
+
+.permission-state.danger {
+  color: var(--red);
+}
+
+.permission-state.muted {
+  color: var(--muted);
+}
+
+.permission-row button,
+.permission-actions button {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.permission-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .signed-user,

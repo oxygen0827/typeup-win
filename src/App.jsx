@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Save,
   Settings,
+  ShieldCheck,
   Square,
   UserRound,
   WandSparkles,
@@ -48,6 +49,7 @@ const COPY = {
     subtitle: "Windows 本地语音输入与 AI 编辑",
     language: "语言",
     readyForWindows: "Windows 体验",
+    readyForMac: "macOS 体验",
     localEngine: "本地引擎",
     voiceConsole: "语音控制台",
     shortcuts: "快捷键",
@@ -115,11 +117,25 @@ const COPY = {
     shortcutPolish: "切换润色模式",
     shortcutPolishDetail: "原生与微润色之间切换",
     modeDisplay: "润色模式",
+    permissions: "权限",
+    permissionCenter: "macOS 权限",
+    permissionHint: "参考轻量版 Voice Keyboard：授权后才能监听热键、录音并输入文字。",
+    accessibility: "辅助功能",
+    inputMonitoring: "输入监控",
+    permissionGranted: "已授权",
+    permissionDenied: "已拒绝",
+    permissionPending: "未决定",
+    permissionUnknown: "未知",
+    openSystemSettings: "打开系统设置",
+    requestMic: "请求麦克风",
+    recheck: "重新检查",
+    restartAfterGrant: "授权后请重启本地引擎。",
   },
   en: {
     subtitle: "Windows local voice input and AI editing",
     language: "Language",
     readyForWindows: "Windows experience",
+    readyForMac: "macOS experience",
     localEngine: "Local Engine",
     voiceConsole: "Voice Console",
     shortcuts: "Shortcuts",
@@ -187,6 +203,19 @@ const COPY = {
     shortcutPolish: "Switch Polish Mode",
     shortcutPolishDetail: "Toggle original and light polish",
     modeDisplay: "Polish Mode",
+    permissions: "Permissions",
+    permissionCenter: "macOS Permissions",
+    permissionHint: "Mirrors the lightweight Voice Keyboard app: required for hotkeys, recording, and typing.",
+    accessibility: "Accessibility",
+    inputMonitoring: "Input Monitoring",
+    permissionGranted: "Granted",
+    permissionDenied: "Denied",
+    permissionPending: "Not decided",
+    permissionUnknown: "Unknown",
+    openSystemSettings: "Open Settings",
+    requestMic: "Request Mic",
+    recheck: "Recheck",
+    restartAfterGrant: "Restart the local engine after granting permissions.",
   },
 };
 
@@ -203,6 +232,15 @@ const EMPTY_AUTH = {
   authenticated: false,
   user: null,
   entitlement: null,
+};
+
+const EMPTY_PERMISSIONS = {
+  platform: "",
+  permissions: {
+    accessibility: "unknown",
+    input_monitoring: "unknown",
+    microphone: "unknown",
+  },
 };
 
 const STATUS_KEYS = [
@@ -224,6 +262,7 @@ const STATUS_KEYS = [
 export default function App() {
   const [lang, setLang] = useState("zh");
   const [apiBase, setApiBase] = useState("");
+  const [platform, setPlatform] = useState("");
   const [status, setStatusState] = useState({ state: "starting" });
   const [usage, setUsage] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -235,6 +274,7 @@ export default function App() {
   const [accountError, setAccountError] = useState("");
   const [lastOrder, setLastOrder] = useState(null);
   const [devices, setDevices] = useState("");
+  const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS);
   const [saving, setSaving] = useState(false);
 
   function setStatus(next) {
@@ -246,6 +286,10 @@ export default function App() {
     async function loadBase() {
       const base = window.typeup ? await window.typeup.apiBase() : "";
       if (mounted) setApiBase(base || "http://127.0.0.1:3000");
+      if (window.typeup?.platform) {
+        const nextPlatform = await window.typeup.platform();
+        if (mounted) setPlatform(nextPlatform || "");
+      }
     }
     loadBase();
     return () => {
@@ -256,10 +300,12 @@ export default function App() {
   useEffect(() => {
     if (!apiBase) return undefined;
     refreshAll(apiBase, { setStatus, setUsage, setLogs, setSettings });
+    refreshPermissions(apiBase, setPermissions);
     refreshAccount(apiBase, { setAuth, setPlans, setAuthForm, setAccountError });
     const timer = setInterval(() => {
       refreshUsage(apiBase, setUsage);
       refreshStatus(apiBase, setStatus);
+      refreshPermissions(apiBase, setPermissions);
     }, 2200);
     const events = new EventSource(`${apiBase}/api/events`);
     events.addEventListener("status", (event) => setStatus(JSON.parse(event.data)));
@@ -410,6 +456,19 @@ export default function App() {
     setDevices(result.output || text.deviceFallback);
   }
 
+  async function openPermission(name) {
+    await api(apiBase, `/api/permissions/${name}/open`, { method: "POST" });
+  }
+
+  async function requestMicPermission() {
+    await api(apiBase, "/api/permissions/microphone/request", { method: "POST" });
+    await refreshPermissions(apiBase, setPermissions);
+  }
+
+  async function recheckPermissions() {
+    await refreshPermissions(apiBase, setPermissions);
+  }
+
   return (
     <main className="app-shell">
       <header className="app-titlebar">
@@ -441,7 +500,7 @@ export default function App() {
                 <p className="eyebrow">{text.localEngine}</p>
                 <h2>{text.voiceConsole}</h2>
               </div>
-              <div className="windows-chip">{text.readyForWindows}</div>
+              <div className="windows-chip">{platform === "darwin" ? text.readyForMac : text.readyForWindows}</div>
             </div>
 
             <div className="voice-grid">
@@ -593,6 +652,17 @@ export default function App() {
             lang={lang}
           />
 
+          {platform === "darwin" ? (
+            <PermissionsPanel
+              text={text}
+              permissions={permissions.permissions}
+              onOpen={openPermission}
+              onRequestMic={requestMicPermission}
+              onRecheck={recheckPermissions}
+              disabled={!apiBase}
+            />
+          ) : null}
+
           <section className="settings-panel">
             <div className="panel-heading compact">
               <div>
@@ -710,6 +780,53 @@ function Shortcut({ label, detail, keys }) {
         <p>{detail}</p>
       </div>
     </article>
+  );
+}
+
+function PermissionsPanel({ text, permissions, onOpen, onRequestMic, onRecheck, disabled }) {
+  const rows = [
+    ["accessibility", text.accessibility],
+    ["input_monitoring", text.inputMonitoring],
+    ["microphone", text.microphone],
+  ];
+  return (
+    <section className="permissions-panel">
+      <div className="panel-heading compact">
+        <div>
+          <p className="eyebrow">{text.permissions}</p>
+          <h2>{text.permissionCenter}</h2>
+        </div>
+        <ShieldCheck size={22} />
+      </div>
+      <p className="permission-hint">{text.permissionHint}</p>
+      <div className="permission-list">
+        {rows.map(([key, label]) => (
+          <div className="permission-row" key={key}>
+            <div>
+              <strong>{label}</strong>
+              <span className={`permission-state ${permissionTone(permissions?.[key])}`}>
+                {permissionText(permissions?.[key], text)}
+              </span>
+            </div>
+            <button type="button" onClick={() => onOpen(key)} disabled={disabled}>
+              <ExternalLink size={15} />
+              {text.openSystemSettings}
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="permission-actions">
+        <button type="button" onClick={onRequestMic} disabled={disabled}>
+          <Mic size={16} />
+          {text.requestMic}
+        </button>
+        <button type="button" onClick={onRecheck} disabled={disabled}>
+          <RefreshCw size={16} />
+          {text.recheck}
+        </button>
+      </div>
+      <p className="permission-footer">{text.restartAfterGrant}</p>
+    </section>
   );
 }
 
@@ -976,6 +1093,15 @@ async function refreshAll(apiBase, setters) {
   ]);
 }
 
+async function refreshPermissions(apiBase, setPermissions) {
+  try {
+    const data = await api(apiBase, "/api/permissions");
+    setPermissions(data || EMPTY_PERMISSIONS);
+  } catch (_error) {
+    setPermissions(EMPTY_PERMISSIONS);
+  }
+}
+
 async function refreshAccount(apiBase, setters) {
   try {
     const session = await api(apiBase, "/api/auth/session");
@@ -1041,6 +1167,20 @@ function formatHotkey(value, lang) {
       return text.toUpperCase();
     })
     .join(" + ");
+}
+
+function permissionTone(value) {
+  if (value === "granted") return "ok";
+  if (value === "denied") return "danger";
+  if (value === "not_determined") return "warn";
+  return "muted";
+}
+
+function permissionText(value, text) {
+  if (value === "granted") return text.permissionGranted;
+  if (value === "denied") return text.permissionDenied;
+  if (value === "not_determined") return text.permissionPending;
+  return text.permissionUnknown;
 }
 
 function sameStatus(left, right) {

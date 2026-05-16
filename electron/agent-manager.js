@@ -165,6 +165,49 @@ class AgentManager extends EventEmitter {
     });
   }
 
+  async permissions() {
+    if (process.platform !== "darwin") {
+      return {
+        accessibility: "granted",
+        input_monitoring: "granted",
+        microphone: "granted",
+      };
+    }
+    const output = await this._runAgentCommand(["--permissions-json"]);
+    return parseLastJson(output) || {
+      accessibility: "unknown",
+      input_monitoring: "unknown",
+      microphone: "unknown",
+    };
+  }
+
+  async requestMicrophone() {
+    if (process.platform !== "darwin") return { microphone: "granted" };
+    const output = await this._runAgentCommand(["--request-microphone"]);
+    return parseLastJson(output) || { microphone: "unknown" };
+  }
+
+  _runAgentCommand(extraArgs = []) {
+    const engineDir = this.engineDir();
+    const launch = this._resolveLaunch(engineDir, extraArgs);
+    return new Promise((resolve, reject) => {
+      const child = spawn(launch.command, launch.args, {
+        cwd: engineDir,
+        windowsHide: true,
+        env: { ...process.env, PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1" },
+      });
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk.toString("utf8");
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk.toString("utf8");
+      });
+      child.once("error", reject);
+      child.once("exit", () => resolve(output.trim()));
+    });
+  }
+
   _resolveLaunch(engineDir, extraArgs = []) {
     const explicitExe = process.env.TYPEUP_AGENT_EXE;
     if (explicitExe && fs.existsSync(explicitExe)) {
@@ -279,6 +322,19 @@ function decodeProcessOutput(chunk) {
   } catch (_error) {
     return utf8;
   }
+}
+
+function parseLastJson(output) {
+  for (const line of String(output || "").split(/\r?\n/).reverse()) {
+    const text = line.trim();
+    if (!text.startsWith("{")) continue;
+    try {
+      return JSON.parse(text);
+    } catch (_error) {
+      // Keep scanning; py2app can print startup lines before JSON.
+    }
+  }
+  return null;
 }
 
 module.exports = { AgentManager };
