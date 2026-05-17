@@ -11,12 +11,12 @@
     "build": "node node_modules/vite/bin/vite.js build",
     "build:win": "npm run build && node node_modules/electron-builder/cli.js --win nsis",
     "build:mac": "npm run build && node node_modules/cross-env/dist/bin/cross-env.js npm_config_electron_mirror= NPM_CONFIG_ELECTRON_MIRROR= ELECTRON_MIRROR= ELECTRON_BUILDER_BINARIES_MIRROR=https://github.com/electron-userland/electron-builder-binaries/releases/download/ node node_modules/electron-builder/cli.js --mac dmg",
-    "engine:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-engine.ps1",
-    "engine:build": "powershell -ExecutionPolicy Bypass -File scripts/build-engine.ps1",
-    "engine:run": "powershell -ExecutionPolicy Bypass -File scripts/run-engine.ps1",
-    "engine:setup:mac": "bash scripts/setup-engine-macos.sh",
-    "engine:build:mac": "bash scripts/build-engine-macos.sh",
-    "engine:run:mac": "bash scripts/run-engine-macos.sh"
+    "engine:setup": "powershell -ExecutionPolicy Bypass -File scripts/windows/setup-engine.ps1",
+    "engine:build": "powershell -ExecutionPolicy Bypass -File scripts/windows/build-engine.ps1",
+    "engine:run": "powershell -ExecutionPolicy Bypass -File scripts/windows/run-engine.ps1",
+    "engine:setup:mac": "bash scripts/macos/setup-engine.sh",
+    "engine:build:mac": "bash scripts/macos/build-engine.sh",
+    "engine:run:mac": "bash scripts/macos/run-engine.sh"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.1",

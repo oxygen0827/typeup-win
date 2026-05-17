@@ -45,14 +45,17 @@ npm run build
 node --check electron/main.js
 node --check electron/agent-manager.js
 node --check electron/local-server.js
+node --check electron/platform/index.js
+node --check electron/platform/darwin.js
+node --check electron/platform/win32.js
 ```
 
 For macOS packaging changes, also run:
 
 ```bash
-bash -n scripts/setup-engine-macos.sh
-bash -n scripts/build-engine-macos.sh
-bash -n scripts/run-engine-macos.sh
+bash -n scripts/macos/setup-engine.sh
+bash -n scripts/macos/build-engine.sh
+bash -n scripts/macos/run-engine.sh
 ```
 
 ## Future Cleanup

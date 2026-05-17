@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 
-$root = Split-Path -Parent $PSScriptRoot
+$root = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $engine = Join-Path $root "engine\voice-keyboard"
 $venv = Join-Path $engine ".venv"
 $python = "python"

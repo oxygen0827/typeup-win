@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 ENGINE="$ROOT/engine/voice-keyboard"
 VENV="$ENGINE/.venv"
 
 if [[ ! -x "$VENV/bin/python" ]]; then
-  bash "$ROOT/scripts/setup-engine-macos.sh"
+  bash "$ROOT/scripts/macos/setup-engine.sh"
 fi
 
 cd "$ENGINE"
