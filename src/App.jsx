@@ -219,15 +219,17 @@ const COPY = {
   },
 };
 
+const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
+
 const EMPTY_SETTINGS = {
-  stt: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-asr-2512", language: "zh" },
+  stt: { provider: "typeup_backend", api_base_url: DEFAULT_BACKEND_URL, access_token: "", model: "glm-asr-2512", language: "zh" },
   audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2 },
   typing: { method: "unicode" },
-  llm: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-4-flash" },
+  llm: { provider: "typeup_backend", api_base_url: DEFAULT_BACKEND_URL, access_token: "", model: "glm-4-flash" },
 };
 
 const EMPTY_AUTH = {
-  apiBaseUrl: "http://localhost:8000",
+  apiBaseUrl: DEFAULT_BACKEND_URL,
   connected: false,
   authenticated: false,
   user: null,
@@ -268,7 +270,7 @@ export default function App() {
   const [logs, setLogs] = useState([]);
   const [settings, setSettings] = useState(EMPTY_SETTINGS);
   const [auth, setAuth] = useState(EMPTY_AUTH);
-  const [authForm, setAuthForm] = useState({ mode: "login", apiBaseUrl: "http://localhost:8000", email: "", password: "" });
+  const [authForm, setAuthForm] = useState({ mode: "login", apiBaseUrl: DEFAULT_BACKEND_URL, email: "", password: "" });
   const [plans, setPlans] = useState([]);
   const [accountBusy, setAccountBusy] = useState("");
   const [accountError, setAccountError] = useState("");
@@ -1138,7 +1140,7 @@ async function refreshAccount(apiBase, setters) {
     setters.setAuth(session);
     setters.setAuthForm((current) => ({
       ...current,
-      apiBaseUrl: session.apiBaseUrl || current.apiBaseUrl || "http://localhost:8000",
+      apiBaseUrl: session.apiBaseUrl || current.apiBaseUrl || DEFAULT_BACKEND_URL,
     }));
     if (session.connected) {
       await refreshPlans(apiBase, setters.setPlans, session.apiBaseUrl);
