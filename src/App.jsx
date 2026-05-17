@@ -59,6 +59,9 @@ const COPY = {
     backendUrl: "后端地址",
     email: "邮箱",
     password: "密码",
+    invalidEmail: "请输入正确的邮箱地址",
+    passwordRequired: "请输入密码",
+    registerPasswordTooShort: "注册密码至少 8 位",
     login: "登录",
     register: "注册",
     logout: "退出登录",
@@ -145,6 +148,9 @@ const COPY = {
     backendUrl: "Backend URL",
     email: "Email",
     password: "Password",
+    invalidEmail: "Enter a valid email address.",
+    passwordRequired: "Enter your password.",
+    registerPasswordTooShort: "Registration password must be at least 8 characters.",
     login: "Login",
     register: "Register",
     logout: "Logout",
@@ -367,8 +373,13 @@ export default function App() {
 
   async function submitAuth(event) {
     event.preventDefault();
-    setAccountBusy(authForm.mode);
     setAccountError("");
+    const validationError = validateAuthForm(authForm, text);
+    if (validationError) {
+      setAccountError(validationError);
+      return;
+    }
+    setAccountBusy(authForm.mode);
     try {
       const session = await api(apiBase, `/api/auth/${authForm.mode}`, {
         method: "POST",
@@ -1189,6 +1200,21 @@ function setNested(setter, path, value) {
     cursor[path[path.length - 1]] = value;
     return next;
   });
+}
+
+function validateAuthForm(form, text) {
+  const email = String(form.email || "").trim();
+  const password = String(form.password || "");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return text.invalidEmail;
+  }
+  if (!password) {
+    return text.passwordRequired;
+  }
+  if (form.mode === "register" && password.length < 8) {
+    return text.registerPasswordTooShort;
+  }
+  return "";
 }
 
 function defaultAudioHotkeys(platform = "") {
