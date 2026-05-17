@@ -125,6 +125,7 @@ npm.cmd run start
 - Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时通过平滑衰减回到静止状态。
 - Windows 悬浮状态框已改为双缓冲绘制，并禁止音量条刷新时擦除背景，减少透明窗口闪烁；React 底部状态栏也会去重相同状态更新，避免“处理中/就绪”反复重绘。
 - 本地 server 会把启动日志、凭证同步日志和 STT 结果日志区分开：只有“识别中/解析指令”才进入 `transcribing`，避免启动后误停在“处理中”。
+- React UI 的快捷键提示会按当前平台和本地 engine 配置动态显示，避免 Windows 用户看到 macOS 默认的“右 Shift / 右 Option”提示。
 - 已知可继续优化项：原生 Win32 圆角裁剪仍可能在个别屏幕缩放下出现轻微边缘毛刺，后续可改成 per-pixel alpha layered window 继续打磨。
 - 未登录时启动 engine 会进入 `needs_config` 状态，提示先登录后端账号。
 
@@ -238,6 +239,8 @@ TypeUp 默认 Windows 快捷键：
 - `ALT`：按住说话，松开后转写到当前光标。
 - `ALT + SPACE`：按住进行 AI 编辑。
 - 双击 `ALT`：切换原生/微润色模式。
+
+macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双击右 `Shift` 切换润色模式。桌面 UI 会读取当前平台和 `settings.audio.ptt_key` / `settings.audio.ai_key` 后再显示提示文案。
 
 按住 `ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。音量条刷新使用平滑衰减和双缓冲绘制，减少闪烁；如果只剩轻微边缘毛刺，属于后续视觉优化项。
 
