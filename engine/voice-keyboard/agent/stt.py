@@ -6,6 +6,7 @@ STT（语音转文字）客户端，支持多家云服务。
   aliyun      — 阿里云智能语音 NLS（中文最优，支持方言）
   volcengine  — 火山引擎 ASR（字节跳动，中文优化）
   zhipuai     — 智谱 AI GLM-4-Voice（参考 transmission_assistant 项目的集成方式）
+  typeup_backend — TypeUp 后端代理（账号、权益、额度由后端处理）
   glm_asr_2512 — 智谱 AI GLM-ASR-2512（专业语音转文本）
 
 调用方只需：
@@ -306,60 +307,6 @@ class _ZhipuSTT:
         return result
 
 
-# ── 智谱 AI GLM-ASR-2512（语音转文本专用接口）────────────────────
-
-class _GLMASR2512STT:
-    """
-    智谱 AI GLM-ASR-2512 语音转文本。
-
-    官方接口：
-      POST https://open.bigmodel.cn/api/paas/v4/audio/transcriptions
-
-    所需配置：
-      api_key   智谱 AI API Key
-      model     默认 glm-asr-2512
-      prompt    可选，上一次转录结果或领域上下文
-      hotwords  可选，热词列表（最多 100 个）
-    """
-
-    _URL = "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
-
-    def __init__(self, cfg: dict):
-        self._api_key = cfg["api_key"]
-        self._model = cfg.get("model", "glm-asr-2512")
-        self._prompt = cfg.get("prompt", "")
-        hotwords = cfg.get("hotwords", [])
-        if isinstance(hotwords, str):
-            hotwords = [w.strip() for w in hotwords.split(",") if w.strip()]
-        self._hotwords = hotwords[:100] if isinstance(hotwords, list) else []
-
-    def transcribe(self, pcm: bytes) -> str:
-        wav = _pcm_to_wav(pcm)
-        return self.transcribe_wav(wav)
-
-    def transcribe_wav(self, wav: bytes) -> str:
-        data = {
-            "model": self._model,
-            "stream": "false",
-        }
-        if self._prompt:
-            data["prompt"] = self._prompt
-        for i, word in enumerate(self._hotwords):
-            data[f"hotwords[{i}]"] = str(word)
-
-        resp = requests.post(
-            self._URL,
-            headers={"Authorization": f"Bearer {self._api_key}"},
-            data=data,
-            files={"file": ("audio.wav", wav, "audio/wav")},
-            timeout=30,
-        )
-        if not resp.ok:
-            raise RuntimeError(f"GLM-ASR-2512 HTTP {resp.status_code}: {resp.text}")
-        result = resp.json()
-        return (result.get("text") or "").strip()
-
-
 # ── TypeUp 后端代理 ───────────────────────────────────────────────
 
 class _TypeUpBackendSTT:
@@ -367,9 +314,10 @@ class _TypeUpBackendSTT:
     通过 TypeUp 后端代理语音识别。
 
     所需配置：
-      api_base_url   后端地址，默认 http://localhost:8000
-      access_token   登录后获得的 access token
-      refresh_token  可选，用于 access token 过期后刷新
+      api_base_url       后端地址，默认 http://localhost:8000
+      access_token       登录后获得的 access token
+      refresh_token      可选，用于 access token 过期后刷新
+      cloud_bridge_path  可选，TypeUp Desktop 写入的登录态 JSON
     """
 
     def __init__(self, cfg: dict):
@@ -467,6 +415,60 @@ class _TypeUpBackendSTT:
             return data.get("error", {}).get("message") or data.get("detail") or fallback
         except Exception:
             return f"{fallback}: HTTP {resp.status_code} {resp.text}"
+
+
+# ── 智谱 AI GLM-ASR-2512（语音转文本专用接口）────────────────────
+
+class _GLMASR2512STT:
+    """
+    智谱 AI GLM-ASR-2512 语音转文本。
+
+    官方接口：
+      POST https://open.bigmodel.cn/api/paas/v4/audio/transcriptions
+
+    所需配置：
+      api_key   智谱 AI API Key
+      model     默认 glm-asr-2512
+      prompt    可选，上一次转录结果或领域上下文
+      hotwords  可选，热词列表（最多 100 个）
+    """
+
+    _URL = "https://open.bigmodel.cn/api/paas/v4/audio/transcriptions"
+
+    def __init__(self, cfg: dict):
+        self._api_key = cfg["api_key"]
+        self._model = cfg.get("model", "glm-asr-2512")
+        self._prompt = cfg.get("prompt", "")
+        hotwords = cfg.get("hotwords", [])
+        if isinstance(hotwords, str):
+            hotwords = [w.strip() for w in hotwords.split(",") if w.strip()]
+        self._hotwords = hotwords[:100] if isinstance(hotwords, list) else []
+
+    def transcribe(self, pcm: bytes) -> str:
+        wav = _pcm_to_wav(pcm)
+        return self.transcribe_wav(wav)
+
+    def transcribe_wav(self, wav: bytes) -> str:
+        data = {
+            "model": self._model,
+            "stream": "false",
+        }
+        if self._prompt:
+            data["prompt"] = self._prompt
+        for i, word in enumerate(self._hotwords):
+            data[f"hotwords[{i}]"] = str(word)
+
+        resp = requests.post(
+            self._URL,
+            headers={"Authorization": f"Bearer {self._api_key}"},
+            data=data,
+            files={"file": ("audio.wav", wav, "audio/wav")},
+            timeout=30,
+        )
+        if not resp.ok:
+            raise RuntimeError(f"GLM-ASR-2512 HTTP {resp.status_code}: {resp.text}")
+        result = resp.json()
+        return (result.get("text") or "").strip()
 
 
 # ── 科大讯飞语音听写（流式 WebSocket）────────────────────────────
@@ -614,9 +616,9 @@ _PROVIDERS: dict[str, type] = {
     "aliyun":     _AliyunSTT,
     "volcengine": _VolcengineSTT,
     "zhipuai":    _ZhipuSTT,
+    "typeup_backend": _TypeUpBackendSTT,
     "glm_asr_2512": _GLMASR2512STT,
     "glm-asr-2512": _GLMASR2512STT,
-    "typeup_backend": _TypeUpBackendSTT,
     "xunfei":     _XunfeiSTT,
 }
 

@@ -227,7 +227,7 @@ class AgentManager extends EventEmitter {
         microphone: "granted",
       };
     }
-    return await this._permissionsFromTcc() || {
+    return await this._permissionsFromRuntime() || await this._permissionsFromTcc() || {
       accessibility: "unknown",
       input_monitoring: "unknown",
       microphone: "unknown",
@@ -414,6 +414,21 @@ class AgentManager extends EventEmitter {
     };
   }
 
+  async _permissionsFromRuntime() {
+    try {
+      const result = await this._runMacEngineAppCommand(["--permissions-json"], { resultJson: true });
+      if (!result || typeof result !== "object") return null;
+      return {
+        accessibility: normalizePermission(result.accessibility),
+        input_monitoring: normalizePermission(result.input_monitoring),
+        microphone: normalizePermission(result.microphone),
+      };
+    } catch (error) {
+      this._appendLog(`[typeup] 运行时权限检测失败: ${error.message}`);
+      return null;
+    }
+  }
+
   _queryTccDatabase(dbPath, services) {
     if (!fs.existsSync(dbPath)) return Promise.resolve({});
     const serviceList = services.map((item) => `'${item.replaceAll("'", "''")}'`).join(",");
@@ -537,6 +552,11 @@ function tccStatus(value, missing = "denied") {
   if (value === 2) return "granted";
   if (value === undefined || Number.isNaN(value)) return missing;
   return "denied";
+}
+
+function normalizePermission(value) {
+  const text = String(value || "").trim();
+  return ["granted", "denied", "not_determined", "unknown"].includes(text) ? text : "unknown";
 }
 
 module.exports = { AgentManager };
