@@ -6,13 +6,15 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
+当前测试版安装包默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+
 ## 当前架构
 
 ```text
 React UI
   -> Electron preload
   -> Local Node server (随机 localhost 端口)
-  -> TypeUp Backend (默认 http://localhost:8000)
+  -> TypeUp Backend (测试版默认 http://150.158.146.192:6053，本地联调用 http://localhost:8000)
   -> STT / LLM / 支付 / 权益校验
 
 Local Node server
@@ -110,6 +112,18 @@ npm.cmd run start
 8. 按住 `ALT` 说话，松开后通过后端 STT 代理转写。
 9. 按住 `ALT + SPACE` 进行 AI 编辑，通过后端 LLM 代理处理。
 
+### 4. 测试版安装包使用
+
+测试版安装包已经内置公网后端地址，普通测试用户不需要手动填写服务器地址。首次使用时按下面流程即可：
+
+1. 安装并打开 TypeUp。
+2. 注册账号，邮箱需要是标准邮箱格式，密码至少 8 位。
+3. 注册成功后会自动获得 `free_trial` 免费权益：30 天、600 分钟语音额度、3000 次 AI 请求额度。
+4. 点击「启动」启动本地引擎。
+5. 按住 `ALT` 说话转写，按住 `ALT + SPACE` 使用 AI 编辑。
+
+如果注册时密码少于 8 位，前端会直接提示「注册密码至少 8 位」；后端也会返回「密码至少 8 位」，不会再只显示笼统的「请求参数不正确」。
+
 ## 当前联调状态
 
 当前前端已经接入 `voice-keyboard-backend` 的账号、订阅、权益和模型代理链路：
@@ -117,6 +131,8 @@ npm.cmd run start
 - React UI 通过 Electron 本地 server 调用后端，不直接保存模型 API Key。
 - Electron 本地 server 已限制跨源访问，只接受 Electron/file、本机开发端口和无 Origin 的本地调用。
 - 已支持注册、登录、刷新 session、退出登录。
+- 注册表单会本地校验邮箱和密码长度；注册密码少于 8 位时会给出明确提示。
+- 新用户注册成功后，后端会自动发放隐藏的 `free_trial` 权益，额度为 30 天、600 分钟 STT、3000 次 AI 请求。
 - 已支持获取套餐、创建订单、打开 mock 支付链接、刷新订单和权益。
 - 登录成功后会自动写入 `%APPDATA%\TypeUp\cloud-bridge.json` 和 `%USERPROFILE%\.voice-keyboard\config.yaml`。
 - Python engine 的 STT/LLM provider 会切到 `typeup_backend`，并调用后端 `/v1/stt/transcribe`、`/v1/llm/chat`。
@@ -145,6 +161,7 @@ npm.cmd run start
 
 ```powershell
 npm.cmd run build
+npm.cmd run build:win
 engine\voice-keyboard\.venv\Scripts\python.exe -m unittest discover -s engine\voice-keyboard\test
 engine\voice-keyboard\.venv\Scripts\python.exe -m compileall engine\voice-keyboard\agent engine\voice-keyboard\test
 node --check electron\local-server.js
@@ -311,6 +328,10 @@ npm.cmd install
 ```powershell
 npm.cmd run build
 ```
+
+### 注册时提示密码不符合要求
+
+TypeUp 注册密码至少 8 位。测试用户如果使用 6 位密码，会看到「注册密码至少 8 位」或「密码至少 8 位」；改成 8 位以上后重新注册即可。
 
 ### engine 提示缺少 Python 依赖
 
