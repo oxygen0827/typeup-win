@@ -143,6 +143,17 @@ button:disabled {
   gap: 10px;
 }
 
+.update-check-button {
+  min-height: 38px;
+  gap: 8px;
+  padding: 0 12px;
+  background: rgba(255, 255, 255, 0.84);
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 780;
+  box-shadow: var(--shadow-soft);
+}
+
 .language-switch {
   height: 38px;
   display: inline-flex;
@@ -219,6 +230,102 @@ button:disabled {
 .state-badge.danger {
   color: var(--red);
   background: var(--red-soft);
+}
+
+.update-banner {
+  margin: -4px 4px 18px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: var(--shadow-soft);
+}
+
+.update-banner-main {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.update-banner-main svg {
+  flex: 0 0 auto;
+}
+
+.update-banner-main div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.update-banner-main strong {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.update-banner-main span {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.update-banner.info {
+  color: var(--primary);
+  border-color: #b7c8f7;
+  background: #f2f6ff;
+}
+
+.update-banner.ok {
+  color: var(--green);
+  border-color: #b9e3d6;
+  background: var(--green-soft);
+}
+
+.update-banner.warn {
+  color: var(--orange);
+  border-color: #f4cf9a;
+  background: #fff8ea;
+}
+
+.update-banner.danger {
+  color: var(--red);
+  border-color: #f1b7b7;
+  background: var(--red-soft);
+}
+
+.update-banner-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.update-banner-actions button {
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 13px;
+}
+
+.save-button.compact {
+  width: auto;
+}
+
+.update-progress {
+  grid-column: 1 / -1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(36, 87, 214, 0.14);
+}
+
+.update-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+  transition: width 180ms ease;
 }
 
 .dashboard {
@@ -1147,6 +1254,14 @@ button:disabled {
 
   .app-titlebar {
     flex-direction: column;
+  }
+
+  .update-banner {
+    grid-template-columns: 1fr;
+  }
+
+  .update-banner-actions {
+    justify-content: flex-start;
   }
 
   .voice-grid,

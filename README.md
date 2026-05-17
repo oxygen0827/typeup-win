@@ -7,6 +7,7 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
 当前测试版安装包默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+`0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8`，后续版本才会在软件内提示下载和重启安装。
 
 ## 当前架构
 
@@ -168,6 +169,7 @@ node --check electron\local-server.js
 node --check electron\settings-store.js
 node --check electron\main.js
 node --check electron\preload.js
+node --check electron\updater.js
 node --check electron\agent-manager.js
 node --check electron\usage-store.js
 ```
@@ -262,6 +264,31 @@ TypeUp 默认 Windows 快捷键：
 macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双击右 `Shift` 切换润色模式。桌面 UI 会读取当前平台和 `settings.audio.ptt_key` / `settings.audio.ai_key` 后再显示提示文案。
 
 按住 `ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。音量条刷新使用平滑衰减和双缓冲绘制，减少闪烁；如果只剩轻微边缘毛刺，属于后续视觉优化项。
+
+## 自动更新
+
+桌面端已经接入 `electron-updater`，更新源指向 GitHub Releases：`oxygen0827/typeup-win`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
+
+注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次新版安装包。
+
+发布新版时需要：
+
+```powershell
+cd C:\Users\Administrator\Desktop\ai_deploy\typeup-win
+npm.cmd version 0.1.9 --no-git-tag-version
+npm.cmd run engine:build
+npm.cmd run build:win
+```
+
+然后在 GitHub 创建对应版本的 Release，例如 `v0.1.9`，上传 `release\` 目录里的安装包和更新元数据：
+
+```text
+TypeUp-Setup-0.1.9.exe
+TypeUp-Setup-0.1.9.exe.blockmap
+latest.yml
+```
+
+如果以后想让构建命令直接发布到 GitHub Releases，可以在本机设置 `GH_TOKEN` 后使用 electron-builder 的 `--publish always`；这个 token 只给发布者本机使用，不能写进代码或安装包。
 
 ## 构建
 

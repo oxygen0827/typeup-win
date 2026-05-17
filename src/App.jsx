@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Cloud,
   CreditCard,
+  Download,
   ExternalLink,
   FileText,
   Languages,
@@ -133,6 +134,19 @@ const COPY = {
     requestMic: "请求麦克风",
     recheck: "重新检查",
     restartAfterGrant: "授权后请重启本地引擎。",
+    checkUpdate: "检查更新",
+    updateChecking: "正在检查更新",
+    updateLatest: "已是最新版本",
+    updateAvailable: "已有新版本，请更新",
+    updateAvailableDetail: "TypeUp {version} 已发布，下载后重启即可安装。",
+    updateDownload: "下载更新",
+    updateDownloading: "正在下载",
+    updateDownloaded: "更新已下载",
+    updateDownloadedDetail: "重启 TypeUp 后会自动安装新版。",
+    updateInstall: "重启安装",
+    updateInstalling: "正在安装",
+    updateError: "更新检查失败",
+    updateDisabled: "开发模式不检查更新",
   },
   en: {
     language: "Language",
@@ -222,6 +236,19 @@ const COPY = {
     requestMic: "Request Mic",
     recheck: "Recheck",
     restartAfterGrant: "Restart the local engine after granting permissions.",
+    checkUpdate: "Check Updates",
+    updateChecking: "Checking for updates",
+    updateLatest: "TypeUp is up to date",
+    updateAvailable: "A new version is available",
+    updateAvailableDetail: "TypeUp {version} is ready. Download it, then restart to install.",
+    updateDownload: "Download",
+    updateDownloading: "Downloading",
+    updateDownloaded: "Update downloaded",
+    updateDownloadedDetail: "Restart TypeUp to install the new version.",
+    updateInstall: "Restart and Install",
+    updateInstalling: "Installing",
+    updateError: "Update check failed",
+    updateDisabled: "Updates are disabled in development",
   },
 };
 
@@ -267,6 +294,14 @@ const STATUS_KEYS = [
   "typingMethod",
 ];
 
+const DEFAULT_UPDATE_STATE = {
+  status: "disabled",
+  currentVersion: "",
+  availableVersion: "",
+  progress: 0,
+  error: "",
+};
+
 export default function App() {
   const [lang, setLang] = useState("zh");
   const [apiBase, setApiBase] = useState("");
@@ -284,6 +319,7 @@ export default function App() {
   const [devices, setDevices] = useState("");
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS);
   const [saving, setSaving] = useState(false);
+  const [updateState, setUpdateState] = useState(DEFAULT_UPDATE_STATE);
 
   function setStatus(next) {
     setStatusState((current) => (sameStatus(current, next) ? current : next));
@@ -326,6 +362,21 @@ export default function App() {
       events.close();
     };
   }, [apiBase]);
+
+  useEffect(() => {
+    if (!window.typeup?.updates) return undefined;
+    let mounted = true;
+    window.typeup.updates.getState().then((next) => {
+      if (mounted && next) setUpdateState(next);
+    });
+    const unsubscribe = window.typeup.updates.onEvent((next) => {
+      if (next) setUpdateState(next);
+    });
+    return () => {
+      mounted = false;
+      if (typeof unsubscribe === "function") unsubscribe();
+    };
+  }, []);
 
   const text = COPY[lang];
   const defaultHotkeys = defaultAudioHotkeys(platform);
@@ -499,6 +550,24 @@ export default function App() {
     await api(apiBase, "/api/permissions/engine/reveal", { method: "POST" });
   }
 
+  async function checkForUpdates() {
+    if (!window.typeup?.updates) return;
+    const next = await window.typeup.updates.check();
+    if (next) setUpdateState(next);
+  }
+
+  async function downloadUpdate() {
+    if (!window.typeup?.updates) return;
+    const next = await window.typeup.updates.download();
+    if (next) setUpdateState(next);
+  }
+
+  async function installUpdate() {
+    if (!window.typeup?.updates) return;
+    const next = await window.typeup.updates.install();
+    if (next) setUpdateState(next);
+  }
+
   return (
     <main className="app-shell">
       <header className="app-titlebar">
@@ -509,6 +578,15 @@ export default function App() {
           </div>
         </div>
         <div className="titlebar-actions">
+          <button
+            type="button"
+            className="update-check-button"
+            onClick={checkForUpdates}
+            disabled={["checking", "downloading", "installing", "disabled"].includes(updateState.status)}
+          >
+            <RefreshCw size={16} />
+            {text.checkUpdate}
+          </button>
           <div className="language-switch" aria-label={text.language}>
             <Languages size={16} />
             <button className={lang === "zh" ? "selected" : ""} onClick={() => setLang("zh")}>中文</button>
@@ -520,6 +598,14 @@ export default function App() {
           </div>
         </div>
       </header>
+
+      <UpdateBanner
+        text={text}
+        updateState={updateState}
+        onCheck={checkForUpdates}
+        onDownload={downloadUpdate}
+        onInstall={installUpdate}
+      />
 
       <section className="dashboard">
         <div className="main-column">
@@ -796,6 +882,98 @@ export default function App() {
       </div>
     </main>
   );
+}
+
+function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
+  const status = updateState?.status || "disabled";
+  const visibleStatuses = new Set(["checking", "latest", "available", "downloading", "downloaded", "installing", "error"]);
+  if (!visibleStatuses.has(status)) return null;
+
+  const version = updateState.availableVersion || "";
+  const progress = Math.max(0, Math.min(100, Number(updateState.progress || 0)));
+  let tone = "info";
+  let title = text.checkUpdate;
+  let detail = "";
+  let icon = <RefreshCw size={18} />;
+  let action = null;
+
+  if (status === "checking") {
+    title = text.updateChecking;
+    detail = updateState.currentVersion ? `v${updateState.currentVersion}` : "";
+  } else if (status === "latest") {
+    tone = "ok";
+    title = text.updateLatest;
+    detail = updateState.currentVersion ? `v${updateState.currentVersion}` : "";
+    icon = <CheckCircle2 size={18} />;
+    action = (
+      <button type="button" onClick={onCheck}>
+        <RefreshCw size={16} />
+        {text.checkUpdate}
+      </button>
+    );
+  } else if (status === "available") {
+    tone = "warn";
+    title = text.updateAvailable;
+    detail = formatUpdateDetail(text.updateAvailableDetail, version);
+    icon = <Download size={18} />;
+    action = (
+      <button type="button" className="save-button compact" onClick={onDownload}>
+        <Download size={16} />
+        {text.updateDownload}
+      </button>
+    );
+  } else if (status === "downloading") {
+    title = `${text.updateDownloading} ${Math.round(progress)}%`;
+    detail = formatUpdateDetail(text.updateAvailableDetail, version);
+    icon = <Download size={18} />;
+  } else if (status === "downloaded") {
+    tone = "ok";
+    title = text.updateDownloaded;
+    detail = text.updateDownloadedDetail;
+    icon = <CheckCircle2 size={18} />;
+    action = (
+      <button type="button" className="save-button compact" onClick={onInstall}>
+        <RefreshCw size={16} />
+        {text.updateInstall}
+      </button>
+    );
+  } else if (status === "installing") {
+    title = text.updateInstalling;
+    detail = text.updateDownloadedDetail;
+  } else if (status === "error") {
+    tone = "danger";
+    title = text.updateError;
+    detail = updateState.error || "";
+    icon = <AlertCircle size={18} />;
+    action = (
+      <button type="button" onClick={onCheck}>
+        <RefreshCw size={16} />
+        {text.checkUpdate}
+      </button>
+    );
+  }
+
+  return (
+    <section className={`update-banner ${tone}`}>
+      <div className="update-banner-main">
+        {icon}
+        <div>
+          <strong>{title}</strong>
+          {detail ? <span>{detail}</span> : null}
+        </div>
+      </div>
+      {status === "downloading" ? (
+        <div className="update-progress" aria-label={title}>
+          <span style={{ width: `${progress}%` }} />
+        </div>
+      ) : null}
+      {action ? <div className="update-banner-actions">{action}</div> : null}
+    </section>
+  );
+}
+
+function formatUpdateDetail(template, version) {
+  return String(template || "").replace("{version}", version ? `v${version}` : "新版本");
 }
 
 function Shortcut({ label, detail, keys }) {

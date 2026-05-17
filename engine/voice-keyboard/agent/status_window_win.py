@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import ctypes
+import math
 import queue
 import threading
 from ctypes import wintypes
@@ -35,8 +36,12 @@ _SPI_GETWORKAREA = 0x0030
 _HWND_TOPMOST = wintypes.HWND(-1)
 _SWP_NOACTIVATE = 0x0010
 _SRCCOPY = 0x00CC0020
+_ULW_ALPHA = 0x00000002
+_AC_SRC_OVER = 0
+_AC_SRC_ALPHA = 1
 _BOTTOM_MARGIN = 18
 _CORNER_RADIUS = 30
+_WINDOW_ALPHA = 246
 
 _DT_SINGLELINE = 0x00000020
 _DT_VCENTER = 0x00000004
@@ -78,6 +83,8 @@ _user32.SystemParametersInfoW.argtypes = [wintypes.UINT, wintypes.UINT, ctypes.c
 _user32.SystemParametersInfoW.restype = wintypes.BOOL
 _user32.SetWindowRgn.argtypes = [wintypes.HWND, HRGN, wintypes.BOOL]
 _user32.SetWindowRgn.restype = ctypes.c_int
+_user32.SetLayeredWindowAttributes.argtypes = [wintypes.HWND, ctypes.c_uint, ctypes.c_ubyte, wintypes.DWORD]
+_user32.SetLayeredWindowAttributes.restype = wintypes.BOOL
 _user32.FillRect.argtypes = [wintypes.HDC, ctypes.c_void_p, HBRUSH]
 _user32.FillRect.restype = ctypes.c_int
 _user32.DrawTextW.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c_int, ctypes.c_void_p, wintypes.UINT]
@@ -101,6 +108,7 @@ _gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
 _gdi32.CreateCompatibleDC.restype = wintypes.HDC
 _gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 _gdi32.CreateCompatibleBitmap.restype = HBITMAP
+_gdi32.CreateDIBSection.restype = HBITMAP
 _gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HANDLE]
 _gdi32.SelectObject.restype = wintypes.HANDLE
 _gdi32.BitBlt.argtypes = [
@@ -185,8 +193,66 @@ class SIZE(ctypes.Structure):
     _fields_ = [("cx", ctypes.c_long), ("cy", ctypes.c_long)]
 
 
+class POINT(ctypes.Structure):
+    _fields_ = [("x", ctypes.c_long), ("y", ctypes.c_long)]
+
+
+class BLENDFUNCTION(ctypes.Structure):
+    _fields_ = [
+        ("BlendOp", ctypes.c_ubyte),
+        ("BlendFlags", ctypes.c_ubyte),
+        ("SourceConstantAlpha", ctypes.c_ubyte),
+        ("AlphaFormat", ctypes.c_ubyte),
+    ]
+
+
+class BITMAPINFOHEADER(ctypes.Structure):
+    _fields_ = [
+        ("biSize", wintypes.DWORD),
+        ("biWidth", ctypes.c_long),
+        ("biHeight", ctypes.c_long),
+        ("biPlanes", wintypes.WORD),
+        ("biBitCount", wintypes.WORD),
+        ("biCompression", wintypes.DWORD),
+        ("biSizeImage", wintypes.DWORD),
+        ("biXPelsPerMeter", ctypes.c_long),
+        ("biYPelsPerMeter", ctypes.c_long),
+        ("biClrUsed", wintypes.DWORD),
+        ("biClrImportant", wintypes.DWORD),
+    ]
+
+
+class BITMAPINFO(ctypes.Structure):
+    _fields_ = [
+        ("bmiHeader", BITMAPINFOHEADER),
+        ("bmiColors", wintypes.DWORD * 1),
+    ]
+
+
 _user32.InvalidateRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT), wintypes.BOOL]
 _user32.InvalidateRect.restype = wintypes.BOOL
+_user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(RECT)]
+_user32.GetWindowRect.restype = wintypes.BOOL
+_user32.UpdateLayeredWindow.argtypes = [
+    wintypes.HWND,
+    wintypes.HDC,
+    ctypes.POINTER(POINT),
+    ctypes.POINTER(SIZE),
+    wintypes.HDC,
+    ctypes.POINTER(POINT),
+    ctypes.c_uint,
+    ctypes.POINTER(BLENDFUNCTION),
+    wintypes.DWORD,
+]
+_user32.UpdateLayeredWindow.restype = wintypes.BOOL
+_gdi32.CreateDIBSection.argtypes = [
+    wintypes.HDC,
+    ctypes.POINTER(BITMAPINFO),
+    wintypes.UINT,
+    ctypes.POINTER(ctypes.c_void_p),
+    wintypes.HANDLE,
+    wintypes.DWORD,
+]
 
 
 _RECORDING_STATES = {"recording", "polish_recording", "ai_recording"}
@@ -205,6 +271,14 @@ def _smooth_audio_level(current: float, target: float) -> float:
     if target >= current:
         return current * 0.35 + target * 0.65
     return current * 0.78 + target * 0.22
+
+
+def _rgb_parts(colorref: int) -> tuple[int, int, int]:
+    return colorref & 0xFF, (colorref >> 8) & 0xFF, (colorref >> 16) & 0xFF
+
+
+def _premultiply(value: int, alpha: int) -> int:
+    return int((max(0, min(255, value)) * max(0, min(255, alpha)) + 127) / 255)
 
 
 WNDPROC = ctypes.WINFUNCTYPE(
@@ -246,6 +320,9 @@ class StatusWindow:
         self._width_text = ""
         self._visible = False
         self._window_size: tuple[int, int] | None = None
+        self._use_per_pixel_alpha = True
+        self._fallback_alpha_applied = False
+        self._alpha_mask_cache: dict[tuple[int, int], bytes] = {}
         self._wndproc = WNDPROC(self._handle_message)
         self._hinst = _kernel32.GetModuleHandleW(None)
         self._class_name = "VoiceKeyboardStatusWindow"
@@ -323,7 +400,6 @@ class StatusWindow:
         if not self._hwnd:
             raise ctypes.WinError()
 
-        _user32.SetLayeredWindowAttributes(self._hwnd, 0, 246, 0x00000002)
         _user32.SetTimer(self._hwnd, _TIMER_POLL, 40, None)
 
         for fn in self._extra_setup:
@@ -461,8 +537,20 @@ class StatusWindow:
             self._invalidate()
 
     def _invalidate(self) -> None:
-        if self._hwnd:
-            _user32.InvalidateRect(self._hwnd, None, False)
+        if not self._hwnd:
+            return
+        if self._use_per_pixel_alpha and self._visible:
+            try:
+                if self._update_layered_window():
+                    return
+            except Exception as e:
+                print(f"[status] 平滑圆角绘制回退: {e}")
+            self._use_per_pixel_alpha = False
+            self._window_size = None
+        if not self._fallback_alpha_applied:
+            _user32.SetLayeredWindowAttributes(self._hwnd, 0, _WINDOW_ALPHA, 0x00000002)
+            self._fallback_alpha_applied = True
+        _user32.InvalidateRect(self._hwnd, None, False)
 
     def _position(self) -> None:
         hdc = _user32.GetDC(self._hwnd)
@@ -484,11 +572,13 @@ class StatusWindow:
             y = int(screen_h - height - _BOTTOM_MARGIN)
         if not _user32.SetWindowPos(self._hwnd, _HWND_TOPMOST, x, y, width, height, _SWP_NOACTIVATE):
             raise ctypes.WinError()
-        if self._window_size != (width, height):
+        if not self._use_per_pixel_alpha and self._window_size != (width, height):
             region = _gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, _CORNER_RADIUS, _CORNER_RADIUS)
             if region:
                 _user32.SetWindowRgn(self._hwnd, region, False)
                 self._window_size = (width, height)
+        else:
+            self._window_size = (width, height)
 
     def _measure_text(self, hdc, text: str, size: int, weight: int) -> int:
         if not text:
@@ -504,6 +594,9 @@ class StatusWindow:
     def _paint(self, hwnd) -> None:
         ps = PAINTSTRUCT()
         hdc = _user32.BeginPaint(hwnd, ctypes.byref(ps))
+        if self._use_per_pixel_alpha:
+            _user32.EndPaint(hwnd, ctypes.byref(ps))
+            return
         rect = RECT()
         _user32.GetClientRect(hwnd, ctypes.byref(rect))
         width = max(1, int(rect.right - rect.left))
@@ -522,6 +615,131 @@ class StatusWindow:
             self._paint_content(hdc, rect)
 
         _user32.EndPaint(hwnd, ctypes.byref(ps))
+
+    def _update_layered_window(self) -> bool:
+        if not self._hwnd:
+            return False
+
+        window_rect = RECT()
+        if not _user32.GetWindowRect(self._hwnd, ctypes.byref(window_rect)):
+            return False
+        width = max(1, int(window_rect.right - window_rect.left))
+        height = max(1, int(window_rect.bottom - window_rect.top))
+
+        screen_dc = _user32.GetDC(None)
+        if not screen_dc:
+            return False
+        memdc = _gdi32.CreateCompatibleDC(screen_dc)
+        bits = ctypes.c_void_p()
+        bitmap = self._create_argb_bitmap(screen_dc, width, height, bits)
+        if not memdc or not bitmap or not bits.value:
+            if bitmap:
+                _gdi32.DeleteObject(bitmap)
+            if memdc:
+                _gdi32.DeleteDC(memdc)
+            _user32.ReleaseDC(None, screen_dc)
+            return False
+
+        old_bitmap = _gdi32.SelectObject(memdc, bitmap)
+        try:
+            self._fill_rounded_background(bits, width, height)
+            self._paint_text(memdc, RECT(0, 0, width, height))
+            self._paint_accent(memdc, RECT(0, 0, width, height))
+            self._apply_alpha_mask_and_premultiply(bits, width, height)
+
+            destination = POINT(window_rect.left, window_rect.top)
+            source = POINT(0, 0)
+            size = SIZE(width, height)
+            blend = BLENDFUNCTION(_AC_SRC_OVER, 0, 255, _AC_SRC_ALPHA)
+            return bool(_user32.UpdateLayeredWindow(
+                self._hwnd,
+                screen_dc,
+                ctypes.byref(destination),
+                ctypes.byref(size),
+                memdc,
+                ctypes.byref(source),
+                0,
+                ctypes.byref(blend),
+                _ULW_ALPHA,
+            ))
+        finally:
+            _gdi32.SelectObject(memdc, old_bitmap)
+            _gdi32.DeleteObject(bitmap)
+            _gdi32.DeleteDC(memdc)
+            _user32.ReleaseDC(None, screen_dc)
+
+    def _create_argb_bitmap(self, hdc, width: int, height: int, bits) -> HBITMAP:
+        info = BITMAPINFO()
+        info.bmiHeader.biSize = ctypes.sizeof(BITMAPINFOHEADER)
+        info.bmiHeader.biWidth = width
+        info.bmiHeader.biHeight = -height
+        info.bmiHeader.biPlanes = 1
+        info.bmiHeader.biBitCount = 32
+        info.bmiHeader.biCompression = 0
+        return _gdi32.CreateDIBSection(hdc, ctypes.byref(info), 0, ctypes.byref(bits), None, 0)
+
+    def _fill_rounded_background(self, bits, width: int, height: int) -> None:
+        red, green, blue = _rgb_parts(_BG)
+        buffer_type = ctypes.c_ubyte * (width * height * 4)
+        pixels = buffer_type.from_address(bits.value)
+        mask = self._rounded_alpha_mask(width, height)
+        idx = 0
+        for alpha in mask:
+            pixels[idx] = blue
+            pixels[idx + 1] = green
+            pixels[idx + 2] = red
+            pixels[idx + 3] = alpha
+            idx += 4
+
+    def _apply_alpha_mask_and_premultiply(self, bits, width: int, height: int) -> None:
+        buffer_type = ctypes.c_ubyte * (width * height * 4)
+        pixels = buffer_type.from_address(bits.value)
+        mask = self._rounded_alpha_mask(width, height)
+        idx = 0
+        for alpha in mask:
+            pixels[idx] = _premultiply(pixels[idx], alpha)
+            pixels[idx + 1] = _premultiply(pixels[idx + 1], alpha)
+            pixels[idx + 2] = _premultiply(pixels[idx + 2], alpha)
+            pixels[idx + 3] = alpha
+            idx += 4
+
+    def _rounded_alpha_mask(self, width: int, height: int) -> bytes:
+        key = (width, height)
+        cached = self._alpha_mask_cache.get(key)
+        if cached is not None:
+            return cached
+
+        radius = max(1.0, _CORNER_RADIUS / 2.0)
+        sample_count = 4
+        step = 1.0 / sample_count
+        mask = bytearray(width * height)
+        pos = 0
+        for y in range(height):
+            for x in range(width):
+                inside = 0
+                for sy in range(sample_count):
+                    py = y + (sy + 0.5) * step
+                    for sx in range(sample_count):
+                        px = x + (sx + 0.5) * step
+                        if self._point_inside_round_rect(px, py, width, height, radius):
+                            inside += 1
+                mask[pos] = int(_WINDOW_ALPHA * inside / (sample_count * sample_count))
+                pos += 1
+        result = bytes(mask)
+        if len(self._alpha_mask_cache) > 8:
+            self._alpha_mask_cache.clear()
+        self._alpha_mask_cache[key] = result
+        return result
+
+    @staticmethod
+    def _point_inside_round_rect(x: float, y: float, width: int, height: int, radius: float) -> bool:
+        if radius <= x <= width - radius:
+            return 0 <= y <= height
+        if radius <= y <= height - radius:
+            return 0 <= x <= width
+        cx = radius if x < radius else width - radius
+        cy = radius if y < radius else height - radius
+        return math.hypot(x - cx, y - cy) <= radius
 
     def _paint_content(self, hdc, rect: RECT) -> None:
         bg = _gdi32.CreateSolidBrush(_BG)

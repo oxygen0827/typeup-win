@@ -1,9 +1,11 @@
 const path = require("node:path");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const { createLocalServer } = require("./local-server");
+const { setupAutoUpdates } = require("./updater");
 
 let mainWindow;
 let localServer;
+let quittingForUpdate = false;
 
 const isDev = process.env.NODE_ENV === "development";
 const windowIcon = path.join(__dirname, "..", "build", process.platform === "darwin" ? "icon.png" : "icon.ico");
@@ -36,11 +38,30 @@ async function createWindow() {
   }
 }
 
+async function closeLocalServer() {
+  if (!localServer) return;
+  const server = localServer;
+  localServer = null;
+  await server.close();
+}
+
+const updates = setupAutoUpdates({
+  app,
+  ipcMain,
+  getMainWindow: () => mainWindow,
+  isDev,
+  beforeInstall: async () => {
+    quittingForUpdate = true;
+    await closeLocalServer();
+  },
+});
+
 async function boot() {
   localServer = await createLocalServer({ electronApp: app });
   await localServer.agent.ensureConfig();
   await localServer.agent.start();
   await createWindow();
+  updates.startupCheck();
 }
 
 app.whenReady().then(boot);
@@ -52,12 +73,10 @@ app.on("activate", async () => {
 });
 
 app.on("before-quit", async (event) => {
-  if (!localServer) return;
+  if (quittingForUpdate || !localServer) return;
   event.preventDefault();
-  const server = localServer;
-  localServer = null;
   try {
-    await server.close();
+    await closeLocalServer();
   } finally {
     app.exit(0);
   }
