@@ -1,5 +1,5 @@
 """
-打包模式下把 stdout/stderr 重定向到 ~/Library/Logs/Voice Keyboard/agent.log，
+打包模式下把 stdout/stderr 重定向到应用日志目录，
 让 Finder 启动的 .app 也能事后查日志。开发模式（python -m agent.main）保持终端输出。
 """
 
@@ -9,6 +9,11 @@ from pathlib import Path
 
 
 def _log_path() -> Path:
+    if os.getenv("TYPEUP_DESKTOP") == "1":
+        if sys.platform == "darwin":
+            return Path.home() / "Library" / "Logs" / "TypeUp" / "engine.log"
+        user_dir = Path(os.getenv("TYPEUP_ENGINE_USER_DIR", "")).expanduser() if os.getenv("TYPEUP_ENGINE_USER_DIR") else Path.home() / ".typeup" / "engine"
+        return user_dir / "agent.log"
     if sys.platform == "darwin":
         return Path.home() / "Library" / "Logs" / "Voice Keyboard" / "agent.log"
     return Path.home() / ".voice-keyboard" / "agent.log"
@@ -52,7 +57,8 @@ def setup() -> Path | None:
         sys.stdout = _Tee(f, sys.stdout) if sys.stdout else f
         sys.stderr = _Tee(f, sys.stderr) if sys.stderr else f
         os.environ["VK_LOG_PATH"] = str(path)
-        print(f"\n[log] === Voice Keyboard 启动 PID={os.getpid()} ===")
+        label = "TypeUp Engine" if os.getenv("TYPEUP_DESKTOP") == "1" else "Voice Keyboard"
+        print(f"\n[log] === {label} 启动 PID={os.getpid()} ===")
         return path
     except Exception as e:
         # 日志失败不应阻断启动

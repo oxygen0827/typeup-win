@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Save,
   Settings,
+  ShieldCheck,
   Square,
   UserRound,
   WandSparkles,
@@ -27,7 +28,7 @@ const STATUS_COPY = {
     stopped: { label: "已停止", title: "本地引擎已停止", detail: "点击启动后，TypeUp 会回到后台等待语音输入。", tone: "muted" },
     stopping: { label: "停止中", title: "正在停止引擎", detail: "正在释放麦克风和键盘监听。", tone: "muted" },
     starting: { label: "启动中", title: "正在启动本地引擎", detail: "正在加载语音、输入和 AI 编辑模块。", tone: "warn" },
-    listening: { label: "就绪", title: "按下 ALT 开始说话", detail: "松开后自动转写并输入到当前光标位置。", tone: "ok" },
+    listening: { label: "就绪", title: "按住右 Shift 开始说话", detail: "松开后自动转写并输入到当前光标位置。", tone: "ok" },
     transcribing: { label: "处理中", title: "正在转写或编辑", detail: "结果完成后会自动写入当前窗口。", tone: "active" },
     needs_config: { label: "等待配置", title: "需要填写 STT Key", detail: "保存配置后会自动重启本地引擎。", tone: "warn" },
     error: { label: "异常", title: "本地引擎遇到问题", detail: "查看日志定位错误，修复后可直接重启。", tone: "danger" },
@@ -36,7 +37,7 @@ const STATUS_COPY = {
     stopped: { label: "Stopped", title: "Local engine is stopped", detail: "Start it to return TypeUp to background voice input.", tone: "muted" },
     stopping: { label: "Stopping", title: "Stopping engine", detail: "Releasing microphone and keyboard hooks.", tone: "muted" },
     starting: { label: "Starting", title: "Starting local engine", detail: "Loading speech, typing, and AI editing modules.", tone: "warn" },
-    listening: { label: "Ready", title: "Press ALT to speak", detail: "Release to transcribe and type at the current cursor.", tone: "ok" },
+    listening: { label: "Ready", title: "Hold Right Shift to speak", detail: "Release to transcribe and type at the current cursor.", tone: "ok" },
     transcribing: { label: "Working", title: "Transcribing or editing", detail: "The result will be written into the active window.", tone: "active" },
     needs_config: { label: "Setup", title: "STT key required", detail: "Save settings to restart the local engine.", tone: "warn" },
     error: { label: "Error", title: "Local engine needs attention", detail: "Check logs, then restart after fixing the issue.", tone: "danger" },
@@ -45,9 +46,7 @@ const STATUS_COPY = {
 
 const COPY = {
   zh: {
-    subtitle: "Windows 本地语音输入与 AI 编辑",
     language: "语言",
-    readyForWindows: "Windows 体验",
     localEngine: "本地引擎",
     voiceConsole: "语音控制台",
     shortcuts: "快捷键",
@@ -107,7 +106,7 @@ const COPY = {
     original: "原生",
     lightPolish: "微润色",
     statusDockReady: "TypeUp 已接管预览页热键",
-    statusDockHint: "ALT 说话，ALT + SPACE 进行 AI 编辑，双击 ALT 切换润色模式",
+    statusDockHint: "右 Shift 说话，右 Option 进行 AI 编辑，双击右 Shift 切换润色模式",
     shortcutSpeak: "开始说话",
     shortcutSpeakDetail: "松开后转写到当前光标",
     shortcutAi: "AI 编辑",
@@ -115,11 +114,25 @@ const COPY = {
     shortcutPolish: "切换润色模式",
     shortcutPolishDetail: "原生与微润色之间切换",
     modeDisplay: "润色模式",
+    permissions: "权限",
+    permissionCenter: "macOS 权限",
+    permissionHint: "参考轻量版 Voice Keyboard：授权后才能监听热键、录音并输入文字。",
+    permissionTarget: "需要授权的是 TypeUp 内嵌引擎，不是你本机独立安装的 Voice Keyboard。",
+    revealPermissionTarget: "显示授权对象",
+    accessibility: "辅助功能",
+    inputMonitoring: "输入监控",
+    permissionGranted: "已授权",
+    permissionDenied: "已拒绝",
+    permissionPending: "未决定",
+    permissionUnknown: "未知",
+    openSystemSettings: "打开系统设置",
+    requestPermission: "请求权限",
+    requestMic: "请求麦克风",
+    recheck: "重新检查",
+    restartAfterGrant: "授权后请重启本地引擎。",
   },
   en: {
-    subtitle: "Windows local voice input and AI editing",
     language: "Language",
-    readyForWindows: "Windows experience",
     localEngine: "Local Engine",
     voiceConsole: "Voice Console",
     shortcuts: "Shortcuts",
@@ -179,7 +192,7 @@ const COPY = {
     original: "Original",
     lightPolish: "Light Polish",
     statusDockReady: "TypeUp is using the preview shortcuts",
-    statusDockHint: "ALT to speak, ALT + SPACE for AI editing, double ALT to switch polish mode",
+    statusDockHint: "Right Shift to speak, Right Option for AI editing, double Right Shift to switch polish mode",
     shortcutSpeak: "Start Speaking",
     shortcutSpeakDetail: "Release to type at the cursor",
     shortcutAi: "AI Edit",
@@ -187,12 +200,28 @@ const COPY = {
     shortcutPolish: "Switch Polish Mode",
     shortcutPolishDetail: "Toggle original and light polish",
     modeDisplay: "Polish Mode",
+    permissions: "Permissions",
+    permissionCenter: "macOS Permissions",
+    permissionHint: "Mirrors the lightweight Voice Keyboard app: required for hotkeys, recording, and typing.",
+    permissionTarget: "Grant permissions to the embedded TypeUp engine, not a separately installed Voice Keyboard app.",
+    revealPermissionTarget: "Show Target",
+    accessibility: "Accessibility",
+    inputMonitoring: "Input Monitoring",
+    permissionGranted: "Granted",
+    permissionDenied: "Denied",
+    permissionPending: "Not decided",
+    permissionUnknown: "Unknown",
+    openSystemSettings: "Open Settings",
+    requestPermission: "Request",
+    requestMic: "Request Mic",
+    recheck: "Recheck",
+    restartAfterGrant: "Restart the local engine after granting permissions.",
   },
 };
 
 const EMPTY_SETTINGS = {
   stt: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-asr-2512", language: "zh" },
-  audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2, ptt_key: "alt_l", ai_key: ["alt_l", "space"] },
+  audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2, ptt_key: "shift_r", ai_key: "alt_r" },
   typing: { method: "unicode" },
   llm: { provider: "typeup_backend", api_base_url: "http://localhost:8000", access_token: "", model: "glm-4-flash" },
 };
@@ -203,6 +232,15 @@ const EMPTY_AUTH = {
   authenticated: false,
   user: null,
   entitlement: null,
+};
+
+const EMPTY_PERMISSIONS = {
+  platform: "",
+  permissions: {
+    accessibility: "unknown",
+    input_monitoring: "unknown",
+    microphone: "unknown",
+  },
 };
 
 const STATUS_KEYS = [
@@ -224,6 +262,7 @@ const STATUS_KEYS = [
 export default function App() {
   const [lang, setLang] = useState("zh");
   const [apiBase, setApiBase] = useState("");
+  const [platform, setPlatform] = useState("");
   const [status, setStatusState] = useState({ state: "starting" });
   const [usage, setUsage] = useState(null);
   const [logs, setLogs] = useState([]);
@@ -235,6 +274,7 @@ export default function App() {
   const [accountError, setAccountError] = useState("");
   const [lastOrder, setLastOrder] = useState(null);
   const [devices, setDevices] = useState("");
+  const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS);
   const [saving, setSaving] = useState(false);
 
   function setStatus(next) {
@@ -246,6 +286,10 @@ export default function App() {
     async function loadBase() {
       const base = window.typeup ? await window.typeup.apiBase() : "";
       if (mounted) setApiBase(base || "http://127.0.0.1:3000");
+      if (window.typeup?.platform) {
+        const nextPlatform = await window.typeup.platform();
+        if (mounted) setPlatform(nextPlatform || "");
+      }
     }
     loadBase();
     return () => {
@@ -256,10 +300,12 @@ export default function App() {
   useEffect(() => {
     if (!apiBase) return undefined;
     refreshAll(apiBase, { setStatus, setUsage, setLogs, setSettings });
+    refreshPermissions(apiBase, setPermissions);
     refreshAccount(apiBase, { setAuth, setPlans, setAuthForm, setAccountError });
     const timer = setInterval(() => {
       refreshUsage(apiBase, setUsage);
       refreshStatus(apiBase, setStatus);
+      refreshPermissions(apiBase, setPermissions);
     }, 2200);
     const events = new EventSource(`${apiBase}/api/events`);
     events.addEventListener("status", (event) => setStatus(JSON.parse(event.data)));
@@ -285,8 +331,9 @@ export default function App() {
     return Math.max(1, ...days.map((day) => (day.transcribedChars || 0) + (day.aiEditedChars || 0)));
   }, [days]);
 
-  const pttKey = settings.audio?.ptt_key || "alt_l";
-  const aiKey = settings.audio?.ai_key || ["alt_l", "space"];
+  const pttKey = settings.audio?.ptt_key || "shift_r";
+  const aiKey = settings.audio?.ai_key || "alt_r";
+  const polishKey = `${lang === "zh" ? "双击" : "Double"} ${formatHotkey(pttKey, lang, platform)}`;
 
   async function agentAction(action) {
     const next = await api(apiBase, `/api/agent/${action}`, { method: "POST" });
@@ -410,6 +457,28 @@ export default function App() {
     setDevices(result.output || text.deviceFallback);
   }
 
+  async function openPermission(name) {
+    await api(apiBase, `/api/permissions/${name}/open`, { method: "POST" });
+  }
+
+  async function requestPermission(name) {
+    await api(apiBase, `/api/permissions/${name}/request`, { method: "POST" });
+    await refreshPermissions(apiBase, setPermissions);
+  }
+
+  async function requestMicPermission() {
+    await api(apiBase, "/api/permissions/microphone/request", { method: "POST" });
+    await refreshPermissions(apiBase, setPermissions);
+  }
+
+  async function recheckPermissions() {
+    await refreshPermissions(apiBase, setPermissions);
+  }
+
+  async function revealPermissionTarget() {
+    await api(apiBase, "/api/permissions/engine/reveal", { method: "POST" });
+  }
+
   return (
     <main className="app-shell">
       <header className="app-titlebar">
@@ -417,7 +486,6 @@ export default function App() {
           <img src={mark} alt="" />
           <div>
             <h1>TypeUp</h1>
-            <p>{text.subtitle}</p>
           </div>
         </div>
         <div className="titlebar-actions">
@@ -441,7 +509,6 @@ export default function App() {
                 <p className="eyebrow">{text.localEngine}</p>
                 <h2>{text.voiceConsole}</h2>
               </div>
-              <div className="windows-chip">{text.readyForWindows}</div>
             </div>
 
             <div className="voice-grid">
@@ -526,14 +593,14 @@ export default function App() {
             <div className="panel-heading compact">
               <div>
                 <p className="eyebrow">{text.shortcuts}</p>
-                <h2>{formatHotkey(pttKey, lang)} / {formatHotkey(aiKey, lang)} / {lang === "zh" ? "双击 ALT" : "Double ALT"}</h2>
+                <h2>{formatHotkey(pttKey, lang, platform)} / {formatHotkey(aiKey, lang, platform)} / {polishKey}</h2>
               </div>
               <WandSparkles size={22} />
             </div>
             <div className="shortcut-grid">
-              <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang)} />
-              <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang)} />
-              <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={lang === "zh" ? "双击 ALT" : "Double ALT"} />
+              <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang, platform)} />
+              <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang, platform)} />
+              <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={polishKey} />
             </div>
           </section>
 
@@ -592,6 +659,20 @@ export default function App() {
             onOpenPayment={openPayment}
             lang={lang}
           />
+
+          {platform === "darwin" ? (
+            <PermissionsPanel
+              text={text}
+              permissions={permissions.permissions}
+              engineAppPath={permissions.engineAppPath}
+              onOpen={openPermission}
+              onRequest={requestPermission}
+              onRequestMic={requestMicPermission}
+              onRecheck={recheckPermissions}
+              onRevealTarget={revealPermissionTarget}
+              disabled={!apiBase}
+            />
+          ) : null}
 
           <section className="settings-panel">
             <div className="panel-heading compact">
@@ -710,6 +791,65 @@ function Shortcut({ label, detail, keys }) {
         <p>{detail}</p>
       </div>
     </article>
+  );
+}
+
+function PermissionsPanel({ text, permissions, engineAppPath, onOpen, onRequest, onRequestMic, onRecheck, onRevealTarget, disabled }) {
+  const rows = [
+    ["accessibility", text.accessibility],
+    ["input_monitoring", text.inputMonitoring],
+    ["microphone", text.microphone],
+  ];
+  return (
+    <section className="permissions-panel">
+      <div className="panel-heading compact">
+        <div>
+          <p className="eyebrow">{text.permissions}</p>
+          <h2>{text.permissionCenter}</h2>
+        </div>
+        <ShieldCheck size={22} />
+      </div>
+      <p className="permission-hint">{text.permissionHint}</p>
+      <div className="permission-target">
+        <span>{text.permissionTarget}</span>
+        <button type="button" onClick={onRevealTarget} disabled={disabled}>
+          <ExternalLink size={15} />
+          {text.revealPermissionTarget}
+        </button>
+        {engineAppPath ? <code>{engineAppPath}</code> : null}
+      </div>
+      <div className="permission-list">
+        {rows.map(([key, label]) => (
+          <div className="permission-row" key={key}>
+            <div>
+              <strong>{label}</strong>
+              <span className={`permission-state ${permissionTone(permissions?.[key])}`}>
+                {permissionText(permissions?.[key], text)}
+              </span>
+            </div>
+            <button type="button" onClick={() => onOpen(key)} disabled={disabled}>
+              <ExternalLink size={15} />
+              {text.openSystemSettings}
+            </button>
+            <button type="button" onClick={() => onRequest(key)} disabled={disabled}>
+              <ShieldCheck size={15} />
+              {text.requestPermission}
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="permission-actions">
+        <button type="button" onClick={onRequestMic} disabled={disabled}>
+          <Mic size={16} />
+          {text.requestMic}
+        </button>
+        <button type="button" onClick={onRecheck} disabled={disabled}>
+          <RefreshCw size={16} />
+          {text.recheck}
+        </button>
+      </div>
+      <p className="permission-footer">{text.restartAfterGrant}</p>
+    </section>
   );
 }
 
@@ -976,6 +1116,15 @@ async function refreshAll(apiBase, setters) {
   ]);
 }
 
+async function refreshPermissions(apiBase, setPermissions) {
+  try {
+    const data = await api(apiBase, "/api/permissions");
+    setPermissions(data || EMPTY_PERMISSIONS);
+  } catch (_error) {
+    setPermissions(EMPTY_PERMISSIONS);
+  }
+}
+
 async function refreshAccount(apiBase, setters) {
   try {
     const session = await api(apiBase, "/api/auth/session");
@@ -984,7 +1133,11 @@ async function refreshAccount(apiBase, setters) {
       ...current,
       apiBaseUrl: session.apiBaseUrl || current.apiBaseUrl || "http://localhost:8000",
     }));
-    await refreshPlans(apiBase, setters.setPlans, session.apiBaseUrl);
+    if (session.connected) {
+      await refreshPlans(apiBase, setters.setPlans, session.apiBaseUrl);
+    } else {
+      setters.setPlans([]);
+    }
   } catch (error) {
     setters.setAccountError(error.message);
   }
@@ -1029,18 +1182,35 @@ function setNested(setter, path, value) {
   });
 }
 
-function formatHotkey(value, lang) {
+function formatHotkey(value, lang, platform = "") {
   const tokens = Array.isArray(value) ? value : [value];
   return tokens
     .map((token) => {
       const text = String(token || "").toLowerCase();
-      if (text === "alt_l" || text === "alt_r" || text === "right_alt" || text === "left_alt") return "ALT";
+      if (text === "alt_l" || text === "left_alt") return platform === "darwin" ? (lang === "zh" ? "左 OPTION" : "LEFT OPTION") : "ALT";
+      if (text === "alt_r" || text === "right_alt") return platform === "darwin" ? (lang === "zh" ? "右 OPTION" : "RIGHT OPTION") : "RIGHT ALT";
       if (text === "ctrl_l" || text === "ctrl_r" || text === "right_ctrl" || text === "left_ctrl") return "CTRL";
       if (text === "space") return lang === "zh" ? "SPACE" : "SPACE";
-      if (text === "cmd_l" || text === "cmd_r") return "WIN";
+      if (text === "shift_l" || text === "left_shift") return lang === "zh" ? "左 SHIFT" : "LEFT SHIFT";
+      if (text === "shift_r" || text === "right_shift") return lang === "zh" ? "右 SHIFT" : "RIGHT SHIFT";
+      if (text === "cmd_l" || text === "cmd_r") return platform === "darwin" ? "COMMAND" : "WIN";
       return text.toUpperCase();
     })
     .join(" + ");
+}
+
+function permissionTone(value) {
+  if (value === "granted") return "ok";
+  if (value === "denied") return "danger";
+  if (value === "not_determined") return "warn";
+  return "muted";
+}
+
+function permissionText(value, text) {
+  if (value === "granted") return text.permissionGranted;
+  if (value === "denied") return text.permissionDenied;
+  if (value === "not_determined") return text.permissionPending;
+  return text.permissionUnknown;
 }
 
 function sameStatus(left, right) {

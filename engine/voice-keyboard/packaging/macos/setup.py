@@ -6,7 +6,7 @@ py2app 打包配置（macOS）。
   python packaging/macos/setup.py py2app          # 正常打包
   python packaging/macos/setup.py py2app -A       # alias 模式，源码修改实时生效
 
-打包后产物：<repo>/dist/Voice Keyboard.app
+打包后产物：<repo>/dist/TypeUp Engine.app
 """
 
 import os
@@ -35,26 +35,29 @@ OPTIONS = {
         "agent.history",
         "agent.permissions",
         "agent.log_setup",
+        "wave",
     ],
     "plist": {
-        "CFBundleName":              "Voice Keyboard",
-        "CFBundleDisplayName":       "Voice Keyboard",
-        "CFBundleIdentifier":        "com.wangqi.voicekeyboard",
+        "CFBundleName":              "TypeUp Engine",
+        "CFBundleDisplayName":       "TypeUp Engine",
+        "CFBundleIdentifier":        "com.typeup.engine",
         "CFBundleVersion":           "0.1.0",
         "CFBundleShortVersionString": "0.1.0",
         "LSMinimumSystemVersion":    "11.0",
         # LSUIElement: 后台应用，无 dock 图标，无菜单栏
         "LSUIElement":               True,
         # 权限说明（首次访问相关 API 时弹窗给用户看）
-        "NSMicrophoneUsageDescription":    "Voice Keyboard 需要使用麦克风进行语音转文字。",
-        "NSAppleEventsUsageDescription":   "Voice Keyboard 需要发送按键事件以实现自动打字。",
-        "NSInputMonitoringUsageDescription": "Voice Keyboard 需要监听键盘热键。",
+        "NSMicrophoneUsageDescription":    "TypeUp 需要使用麦克风进行语音转文字。",
+        "NSAppleEventsUsageDescription":   "TypeUp 需要发送按键事件以实现自动打字。",
+        "NSInputMonitoringUsageDescription": "TypeUp 需要监听键盘热键。",
     },
     # 显式打包，避免 py2app 漏掉动态导入的模块
     "packages": [
         "agent",
+        "numpy",
         "sounddevice",
         "pynput",
+        "serial",
         "websocket",
         "yaml",
         "certifi",
@@ -78,7 +81,7 @@ OPTIONS = {
 
 setup(
     app=APP,
-    name="Voice Keyboard",
+    name="TypeUp Engine",
     data_files=DATA_FILES,
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],

@@ -3,12 +3,15 @@ const os = require("node:os");
 const path = require("node:path");
 const YAML = require("yaml");
 
-const USER_DIR = path.join(os.homedir(), ".voice-keyboard");
+const USER_DIR = path.join(resolveAppDataDir(), "TypeUp", "engine");
 const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
-const TYPEUP_DIR = path.join(process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "TypeUp");
+const TYPEUP_DIR = path.join(resolveAppDataDir(), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");
-const CONFIG_VERSION = 2;
+const CONFIG_VERSION = 3;
 const DEFAULT_BACKEND_URL = "http://localhost:8000";
+const DEFAULT_AUDIO_HOTKEYS = process.platform === "darwin"
+  ? { ptt_key: "shift_r", ai_key: "alt_r" }
+  : { ptt_key: "alt_l", ai_key: ["alt_l", "space"] };
 
 const DEFAULT_CONFIG = {
   stt: {
@@ -23,8 +26,7 @@ const DEFAULT_CONFIG = {
     mode: "ptt",
     device: "auto",
     vad_aggressiveness: 2,
-    ptt_key: "alt_l",
-    ai_key: ["alt_l", "space"],
+    ...DEFAULT_AUDIO_HOTKEYS,
   },
   typing: {
     method: "unicode",
@@ -37,6 +39,17 @@ const DEFAULT_CONFIG = {
     model: "glm-4-flash",
   },
 };
+
+function resolveAppDataDir() {
+  if (process.env.TYPEUP_APP_DATA_DIR) return process.env.TYPEUP_APP_DATA_DIR;
+  if (process.platform === "win32") {
+    return process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming");
+  }
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support");
+  }
+  return process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+}
 
 function ensureDefaultConfig() {
   fs.mkdirSync(USER_DIR, { recursive: true });

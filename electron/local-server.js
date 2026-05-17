@@ -1,4 +1,5 @@
 const http = require("node:http");
+const { spawn } = require("node:child_process");
 const express = require("express");
 const cors = require("cors");
 const { AgentManager } = require("./agent-manager");
@@ -11,8 +12,14 @@ const {
 } = require("./settings-store");
 
 const DEFAULT_BACKEND_URL = process.env.TYPEUP_BACKEND_URL || "http://localhost:8000";
+const DEFAULT_BACKEND_TIMEOUT_MS = 30000;
 const LOCAL_RENDERER_PORTS = new Set(["5173", "4173"]);
 const LOCAL_RENDERER_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+const MAC_PERMISSION_URLS = {
+  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  input_monitoring: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+  microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
+};
 
 class BackendRequestError extends Error {
   constructor(status, body) {
@@ -81,13 +88,26 @@ function clearAuthSession(apiBaseUrl) {
 }
 
 async function backendJson(apiBaseUrl, path, options = {}) {
-  const response = await fetch(`${normalizeBackendUrl(apiBaseUrl)}${path}`, {
-    ...options,
-    headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
-      ...(options.headers || {}),
-    },
-  });
+  let response;
+  try {
+    response = await fetch(`${normalizeBackendUrl(apiBaseUrl)}${path}`, {
+      ...options,
+      signal: options.signal || AbortSignal.timeout(options.timeoutMs || DEFAULT_BACKEND_TIMEOUT_MS),
+      headers: {
+        ...(options.body ? { "Content-Type": "application/json" } : {}),
+        ...(options.headers || {}),
+      },
+    });
+  } catch (error) {
+    const timedOut = error.name === "TimeoutError" || error.name === "AbortError";
+    throw new BackendRequestError(502, {
+      error: {
+        code: timedOut ? "BACKEND_TIMEOUT" : "BACKEND_UNAVAILABLE",
+        message: timedOut ? "TypeUp 后端请求超时，请确认服务是否可用" : "无法连接 TypeUp 后端，请确认服务已启动或后端地址正确",
+        status: 502,
+      },
+    });
+  }
   const text = await response.text();
   const body = text ? safeJson(text) : null;
   if (!response.ok) {
@@ -237,6 +257,7 @@ function createLocalServer({ electronApp }) {
   const server = http.createServer(app);
   const agent = new AgentManager({ electronApp });
   const sseClients = new Set();
+  applyBackendEngineConfig(readCloudBridge());
 
   function publish(event, payload) {
     const body = `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
@@ -297,6 +318,65 @@ function createLocalServer({ electronApp }) {
       res.json({ ok: true, output });
     } catch (error) {
       res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
+  app.get("/api/permissions", async (_req, res) => {
+    try {
+      res.json({
+        platform: process.platform,
+        engineAppPath: process.platform === "darwin" ? agent.macEngineAppPath() : "",
+        permissions: await agent.permissions(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: { code: "PERMISSION_CHECK_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
+  app.post("/api/permissions/engine/reveal", async (_req, res) => {
+    if (process.platform !== "darwin") {
+      res.status(400).json({ error: { code: "UNSUPPORTED_PLATFORM", message: "仅 macOS 支持显示授权对象", status: 400 } });
+      return;
+    }
+    try {
+      await revealInFinder(agent.macEngineAppPath());
+      res.json({ ok: true, path: agent.macEngineAppPath() });
+    } catch (error) {
+      res.status(500).json({ error: { code: "REVEAL_ENGINE_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
+  app.post("/api/permissions/:name/open", async (req, res) => {
+    const url = MAC_PERMISSION_URLS[req.params.name];
+    if (process.platform !== "darwin" || !url) {
+      res.status(400).json({ error: { code: "UNSUPPORTED_PERMISSION", message: "不支持的权限项", status: 400 } });
+      return;
+    }
+    try {
+      await openMacSettings(url);
+      res.json({ ok: true });
+    } catch (error) {
+      res.status(500).json({ error: { code: "OPEN_SETTINGS_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
+  app.post("/api/permissions/:name/request", async (req, res) => {
+    if (process.platform !== "darwin") {
+      res.json({ [req.params.name]: "granted" });
+      return;
+    }
+    try {
+      res.json(await agent.requestPermission(req.params.name));
+    } catch (error) {
+      res.status(500).json({ error: { code: "PERMISSION_REQUEST_FAILED", message: error.message, status: 500 } });
+    }
+  });
+
+  app.post("/api/permissions/microphone/request", async (_req, res) => {
+    try {
+      res.json(await agent.requestMicrophone());
+    } catch (error) {
+      res.status(500).json({ error: { code: "MICROPHONE_REQUEST_FAILED", message: error.message, status: 500 } });
     }
   });
 
@@ -363,6 +443,15 @@ function createLocalServer({ electronApp }) {
       }
       if (error.status === 403) {
         res.json(clearAuthSession(cloud.apiBaseUrl));
+        return;
+      }
+      if (error.status >= 500) {
+        const next = updateCloudBridge({
+          apiBaseUrl: cloud.apiBaseUrl,
+          connected: false,
+          entitlement: null,
+        });
+        res.json(publicSession(next));
         return;
       }
       sendBackendError(res, error);
@@ -460,6 +549,28 @@ function createLocalServer({ electronApp }) {
           await new Promise((done) => server.close(done));
         },
       });
+    });
+  });
+}
+
+function openMacSettings(url) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("open", [url], { windowsHide: true });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`open exited with code ${code}`));
+    });
+  });
+}
+
+function revealInFinder(targetPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("open", ["-R", targetPath], { windowsHide: true });
+    child.once("error", reject);
+    child.once("exit", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`open -R exited with code ${code}`));
     });
   });
 }

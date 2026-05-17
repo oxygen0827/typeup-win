@@ -2,7 +2,7 @@
   "name": "typeup",
   "version": "0.1.7",
   "private": true,
-  "description": "TypeUp Windows desktop client for always-on voice transcription.",
+  "description": "TypeUp desktop client for always-on voice transcription.",
   "main": "electron/main.js",
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
@@ -10,9 +10,13 @@
     "start": "node node_modules/concurrently/dist/bin/concurrently.js -k \"npm run dev\" \"node node_modules/wait-on/bin/wait-on http://127.0.0.1:5173 && npm run electron\"",
     "build": "node node_modules/vite/bin/vite.js build",
     "build:win": "npm run build && node node_modules/electron-builder/cli.js --win nsis",
+    "build:mac": "npm run build && node node_modules/cross-env/dist/bin/cross-env.js npm_config_electron_mirror= NPM_CONFIG_ELECTRON_MIRROR= ELECTRON_MIRROR= ELECTRON_BUILDER_BINARIES_MIRROR=https://github.com/electron-userland/electron-builder-binaries/releases/download/ node node_modules/electron-builder/cli.js --mac dmg",
     "engine:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-engine.ps1",
     "engine:build": "powershell -ExecutionPolicy Bypass -File scripts/build-engine.ps1",
-    "engine:run": "powershell -ExecutionPolicy Bypass -File scripts/run-engine.ps1"
+    "engine:run": "powershell -ExecutionPolicy Bypass -File scripts/run-engine.ps1",
+    "engine:setup:mac": "bash scripts/setup-engine-macos.sh",
+    "engine:build:mac": "bash scripts/build-engine-macos.sh",
+    "engine:run:mac": "bash scripts/run-engine-macos.sh"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.1.1",
@@ -47,18 +51,21 @@
         "from": "engine/voice-keyboard",
         "to": "engine/voice-keyboard",
         "filter": [
-          "**/*",
-          "!**/.git/**",
-          "!**/.venv/**",
-          "!build/**",
-          "!**/__pycache__/**",
-          "!**/*.pyc"
+          "dist/**/*"
         ]
       }
     ],
     "win": {
       "icon": "build/icon.ico",
       "target": "nsis"
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "target": "dmg",
+      "category": "public.app-category.productivity"
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
