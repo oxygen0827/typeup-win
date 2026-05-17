@@ -15,9 +15,9 @@ def activate_app_for_permission_prompt() -> None:
     if not _DARWIN:
         return
     try:
-        from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
+        from AppKit import NSApplication, NSApplicationActivationPolicyRegular
         app = NSApplication.sharedApplication()
-        app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
+        app.setActivationPolicy_(NSApplicationActivationPolicyRegular)
         app.activateIgnoringOtherApps_(True)
     except Exception:
         pass
@@ -169,8 +169,9 @@ def request_microphone_by_capture() -> None:
         return
     try:
         import sounddevice as sd
+        sd.query_devices(kind="input")
         with sd.InputStream(channels=1, samplerate=16000, blocksize=1024):
-            sd.sleep(250)
+            sd.sleep(500)
     except Exception as e:
         print(f"[perm] 触发麦克风输入失败: {e}")
 
@@ -182,28 +183,22 @@ def request_microphone_sync(timeout: float = 20.0) -> str:
     if microphone() == "granted":
         return "granted"
 
+    activate_app_for_permission_prompt()
     result = {"granted": False}
+    done = threading.Event()
 
     def _callback(granted):
         result["granted"] = bool(granted)
-        try:
-            from PyObjCTools import AppHelper
-            AppHelper.stopEventLoop()
-        except Exception:
-            pass
+        done.set()
 
     request_microphone(_callback)
-    try:
-        from PyObjCTools import AppHelper
-        AppHelper.callLater(timeout, AppHelper.stopEventLoop)
-        AppHelper.runConsoleEventLoop()
-    except Exception:
-        done = threading.Event()
-        request_microphone(lambda granted: (result.update({"granted": bool(granted)}), done.set()))
-        done.wait(timeout)
-    if not result["granted"]:
+    done.wait(timeout)
+
+    status = "granted" if result["granted"] else microphone()
+    if status != "granted":
         request_microphone_by_capture()
-    return "granted" if result["granted"] else microphone()
+        status = microphone()
+    return status
 
 
 _SETTINGS_LINKS = {

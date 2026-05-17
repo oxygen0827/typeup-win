@@ -4,6 +4,7 @@ const os = require("node:os");
 const path = require("node:path");
 const { spawn } = require("node:child_process");
 const { TextDecoder } = require("node:util");
+const { systemPreferences } = require("electron");
 const { ensureDefaultConfig, readSettings } = require("./settings-store");
 
 const MAX_LOGS = 220;
@@ -236,17 +237,22 @@ class AgentManager extends EventEmitter {
 
   async requestMicrophone() {
     if (process.platform !== "darwin") return { microphone: "granted" };
-    await this._runMacEngineAppCommand(["--request-microphone"], { resultJson: true });
+    try {
+      await systemPreferences.askForMediaAccess("microphone");
+    } catch (error) {
+      this._appendLog(`[typeup] 请求 TypeUp 麦克风权限失败: ${error.message}`);
+    }
+    await this._runAgentJsonCommand(["--request-microphone"]);
     return this.permissions();
   }
 
   async requestPermission(name) {
     if (name === "accessibility") {
-      await this._runMacEngineAppCommand(["--request-accessibility"], { resultJson: true });
+      await this._runAgentJsonCommand(["--request-accessibility"]);
       return this.permissions();
     }
     if (name === "input_monitoring") {
-      await this._runMacEngineAppCommand(["--request-input-monitoring"], { resultJson: true });
+      await this._runAgentJsonCommand(["--request-input-monitoring"]);
       return this.permissions();
     }
     if (name === "microphone") {
@@ -280,6 +286,15 @@ class AgentManager extends EventEmitter {
       child.once("error", reject);
       child.once("exit", () => resolve(output.trim()));
     });
+  }
+
+  async _runAgentJsonCommand(extraArgs = []) {
+    const output = await this._runAgentCommand(extraArgs);
+    const parsed = parseLastJson(output);
+    if (!parsed) {
+      throw new Error(`Engine command did not return JSON: ${output.slice(-500)}`);
+    }
+    return parsed;
   }
 
   _runMacEngineAppCommand(extraArgs = [], options = {}) {
@@ -327,13 +342,6 @@ class AgentManager extends EventEmitter {
 
     if (process.platform === "darwin") {
       const appPath = this.macEngineAppPath();
-      if (this.electronApp.isPackaged && extraArgs.length === 0) {
-        return {
-          command: "open",
-          args: ["-n", "-W", appPath, "--args", "--no-serial", "--no-ui"],
-          viaLaunchServices: true,
-        };
-      }
       for (const executableName of ["TypeUp Engine", "Voice Keyboard"]) {
         const typeupAppExecutable = path.join(appPath, "Contents", "MacOS", executableName);
         if (fs.existsSync(typeupAppExecutable)) {
@@ -416,7 +424,7 @@ class AgentManager extends EventEmitter {
 
   async _permissionsFromRuntime() {
     try {
-      const result = await this._runMacEngineAppCommand(["--permissions-json"], { resultJson: true });
+      const result = await this._runAgentJsonCommand(["--permissions-json"]);
       if (!result || typeof result !== "object") return null;
       return {
         accessibility: normalizePermission(result.accessibility),
