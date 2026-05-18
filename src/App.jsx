@@ -396,6 +396,8 @@ export default function App() {
   const days = usage?.days || [];
   const activeChars = (today.transcribedChars || 0) + (today.aiEditedChars || 0);
   const savedTime = formatSavedTime(activeChars, lang);
+  const engineRunning = ["listening", "transcribing", "starting", "needs_config"].includes(status.state);
+  const engineStopped = ["stopped", "stopping", "error"].includes(status.state) || !engineRunning;
 
   const peak = useMemo(() => {
     return Math.max(1, ...days.map((day) => (day.transcribedChars || 0) + (day.aiEditedChars || 0)));
@@ -676,11 +678,11 @@ export default function App() {
             )}
 
             <div className="actions">
-              <button className="primary" onClick={() => agentAction("start")} disabled={!apiBase}>
+              <button className={engineRunning ? "" : "state-active"} onClick={() => agentAction("start")} disabled={!apiBase}>
                 <Play size={18} />
                 {text.start}
               </button>
-              <button onClick={() => agentAction("stop")} disabled={!apiBase}>
+              <button className={engineStopped ? "state-active" : ""} onClick={() => agentAction("stop")} disabled={!apiBase}>
                 <Square size={18} />
                 {text.stop}
               </button>

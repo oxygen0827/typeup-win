@@ -143,6 +143,7 @@ npm.cmd run start
 - 语音输入会在最终打字前清理 STT/LLM 偶发生成的开头 Markdown/井号标记，例如 `#`、`＃`、`润色结果：`、代码围栏等，避免正文前多出井号。
 - Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时通过平滑衰减回到静止状态。
 - Windows 悬浮状态框已改为双缓冲绘制，并禁止音量条刷新时擦除背景，减少透明窗口闪烁；React 底部状态栏也会去重相同状态更新，避免“处理中/就绪”反复重绘。
+- 语音控制台的「启动 / 停止」按钮会按本地 engine 状态互斥高亮：运行时启动按钮为蓝色，停止或异常时停止按钮为蓝色，不需要再只看顶部状态标签判断当前状态。
 - 本地 server 会把启动日志、凭证同步日志和 STT 结果日志区分开：只有“识别中/解析指令”才进入 `transcribing`，避免启动后误停在“处理中”。
 - React UI 的快捷键提示会按当前平台和本地 engine 配置动态显示，避免 Windows 用户看到 macOS 默认的“右 Shift / 右 Option”提示。
 - 已知可继续优化项：原生 Win32 圆角裁剪仍可能在个别屏幕缩放下出现轻微边缘毛刺，后续可改成 per-pixel alpha layered window 继续打磨。
@@ -269,22 +270,22 @@ macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双
 
 桌面端已经接入 `electron-updater`，更新源指向 GitHub Releases：`oxygen0827/typeup-win`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
 
-注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次新版安装包。
+注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次新版安装包。当前用于验证自动更新链路的下一版是 `0.1.9`。
 
 发布新版时需要：
 
 ```powershell
 cd C:\Users\Administrator\Desktop\ai_deploy\typeup-win
-npm.cmd version 0.1.9 --no-git-tag-version
+npm.cmd version 0.1.10 --no-git-tag-version
 npm.cmd run engine:build
 npm.cmd run build:win
 ```
 
-然后在 GitHub 创建对应版本的 Release，例如 `v0.1.9`，上传 `release\` 目录里的安装包和更新元数据：
+然后在 GitHub 创建对应版本的 Release，例如 `v0.1.10`，上传 `release\` 目录里的安装包和更新元数据：
 
 ```text
-TypeUp-Setup-0.1.9.exe
-TypeUp-Setup-0.1.9.exe.blockmap
+TypeUp-Setup-0.1.10.exe
+TypeUp-Setup-0.1.10.exe.blockmap
 latest.yml
 ```
 

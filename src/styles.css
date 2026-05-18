@@ -607,7 +607,7 @@ button:disabled {
   margin-top: 16px;
 }
 
-.actions .primary,
+.actions .state-active,
 .save-button {
   background: var(--primary);
   border-color: var(--primary);
