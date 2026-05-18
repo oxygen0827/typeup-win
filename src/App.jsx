@@ -320,6 +320,7 @@ export default function App() {
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS);
   const [saving, setSaving] = useState(false);
   const [updateState, setUpdateState] = useState(DEFAULT_UPDATE_STATE);
+  const [activeModule, setActiveModule] = useState("voice");
 
   function setStatus(next) {
     setStatusState((current) => (sameStatus(current, next) ? current : next));
@@ -396,8 +397,20 @@ export default function App() {
   const days = usage?.days || [];
   const activeChars = (today.transcribedChars || 0) + (today.aiEditedChars || 0);
   const savedTime = formatSavedTime(activeChars, lang);
-  const engineRunning = ["listening", "transcribing", "starting", "needs_config"].includes(status.state);
-  const engineStopped = ["stopped", "stopping", "error"].includes(status.state) || !engineRunning;
+  const engineStopped = ["stopped", "stopping", "error"].includes(status.state);
+  const engineRunning = !engineStopped;
+  const moduleItems = [
+    { id: "voice", label: text.voiceConsole, detail: statusMeta.label, icon: <Mic size={18} /> },
+    {
+      id: "account",
+      label: text.accountCenter,
+      detail: auth.authenticated ? auth.user?.email || text.activeSubscription : text.login,
+      icon: <UserRound size={18} />,
+    },
+    { id: "usage", label: text.usage, detail: text.usageRange, icon: <Activity size={18} /> },
+    { id: "settings", label: text.settings, detail: text.speechModel, icon: <Settings size={18} /> },
+    { id: "logs", label: text.logs, detail: text.backend, icon: <Pause size={18} /> },
+  ];
 
   const peak = useMemo(() => {
     return Math.max(1, ...days.map((day) => (day.transcribedChars || 0) + (day.aiEditedChars || 0)));
@@ -601,195 +614,218 @@ export default function App() {
         </div>
       </header>
 
-      <UpdateBanner
-        text={text}
-        updateState={updateState}
-        onCheck={checkForUpdates}
-        onDownload={downloadUpdate}
-        onInstall={installUpdate}
-      />
+      <div className="app-body">
+        <UpdateBanner
+          text={text}
+          updateState={updateState}
+          onCheck={checkForUpdates}
+          onDownload={downloadUpdate}
+          onInstall={installUpdate}
+        />
 
-      <section className="dashboard">
-        <div className="main-column">
-          <section className="voice-panel">
-            <div className="panel-heading">
-              <div>
-                <p className="eyebrow">{text.localEngine}</p>
-                <h2>{text.voiceConsole}</h2>
-              </div>
-            </div>
+        <section className="app-workspace">
+          <nav className="module-nav" aria-label="TypeUp modules">
+            {moduleItems.map((item) => (
+              <button
+                type="button"
+                key={item.id}
+                className={activeModule === item.id ? "selected" : ""}
+                onClick={() => setActiveModule(item.id)}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+                <small>{item.detail}</small>
+              </button>
+            ))}
+          </nav>
 
-            <div className="voice-grid">
-              <div className={`voice-orb ${statusMeta.tone}`}>
-                <div className="orb-ring" />
-                <div className="orb-core">
-                  <Mic size={34} />
-                </div>
-                <div className="wave-lines" aria-hidden="true">
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                  <span />
-                </div>
-              </div>
-
-              <div className="voice-state">
-                <div className={`state-badge ${statusMeta.tone}`}>
-                  <span />
-                  {statusMeta.label}
-                </div>
-                <h3>{statusMeta.title}</h3>
-                <p>{statusMeta.detail}</p>
-                <div className="mode-card">
-                  <span>{text.modeDisplay}</span>
+          <div className="module-content">
+            <div className={activeModule === "voice" ? "module-view active" : "module-view"}>
+              <section className="voice-panel">
+                <div className="panel-heading">
                   <div>
-                    <strong>{text.original}</strong>
-                    <i />
-                    <strong>{text.lightPolish}</strong>
+                    <p className="eyebrow">{text.localEngine}</p>
+                    <h2>{text.voiceConsole}</h2>
                   </div>
                 </div>
-              </div>
 
-              <div className="engine-card">
-                <InfoRow label={text.process} value={status.pid ? `PID ${status.pid}` : text.notRunning} />
-                <InfoRow label={text.listenMode} value={status.mode === "ptt" ? text.pushToTalk : text.alwaysOn} />
-                <InfoRow label={text.stt} value={status.provider || text.notConfigured} />
-                <InfoRow label={text.typing} value={status.typingMethod === "clip" ? text.clipboard : text.unicode} />
-              </div>
+                <div className="voice-grid">
+                  <div className={`voice-orb ${statusMeta.tone}`}>
+                    <div className="orb-ring" />
+                    <div className="orb-core">
+                      <Mic size={34} />
+                    </div>
+                    <div className="wave-lines" aria-hidden="true">
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </div>
+
+                  <div className="voice-state">
+                    <div className={`state-badge ${statusMeta.tone}`}>
+                      <span />
+                      {statusMeta.label}
+                    </div>
+                    <h3>{statusMeta.title}</h3>
+                    <p>{statusMeta.detail}</p>
+                    <div className="mode-card">
+                      <span>{text.modeDisplay}</span>
+                      <div>
+                        <strong>{text.original}</strong>
+                        <i />
+                        <strong>{text.lightPolish}</strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="engine-card">
+                    <InfoRow label={text.process} value={status.pid ? `PID ${status.pid}` : text.notRunning} />
+                    <InfoRow label={text.listenMode} value={status.mode === "ptt" ? text.pushToTalk : text.alwaysOn} />
+                    <InfoRow label={text.stt} value={status.provider || text.notConfigured} />
+                    <InfoRow label={text.typing} value={status.typingMethod === "clip" ? text.clipboard : text.unicode} />
+                  </div>
+                </div>
+
+                {status.lastError ? (
+                  <div className="notice danger">
+                    <AlertCircle size={18} />
+                    <span>{status.lastError}</span>
+                  </div>
+                ) : null}
+                {!status.configured ? (
+                  <div className="notice warn">
+                    <AlertCircle size={18} />
+                    <span>{text.missingConfig}</span>
+                  </div>
+                ) : (
+                  <div className="notice ok">
+                    <CheckCircle2 size={18} />
+                    <span>{text.configured}</span>
+                  </div>
+                )}
+
+                <div className="actions">
+                  <button className={engineRunning ? "state-active" : ""} onClick={() => agentAction("start")} disabled={!apiBase}>
+                    <Play size={18} />
+                    {text.start}
+                  </button>
+                  <button className={engineStopped ? "state-active" : ""} onClick={() => agentAction("stop")} disabled={!apiBase}>
+                    <Square size={18} />
+                    {text.stop}
+                  </button>
+                  <button onClick={() => agentAction("restart")} disabled={!apiBase}>
+                    <RefreshCw size={18} />
+                    {text.restart}
+                  </button>
+                  <button onClick={listDevices} disabled={!apiBase}>
+                    <Mic size={18} />
+                    {text.microphone}
+                  </button>
+                </div>
+              </section>
+
+              <section className="shortcut-panel">
+                <div className="panel-heading compact">
+                  <div>
+                    <p className="eyebrow">{text.shortcuts}</p>
+                    <h2>{formatHotkey(pttKey, lang, platform)} / {formatHotkey(aiKey, lang, platform)} / {polishKey}</h2>
+                  </div>
+                  <WandSparkles size={22} />
+                </div>
+                <div className="shortcut-grid">
+                  <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang, platform)} />
+                  <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang, platform)} />
+                  <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={polishKey} />
+                </div>
+              </section>
             </div>
 
-            {status.lastError ? (
-              <div className="notice danger">
-                <AlertCircle size={18} />
-                <span>{status.lastError}</span>
-              </div>
-            ) : null}
-            {!status.configured ? (
-              <div className="notice warn">
-                <AlertCircle size={18} />
-                <span>{text.missingConfig}</span>
-              </div>
-            ) : (
-              <div className="notice ok">
-                <CheckCircle2 size={18} />
-                <span>{text.configured}</span>
-              </div>
-            )}
+            <div className={activeModule === "usage" ? "module-view usage-view active" : "module-view usage-view"}>
+              <section className="metrics-grid">
+                <Metric icon={<FileText />} label={text.transcribedChars} value={formatNumber(today.transcribedChars, lang)} accent="blue" />
+                <Metric icon={<WandSparkles />} label={text.aiEditedChars} value={formatNumber(today.aiEditedChars, lang)} accent="violet" />
+                <Metric icon={<Activity />} label={text.savedTime} value={savedTime} accent="cyan" />
+                <Metric icon={<CheckCircle2 />} label={text.successfulEvents} value={formatNumber(totals.successfulEvents, lang)} accent="green" />
+              </section>
 
-            <div className="actions">
-              <button className={engineRunning ? "" : "state-active"} onClick={() => agentAction("start")} disabled={!apiBase}>
-                <Play size={18} />
-                {text.start}
-              </button>
-              <button className={engineStopped ? "state-active" : ""} onClick={() => agentAction("stop")} disabled={!apiBase}>
-                <Square size={18} />
-                {text.stop}
-              </button>
-              <button onClick={() => agentAction("restart")} disabled={!apiBase}>
-                <RefreshCw size={18} />
-                {text.restart}
-              </button>
-              <button onClick={listDevices} disabled={!apiBase}>
-                <Mic size={18} />
-                {text.microphone}
-              </button>
+              <section className="usage-panel">
+                <div className="panel-heading compact">
+                  <div>
+                    <p className="eyebrow">{text.usageRange}</p>
+                    <h2>{text.usage}</h2>
+                  </div>
+                  <Activity size={22} />
+                </div>
+                <TrendChart days={days} peak={peak} lang={lang} />
+              </section>
             </div>
-          </section>
 
-          <section className="shortcut-panel">
-            <div className="panel-heading compact">
-              <div>
-                <p className="eyebrow">{text.shortcuts}</p>
-                <h2>{formatHotkey(pttKey, lang, platform)} / {formatHotkey(aiKey, lang, platform)} / {polishKey}</h2>
-              </div>
-              <WandSparkles size={22} />
+            <div className={activeModule === "logs" ? "module-view active" : "module-view"}>
+              <section className="log-panel">
+                <div className="panel-heading compact">
+                  <div>
+                    <p className="eyebrow">{text.logs}</p>
+                    <h2>{text.backend}</h2>
+                  </div>
+                  <Pause size={22} />
+                </div>
+                <div className="logs">
+                  {logs.length ? logs.map((item) => (
+                    <p key={`${item.ts}-${item.line}`}>
+                      <time>{formatTime(item.ts, lang)}</time>
+                      <span>{item.line}</span>
+                    </p>
+                  )) : <p className="empty-log">{text.noLogs}</p>}
+                </div>
+              </section>
             </div>
-            <div className="shortcut-grid">
-              <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang, platform)} />
-              <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang, platform)} />
-              <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={polishKey} />
+
+            <div className={activeModule === "account" ? "module-view active" : "module-view"}>
+              <AccountPanel
+                text={text}
+                auth={auth}
+                authForm={authForm}
+                setAuthForm={setAuthForm}
+                plans={plans}
+                lastOrder={lastOrder}
+                accountBusy={accountBusy}
+                accountError={accountError}
+                onSubmitAuth={submitAuth}
+                onLogout={logout}
+                onRefresh={reloadAccount}
+                onCreateOrder={createOrder}
+                onRefreshOrder={refreshOrder}
+                onOpenPayment={openPayment}
+                lang={lang}
+              />
+
+              {platform === "darwin" ? (
+                <PermissionsPanel
+                  text={text}
+                  permissions={permissions.permissions}
+                  engineAppPath={permissions.engineAppPath}
+                  onOpen={openPermission}
+                  onRequest={requestPermission}
+                  onRequestMic={requestMicPermission}
+                  onRecheck={recheckPermissions}
+                  onRevealTarget={revealPermissionTarget}
+                  disabled={!apiBase}
+                />
+              ) : null}
             </div>
-          </section>
 
-          <section className="metrics-grid">
-            <Metric icon={<FileText />} label={text.transcribedChars} value={formatNumber(today.transcribedChars, lang)} accent="blue" />
-            <Metric icon={<WandSparkles />} label={text.aiEditedChars} value={formatNumber(today.aiEditedChars, lang)} accent="violet" />
-            <Metric icon={<Activity />} label={text.savedTime} value={savedTime} accent="cyan" />
-            <Metric icon={<CheckCircle2 />} label={text.successfulEvents} value={formatNumber(totals.successfulEvents, lang)} accent="green" />
-          </section>
-
-          <section className="usage-panel">
-            <div className="panel-heading compact">
-              <div>
-                <p className="eyebrow">{text.usageRange}</p>
-                <h2>{text.usage}</h2>
-              </div>
-              <Activity size={22} />
-            </div>
-            <TrendChart days={days} peak={peak} lang={lang} />
-          </section>
-
-          <section className="log-panel">
-            <div className="panel-heading compact">
-              <div>
-                <p className="eyebrow">{text.logs}</p>
-                <h2>{text.backend}</h2>
-              </div>
-              <Pause size={22} />
-            </div>
-            <div className="logs">
-              {logs.length ? logs.map((item) => (
-                <p key={`${item.ts}-${item.line}`}>
-                  <time>{formatTime(item.ts, lang)}</time>
-                  <span>{item.line}</span>
-                </p>
-              )) : <p className="empty-log">{text.noLogs}</p>}
-            </div>
-          </section>
-        </div>
-
-        <aside className="side-column">
-          <AccountPanel
-            text={text}
-            auth={auth}
-            authForm={authForm}
-            setAuthForm={setAuthForm}
-            plans={plans}
-            lastOrder={lastOrder}
-            accountBusy={accountBusy}
-            accountError={accountError}
-            onSubmitAuth={submitAuth}
-            onLogout={logout}
-            onRefresh={reloadAccount}
-            onCreateOrder={createOrder}
-            onRefreshOrder={refreshOrder}
-            onOpenPayment={openPayment}
-            lang={lang}
-          />
-
-          {platform === "darwin" ? (
-            <PermissionsPanel
-              text={text}
-              permissions={permissions.permissions}
-              engineAppPath={permissions.engineAppPath}
-              onOpen={openPermission}
-              onRequest={requestPermission}
-              onRequestMic={requestMicPermission}
-              onRecheck={recheckPermissions}
-              onRevealTarget={revealPermissionTarget}
-              disabled={!apiBase}
-            />
-          ) : null}
-
-          <section className="settings-panel">
-            <div className="panel-heading compact">
-              <div>
-                <p className="eyebrow">{text.settings}</p>
-                <h2>{text.speechModel}</h2>
-              </div>
-              <Settings size={22} />
-            </div>
+            <div className={activeModule === "settings" ? "module-view active" : "module-view"}>
+              <section className="settings-panel">
+                <div className="panel-heading compact">
+                  <div>
+                    <p className="eyebrow">{text.settings}</p>
+                    <h2>{text.speechModel}</h2>
+                  </div>
+                  <Settings size={22} />
+                </div>
             <FormSelect
               label="STT Provider"
               value={settings.stt?.provider || ""}
@@ -865,15 +901,17 @@ export default function App() {
               <Save size={18} />
               {saving ? text.saving : text.saveAndRestart}
             </button>
-          </section>
+              </section>
 
-          {devices ? (
-            <section className="devices-panel">
-              <pre>{devices}</pre>
-            </section>
-          ) : null}
-        </aside>
-      </section>
+              {devices ? (
+                <section className="devices-panel">
+                  <pre>{devices}</pre>
+                </section>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      </div>
 
       <div className={`status-dock ${statusMeta.tone}`}>
         <span className="dock-dot" />
