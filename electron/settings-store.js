@@ -191,8 +191,8 @@ function normalizePatch(patch) {
   const normalized = {};
   if (patch.stt) {
     normalized.stt = {
-      provider: stringValue(patch.stt.provider),
-      api_key: stringValue(patch.stt.api_key),
+      provider: "typeup_backend",
+      api_key: "",
       api_base_url: stringValue(patch.stt.api_base_url),
       access_token: stringValue(patch.stt.access_token),
       refresh_token: stringValue(patch.stt.refresh_token),
@@ -226,8 +226,8 @@ function normalizePatch(patch) {
   }
   if (patch.llm) {
     normalized.llm = {
-      provider: stringValue(patch.llm.provider),
-      api_key: stringValue(patch.llm.api_key),
+      provider: "typeup_backend",
+      api_key: "",
       api_base_url: stringValue(patch.llm.api_base_url),
       access_token: stringValue(patch.llm.access_token),
       refresh_token: stringValue(patch.llm.refresh_token),

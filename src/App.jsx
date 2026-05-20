@@ -96,8 +96,10 @@ const COPY = {
     restart: "重启",
     microphone: "麦克风",
     deviceFallback: "未发现输入设备",
-    configured: "本地 STT 配置已就绪。",
-    missingConfig: "STT 凭据未完成，本地引擎会启动，但不会发起转写。",
+    configured: "订阅模型代理已接入。",
+    missingConfig: "请先登录账号，本地引擎会通过订阅服务调用模型。",
+    managedProvider: "已接入后台",
+    subscriptionIncluded: "已包含在订阅服务内",
     transcribedChars: "今日转写字数",
     aiEditedChars: "今日 AI 编辑字数",
     savedTime: "总节约时间",
@@ -198,8 +200,10 @@ const COPY = {
     restart: "Restart",
     microphone: "Microphone",
     deviceFallback: "No input devices found",
-    configured: "Local STT configuration is ready.",
-    missingConfig: "STT credentials are incomplete. The engine can start, but transcription will be skipped.",
+    configured: "Subscription model proxy is connected.",
+    missingConfig: "Sign in first. The local engine calls models through your subscription.",
+    managedProvider: "Managed by backend",
+    subscriptionIncluded: "Included in subscription",
     transcribedChars: "Transcribed Today",
     aiEditedChars: "AI Edited Today",
     savedTime: "Time Saved",
@@ -428,7 +432,7 @@ export default function App() {
       const next = await api(apiBase, "/api/settings?restart=1", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify(toManagedSettings(settings)),
       });
       setSettings(next);
       await refreshStatus(apiBase, setStatus);
@@ -826,26 +830,8 @@ export default function App() {
                   </div>
                   <Settings size={22} />
                 </div>
-            <FormSelect
-              label="STT Provider"
-              value={settings.stt?.provider || ""}
-              onChange={(provider) => setNested(setSettings, ["stt", "provider"], provider)}
-              options={[
-                ["typeup_backend", "TypeUp Backend"],
-                ["glm_asr_2512", "GLM-ASR-2512"],
-                ["openai", "OpenAI Whisper"],
-                ["zhipuai", "GLM-4-Voice"],
-                ["aliyun", "阿里云 NLS"],
-                ["volcengine", "火山 ASR"],
-                ["xunfei", "讯飞 IAT"],
-              ]}
-            />
-            <FormInput
-              label="STT API Key"
-              value={settings.stt?.api_key || ""}
-              type="password"
-              onChange={(value) => setNested(setSettings, ["stt", "api_key"], value)}
-            />
+            <ReadonlyField label="STT Provider" value={text.managedProvider} />
+            <ReadonlyField label="STT API Key" value={text.subscriptionIncluded} />
             <FormInput
               label="STT Model"
               value={settings.stt?.model || ""}
@@ -879,24 +865,8 @@ export default function App() {
               ]}
               onChange={(value) => setNested(setSettings, ["typing", "method"], value)}
             />
-            <FormSelect
-              label="LLM Provider"
-              value={settings.llm?.provider || ""}
-              onChange={(provider) => setNested(setSettings, ["llm", "provider"], provider)}
-              options={[
-                ["typeup_backend", "TypeUp Backend"],
-                ["zhipuai", "智谱 GLM"],
-                ["openai", "OpenAI"],
-                ["aliyun", "通义千问"],
-                ["volcengine", "豆包"],
-              ]}
-            />
-            <FormInput
-              label="LLM API Key"
-              value={settings.llm?.api_key || ""}
-              type="password"
-              onChange={(value) => setNested(setSettings, ["llm", "api_key"], value)}
-            />
+            <ReadonlyField label="LLM Provider" value={text.managedProvider} />
+            <ReadonlyField label="LLM API Key" value={text.subscriptionIncluded} />
             <button className="save-button" onClick={saveSettings} disabled={saving || !apiBase}>
               <Save size={18} />
               {saving ? text.saving : text.saveAndRestart}
@@ -1309,6 +1279,15 @@ function FormInput({ label, value, onChange, type = "text" }) {
   );
 }
 
+function ReadonlyField({ label, value }) {
+  return (
+    <div className="field readonly-field">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
 function FormSelect({ label, value, onChange, options }) {
   return (
     <label className="field">
@@ -1418,6 +1397,22 @@ function setNested(setter, path, value) {
     cursor[path[path.length - 1]] = value;
     return next;
   });
+}
+
+function toManagedSettings(settings) {
+  return {
+    ...settings,
+    stt: {
+      ...(settings.stt || {}),
+      provider: "typeup_backend",
+      api_key: "",
+    },
+    llm: {
+      ...(settings.llm || {}),
+      provider: "typeup_backend",
+      api_key: "",
+    },
+  };
 }
 
 function validateAuthForm(form, text) {
