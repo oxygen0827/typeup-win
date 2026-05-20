@@ -135,7 +135,7 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
       if (typeof beforeInstall === "function") {
         await beforeInstall();
       }
-      autoUpdater.quitAndInstall(false, true);
+      autoUpdater.quitAndInstall(true, true);
     } catch (error) {
       setError(error);
     }

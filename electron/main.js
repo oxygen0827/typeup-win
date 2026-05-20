@@ -52,6 +52,10 @@ const updates = setupAutoUpdates({
   isDev,
   beforeInstall: async () => {
     quittingForUpdate = true;
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.removeAllListeners("close");
+      mainWindow.close();
+    }
     await closeLocalServer();
   },
 });
