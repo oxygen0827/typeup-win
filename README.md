@@ -6,11 +6,16 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前测试版安装包为 `TypeUp-Setup-0.1.10.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前测试版安装包为 `TypeUp-Setup-0.1.13.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
 
-## 0.1.10 更新重点
+## 0.1.13 更新重点
 
+- 修复 Windows `ALT + SPACE` AI 编辑后的热键状态残留：普通空格不再被全局键盘钩子吞掉，只有真正按住 `ALT + SPACE` 时才进入 AI 编辑。
+- 底部状态栏已经放入主工作区网格，并按滚动条预留宽度收齐，右边界与上方主内容区视觉对齐。
+- Windows 桌面图标和安装器图标资源已重新生成，`ico/png` 各尺寸不再保留透明留白，桌面快捷方式图标会按正常软件大小显示。
+- `npm.cmd run build:win` 现在会先自动执行 `engine:build`，确保 Windows 安装包里的 `TypeUpAgent.exe` 一定包含最新 Python engine 代码。
+- `scripts/build-engine.ps1` 已对 PyInstaller 等原生命令做退出码检查；引擎打包失败会立刻中断，不会悄悄产出旧引擎安装包。
 - 桌面端首页改为软件式模块导航，不再把语音控制、账号订阅、用量趋势、配置和日志全部堆在同一个纵向网页里。
 - 左侧模块栏已收窄并优化选中态，整体视觉更接近原生桌面软件。
 - 用量趋势页固定工作区高度，趋势图缩小到无需下滑即可看全，外层白色背景板会完整兜住图表。
@@ -22,7 +27,7 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 - Windows 热键现在按通用 `ALT` 处理，左右 Alt、系统上报差异和 `WM_SYSKEY*` 的 Alt-down 上下文都会被同一套 `ALT + SPACE` 拦截逻辑覆盖，避免 AI 编辑时 `SPACE` 穿透到前台输入框并提前覆盖选区。
 - 新增语音记忆片段能力，可用语音保存、更新、删除和召回常用文本。
 - 打包后的 `TypeUpAgent.exe` 增加日志路径兜底，在用户目录权限异常时会退到临时目录写日志，避免启动时只因日志目录不可写而失败。
-- 本次发布前已验证 `npm.cmd run build`、`npm.cmd run engine:build`、`npm.cmd run build:win`、engine `unittest` 124 项和 Python 编译检查。
+- 本次发布前已验证 `npm.cmd run build:win`、engine `unittest` 126 项、Python 编译检查和 Electron 语法检查。
 
 ## 当前架构
 
@@ -311,18 +316,17 @@ macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双
 
 桌面端已经接入 `electron-updater`，更新源指向 GitHub Releases：`oxygen0827/typeup-win`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
 
-注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.1.10`。
+注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.1.13`。
 
 发布新版时需要：
 
 ```powershell
 cd C:\Users\Administrator\Desktop\ai_deploy\typeup-win
 npm.cmd version <next-version> --no-git-tag-version
-npm.cmd run engine:build
 npm.cmd run build:win
 ```
 
-然后在 GitHub 创建对应版本的 Release，例如 `v0.1.11`，上传 `release\` 目录里的安装包和更新元数据：
+`build:win` 会先自动重建内嵌 Python engine，再构建 React UI 和 NSIS 安装包。然后在 GitHub 创建对应版本的 Release，例如 `v0.1.13`，上传 `release\` 目录里的安装包和更新元数据：
 
 ```text
 TypeUp-Setup-<version>.exe
