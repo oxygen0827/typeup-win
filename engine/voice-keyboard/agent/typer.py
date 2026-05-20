@@ -1,5 +1,6 @@
 import platform
 import time
+from dataclasses import dataclass
 from pynput.keyboard import Controller, Key, KeyCode
 
 _kb = Controller()
@@ -105,6 +106,46 @@ _simulating: bool = False   # 程序自己发 Cmd+C/V 等按键时置 True，让
 _use_clipboard_mode: bool = False
 
 
+@dataclass(frozen=True)
+class ActiveApplication:
+    name: str = ""
+    bundle_id: str = ""
+    pid: int | None = None
+
+    @property
+    def label(self) -> str:
+        if self.name and self.bundle_id:
+            return f"{self.name} ({self.bundle_id})"
+        return self.name or self.bundle_id or "未知活动应用"
+
+
+@dataclass(frozen=True)
+class CaretTextWindow:
+    text: str
+    source: str = "caret"
+
+
+@dataclass(frozen=True)
+class ShortcutCatalogEntry:
+    name: str
+    source: str
+    risk: str = "normal"
+    application: str = ""
+    kind: str = "shortcut"
+
+
+@dataclass(frozen=True)
+class ShortcutPolicyDecision:
+    name: str
+    found: bool
+    allowed: bool
+    risk: str = "normal"
+    source: str = ""
+    application: str = ""
+    reason: str = ""
+    kind: str = "shortcut"
+
+
 def init(cfg: dict) -> None:
     """由 main.py 在启动时调用，根据 config.yaml 的 typing.method 配置打字方式。"""
     global _use_clipboard_mode
@@ -120,6 +161,25 @@ def is_erasing() -> bool:
 def is_simulating() -> bool:
     """供 push_to_talk 检查：当前按键事件是否由程序自身发出（如 Cmd+C）。"""
     return _simulating
+
+
+def has_focused_text_input() -> bool:
+    return True
+
+
+def confirm_paste_without_focused_input(text: str) -> bool:
+    return True
+
+
+def current_application() -> ActiveApplication:
+    if _OS == "Windows":
+        try:
+            _, pid = _foreground_window_and_pid()
+            name = _process_name(pid) or "Windows foreground window"
+            return ActiveApplication(name=name, pid=pid or None)
+        except Exception:
+            return ActiveApplication(name="Windows foreground window")
+    return ActiveApplication(name=_OS or "未知活动应用")
 
 
 # 语音指令 → 快捷键映射
@@ -168,6 +228,10 @@ def type_text(text: str) -> None:
             _type_via_sendinput(text)
     else:
         _type_via_xtest(text)  # Linux
+
+
+def paste_text(text: str) -> None:
+    replace_selection(text)
 
 
 def _type_via_quartz(text: str) -> None:
@@ -432,7 +496,11 @@ def get_selection() -> str:
         return ""
 
 
-def replace_selection(text: str) -> None:
+def get_caret_text_window(max_chars: int = 600) -> CaretTextWindow | None:
+    return None
+
+
+def replace_selection(text: str, original: str = "") -> None:
     """将 text 写入剪贴板并粘贴，替换当前选中内容（选区失效时在光标处插入）。"""
     global _simulating
     _set_clipboard(text)
@@ -455,6 +523,17 @@ def replace_selection(text: str) -> None:
     finally:
         _simulating = False
     time.sleep(0.03)
+
+
+def replace_text_window(original: str, replacement: str) -> bool:
+    return False
+
+
+def delete_selection(original: str = "") -> None:
+    if original:
+        replace_selection("", original=original)
+        return
+    _press_key(Key.backspace)
 
 
 def replace_current_line(new_text: str) -> None:
@@ -614,6 +693,38 @@ def register_shortcut(name: str, keys: list) -> None:
 
 def list_shortcuts() -> list[str]:
     return list(_SHORTCUTS.keys())
+
+
+def shortcut_catalog() -> list[ShortcutCatalogEntry]:
+    app = current_application().label
+    return [
+        ShortcutCatalogEntry(name=name, source="local", application=app)
+        for name in list_shortcuts()
+    ]
+
+
+def shortcut_policy_for_invocation(
+    name: str,
+    *,
+    in_atomic_stack: bool = False,
+) -> ShortcutPolicyDecision:
+    for entry in shortcut_catalog():
+        if entry.name == name:
+            return ShortcutPolicyDecision(
+                name=name,
+                found=True,
+                allowed=True,
+                risk=entry.risk,
+                source=entry.source,
+                application=entry.application,
+                kind=entry.kind,
+            )
+    return ShortcutPolicyDecision(
+        name=name,
+        found=False,
+        allowed=False,
+        reason="not_in_shortcut_catalog",
+    )
 
 
 def jump_to_end() -> None:

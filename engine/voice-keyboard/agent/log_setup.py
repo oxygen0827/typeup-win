@@ -19,6 +19,18 @@ def _log_path() -> Path:
     return Path.home() / ".voice-keyboard" / "agent.log"
 
 
+def _fallback_log_path() -> Path:
+    if sys.platform == "win32":
+        base = os.getenv("LOCALAPPDATA") or os.getenv("TEMP") or str(Path.home())
+        return Path(base) / "TypeUp" / "engine" / "agent.log"
+    return Path(os.getenv("TMPDIR") or "/tmp") / "typeup-agent.log"
+
+
+def _emergency_log_path() -> Path:
+    base = os.getenv("TEMP") or os.getenv("TMP") or os.getenv("TMPDIR") or str(Path.cwd())
+    return Path(base) / f"typeup-agent-{os.getpid()}.log"
+
+
 class _Tee:
     """同时写文件和原 stream，带行缓冲 flush。"""
     def __init__(self, *streams):
@@ -46,6 +58,22 @@ def setup() -> Path | None:
         return None
 
     path = _log_path()
+    fallback = _fallback_log_path()
+    last_error: Exception | None = None
+    for candidate in (path, fallback, _emergency_log_path()):
+        try:
+            _attach_log_file(candidate)
+            return candidate
+        except Exception as e:
+            last_error = e
+            path = candidate
+
+    # 日志失败不应阻断启动
+    print(f"[log] 日志重定向失败: {last_error}")
+    return None
+
+
+def _attach_log_file(path: Path) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         # 截断到 1MB 以下，防止无限增长
@@ -59,11 +87,10 @@ def setup() -> Path | None:
         os.environ["VK_LOG_PATH"] = str(path)
         label = "TypeUp Engine" if os.getenv("TYPEUP_DESKTOP") == "1" else "Voice Keyboard"
         print(f"\n[log] === {label} 启动 PID={os.getpid()} ===")
-        return path
-    except Exception as e:
-        # 日志失败不应阻断启动
-        print(f"[log] 日志重定向失败: {e}")
-        return None
+    except Exception:
+        if os.environ.get("VK_LOG_PATH") == str(path):
+            os.environ.pop("VK_LOG_PATH", None)
+        raise
 
 
 def log_path() -> Path:

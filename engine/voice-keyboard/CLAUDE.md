@@ -59,7 +59,10 @@ python -m agent.main --list-devices
 |------|------|
 | `agent/main.py` | 入口，串联所有模块 |
 | `agent/push_to_talk.py` | PTT 录音，pynput 键盘监听，双热键（ptt/ai） |
-| `agent/ai_handler.py` | AI 键统一处理：STT→意图分类→快捷键/编辑/写作/删除/撤回/聊天 |
+| `agent/ai_handler.py` | Instruction Mode 编排：STT→意图分类→Voice Text Operation 执行 |
+| `agent/ai_intent.py` | AI 指令意图分类与本地兜底规则 |
+| `agent/instruction_executor.py` | 执行快捷键、编辑、删除、写作、备忘等 Voice Text Operation |
+| `agent/input_environment.py` | Operation Window 与 Replacement Plan 本地校验，控制可编辑范围 |
 | `agent/stt.py` | STT 多 provider（xunfei/openai/aliyun/volcengine/zhipuai） |
 | `agent/typer.py` | 三平台打字（Unicode / 剪贴板），退格擦除，行选择，jump_to_end |
 | `agent/audio_monitor.py` | VAD 常开模式（PTT 模式不用此文件） |
@@ -139,81 +142,83 @@ pip install -r requirements.txt
 
 主要依赖：`sounddevice` `pynput` `websocket-client` `zhipuai` `requests` `pyyaml`
 
+## AI 编辑架构
+
+当前 AI 键是 Instruction Mode，不再把聊天回复写进输入框再定时删除。完整链路是：
+
+1. `AIHandler` 做 STT，并读取 Explicit Selection 与 TextBuffer 的 Tracked Segment。
+2. `ai_intent.classify_intent()` 先跑本地安全兜底，再让 LLM 返回结构化意图。
+3. `voice_text_operation.operation_from_intent()` 把意图转成单个 Voice Text Operation。
+4. `InstructionModeExecutor` 执行操作；编辑/删除会要求 LLM 生成 Replacement Plan。
+5. `InputEnvironment.apply_replacement_plan()` 在本地校验目标文本存在、唯一、置信度足够，再替换。
+
+关键规则：
+
+- Explicit Selection 优先于 Tracked Segment。
+- 无选区编辑默认作用于最近一次由 TypeUp 输出的 Tracked Segment。
+- 无选区的局部删除会失败关闭，提示用户先选中内容。
+- 聊天反馈只显示在状态/HUD，不再直接写入目标输入框。
+- 写作先等模型完成，再一次性插入，并做中文标点兜底。
+
 ## AI 键已知 Bug 及修复记录
 
 ### 1. AI 键按下时触发「录音太短，跳过」
 
 **现象**：每次按下 AI 键，日志里紧跟一条 `[ptt] 录音太短，跳过`。
 
-**原因**：`get_selection()` 在后台线程调用 `_copy_selection()`，后者通过 pynput Controller 发出 Cmd+C。pynput 监听线程收到这个合成按键事件，错误地把它识别为 AI 键按下，开启一次新录音，立刻又被 `get_selection()` 发出的 Cmd 抬起事件终止，产生极短录音。
+**原因**：`get_selection()` 会通过 pynput Controller 发出复制快捷键。pynput 监听线程收到合成按键事件后，可能误判为新的热键事件。
 
-**修复**：`typer.py` 加 `_simulating` 标志，`_copy_selection()` / `replace_selection()` 执行期间置 `True`。`push_to_talk._on_press` / `_on_release` 开头检查 `is_simulating()`，为真则直接返回。
-
----
-
-### 2. AI 回复的自动删除误删原文（竞态条件）
-
-**现象**：和 AI 聊天时，如果在定时器倒计时期间再次按 AI 键，整个输入框内容被清空。
-
-**原因**：`_auto_erase` 定时器在后台线程调用 `erase_last()`，与新一轮 AI 交互中 `_show()` 的 `erase_last()` + `type_text()` 并发执行，两个线程同时操作输入框导致互相干扰。
-
-**修复**：`ai_handler.py` 加 `_io_lock`，所有输入框 IO（`erase_last` + `type_text`）必须持锁才能执行。`_show()` 在同一个 `_io_lock` 块内先擦旧文字再打新文字，`_auto_erase` 同样持锁。
+**修复**：`typer.py` 用 `_simulating` 标志包住 `_copy_selection()` / `replace_selection()`。`push_to_talk._on_press` / `_on_release` 开头检查 `is_simulating()`，为真则直接返回。
 
 ---
 
-### 3. Command 键按住时 erase_last 触发 Cmd+Backspace 删整行
+### 2. 聊天回复误删或覆盖用户原文
 
-**现象**：按住 Command 键（AI 键）过程中，定时器触发 `erase_last`，macOS 收到的是 Cmd+Backspace（删到行首），而不是普通 Backspace。
+**现象**：旧版本会把聊天回复写进输入框，再用定时器擦掉；连续触发 AI 键时，可能误删输入框里的原文。
 
-**原因**：`CGEventCreateKeyboardEvent` 创建的事件会继承当前 HID 系统的修饰键状态。Command 键按住时，所有通过 Quartz 发出的按键都自动带 Command 修饰。
+**原因**：聊天反馈不属于目标输入内容，却和真实输入共用 `erase_last()` / `type_text()` 副作用。
 
-**修复**：两层防护：
-1. `typer._erase_via_quartz` 每次发 Backspace 事件后调用 `CGEventSetFlags(evt, 0)` 清空修饰键标志。
-2. `push_to_talk._on_press` 检测到 AI 键按下时立刻调用 `ai_handler.on_ai_key_down()`，取消定时器，确保 Command 按住期间定时器不会触发。松键后 `_run()` 开头统一处理旧 AI 文字的删除（此时 Command 已释放，安全）。
+**修复**：聊天路径现在只调用 `status_window.show_typing_message()` / `show_message()`，不再向目标输入框写入临时 AI 回复。
 
 ---
 
-### 4. AI 文字越积越多不删除
+### 3. 有选中文字时聊天/写作覆盖选中内容
 
-**现象**：连续多次按 AI 键聊天，前几次的 AI 回复一直留在输入框不消失。
+**现象**：鼠标选中了一段文字，用 AI 键聊天或写作时，系统输入会替换选中区域。
 
-**原因**：`on_ai_key_down` 取消了定时器，但没有记录哪些文字待删。`handle()` 松键后直接开新线程，没有清理旧 AI 文字。
+**原因**：`type_text` / 粘贴在有选区时会替换选中区域，这是操作系统标准行为。
 
-**修复**：`on_ai_key_down` 只取消定时器、不清 `_last_ai_output`。`_run()` 开头（Command 已松开、安全时）统一读取并擦除 `_last_ai_output`，再继续 STT 流程。
-
----
-
-### 5. 有选中文字时聊天/写作覆盖选中内容
-
-**现象**：鼠标选中了一段文字，用 AI 键聊天或写作时，`type_text` 把选中内容替换掉了。
-
-**原因**：`type_text` 在有选中文字时会替换选中区域（操作系统标准行为）。
-
-**修复**：`ai_handler._run()` 中，chat 和 write 意图检测到 `selected` 非空时，先调 `jump_to_end()`（macOS: Cmd+Down，Windows/Linux: Ctrl+End）取消选中并跳到末尾，再打入文字。
+**修复**：写作和备忘插入走 `InputEnvironment.insert_generated_text()`；有选区时先 `jump_to_end()` 取消选中，再插入生成文本。聊天只显示 HUD，不碰输入框。
 
 ---
 
-### 6. delete 意图说删除后仍无法删除
+### 4. delete 意图说删除后仍无法删除
 
-**现象**：`cursor_uncertain=True` 时 AI 提示「请先选中内容」，用户选中后再说「删除」，内容不消失。
+**现象**：用户选中内容后说「删除」，旧实现可能让 LLM 产出空字符串并尝试粘贴空文本，部分应用不会删除选区。
 
-**原因**：走 `edit` 意图时 LLM 被要求对「删除」指令返回空字符串，再调 `replace_selection("")`。部分应用粘贴空字符串并不等同于删除选中内容。
-
-**修复**：新增独立的 `delete` 意图，检测到后直接发 Backspace 键删除选中区域，不经过 LLM。
+**修复**：新增独立 `delete` Voice Text Operation。局部删除必须有 Explicit Selection；全文/清空类指令走 Operation Window 或全选删除兜底。
 
 ---
 
-### 7. 写作输出无标点，整块文字一次性输出
+### 5. 编辑目标过大或替错位置
 
-**现象**：AI 写作时不加任何标点，流式分句逻辑检测不到句子边界，整段内容等到流结束才一次性打出。
+**现象**：旧实现把整段上下文直接交给 LLM 改写，容易出现局部修改却替换整段、或目标不明确时仍强行改写。
 
-**原因**：GLM-4-Flash 在 system prompt 要求加标点时仍倾向于省略，尤其是在简洁输出模式下。
+**修复**：LLM 现在返回 `{target_text, replacement_text, confidence}` 的 Replacement Plan。`InputEnvironment` 会在本地确认 target 存在且唯一，低置信度或歧义目标不会写入。
 
-**修复**：
-1. System prompt 明确要求「必须使用完整标点，不得省略」。
-2. 在用户消息末尾追加「（必须加上完整的中文标点符号，包括逗号和句号，不得省略）」——模型对 user turn 的指令遵从率高于 system prompt。
-3. `_SENTENCE_END` 加入逗号（`，,；;`），逗号也触发分句输出。
-4. 加 `_MAX_PENDING=40` 兜底：超过 40 字没有任何标点强制输出，防止模型完全不加标点时卡住。
+---
+
+### 6. 写作输出无标点，整块文字一次性输出
+
+**现象**：AI 写作时不加任何标点，旧流式分句逻辑检测不到句子边界，整段内容等到流结束才一次性打出。
+
+**修复**：写作 prompt 明确要求完整中文标点；执行器收集完整生成结果后统一插入，并用 `punctuation.normalize_spoken_punctuation()` 和句末标点兜底，避免半句流式写入。
+
+---
+
+### 7. Windows 光标窗口能力限制
+
+**现状**：Windows 端 `typer.get_caret_text_window()` 暂时保守返回 `None`。因此「无选区且无 Tracked Segment」的局部编辑会提示先选中内容；最近一次 TypeUp 输出的文本仍可作为默认编辑目标。
 
 ---
 
