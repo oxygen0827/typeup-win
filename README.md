@@ -19,9 +19,10 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 - AI 编辑已迁移 macOS 版的指令模式：`ALT + SPACE` 不再把聊天回复直接打进输入框，而是把语音识别结果分类为改写、删除、生成、撤销、快捷键、记忆片段或普通问答。
 - AI 改写优先处理用户显式选中的文字；没有选区时只处理 TypeUp 刚输入并可追踪的片段，避免误改当前应用里其它内容。
 - 改写会先生成 `ReplacementPlan` 并在本地校验原文与替换范围；校验失败时不会盲目粘贴，降低误删、错替换风险。
+- Windows 热键现在按通用 `ALT` 处理，左右 Alt、系统上报差异和 `WM_SYSKEY*` 的 Alt-down 上下文都会被同一套 `ALT + SPACE` 拦截逻辑覆盖，避免 AI 编辑时 `SPACE` 穿透到前台输入框并提前覆盖选区。
 - 新增语音记忆片段能力，可用语音保存、更新、删除和召回常用文本。
 - 打包后的 `TypeUpAgent.exe` 增加日志路径兜底，在用户目录权限异常时会退到临时目录写日志，避免启动时只因日志目录不可写而失败。
-- 本次发布前已验证 `npm.cmd run build`、`npm.cmd run engine:build`、`npm.cmd run build:win`、engine `unittest` 117 项和 Python 编译检查。
+- 本次发布前已验证 `npm.cmd run build`、`npm.cmd run engine:build`、`npm.cmd run build:win`、engine `unittest` 124 项和 Python 编译检查。
 
 ## 当前架构
 
@@ -160,6 +161,7 @@ npm.cmd run start
 - 语音控制台的「启动 / 停止」按钮会按本地 engine 状态互斥高亮：运行时启动按钮为蓝色，停止或异常时停止按钮为蓝色，不需要再只看顶部状态标签判断当前状态。
 - 本地 server 会把启动日志、凭证同步日志和 STT 结果日志区分开：只有“识别中/解析指令”才进入 `transcribing`，避免启动后误停在“处理中”。
 - React UI 的快捷键提示会按当前平台和本地 engine 配置动态显示，避免 Windows 用户看到 macOS 默认的“右 Shift / 右 Option”提示。
+- Windows 默认热键配置为通用 `ALT` / `ALT + SPACE`，底层会兼容 `alt_l`、`alt_r` 和通用 `alt` 事件，减少不同键盘布局或应用场景下的热键穿透。
 - AI 编辑热键现在进入 Instruction Mode：语音会先经过 STT，再交给本地意图分类和后端 LLM 代理生成可验证的操作，而不是把模型聊天内容当正文输入。
 - 普通问答类 AI 回复只显示在状态框，不写入当前输入框；需要写入内容时必须被识别为生成、改写或记忆片段召回。
 - 删除类指令采用保守策略：有选区时可删除选区；“清空全文”等明确指令可执行整段删除；没有选区的局部删除不会猜测用户想删哪一段。

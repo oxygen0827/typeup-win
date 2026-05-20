@@ -31,11 +31,41 @@ except ImportError:
     _webrtcvad = None
 
 
+_KEY_ALIASES = {
+    "left_alt": "alt_l",
+    "right_alt": "alt_r",
+    "alt_gr": "alt_r",
+    "option": "alt",
+    "option_l": "alt_l",
+    "option_r": "alt_r",
+    "left_option": "alt_l",
+    "right_option": "alt_r",
+    "left_ctrl": "ctrl_l",
+    "right_ctrl": "ctrl_r",
+    "control": "ctrl",
+    "control_l": "ctrl_l",
+    "control_r": "ctrl_r",
+    "left_shift": "shift_l",
+    "right_shift": "shift_r",
+    "command": "cmd",
+    "command_l": "cmd_l",
+    "command_r": "cmd_r",
+    "left_cmd": "cmd_l",
+    "right_cmd": "cmd_r",
+}
+
+
+def _normalized_key_name(key_str: str) -> str:
+    key_name = str(key_str).strip().lower()
+    return _KEY_ALIASES.get(key_name, key_name)
+
+
 def _parse_key(key_str: str):
+    key_name = _normalized_key_name(key_str)
     try:
-        return getattr(kb.Key, key_str)
+        return getattr(kb.Key, key_name)
     except AttributeError:
-        return kb.KeyCode.from_char(key_str)
+        return kb.KeyCode.from_char(key_name)
 
 
 def _parse_keys(key_input) -> list:
@@ -62,13 +92,103 @@ def _parse_hotkeys(key_input) -> list[tuple]:
 def _hotkey_tokens(key_input) -> list[tuple[str, ...]]:
     if isinstance(key_input, list):
         if key_input and all(isinstance(item, list) for item in key_input):
-            return [tuple(str(k).strip() for k in item if str(k).strip()) for item in key_input]
-        return [tuple(str(k).strip() for k in key_input if str(k).strip())]
-    return [(str(key_input).strip(),)]
+            return [tuple(_normalized_key_name(k) for k in item if str(k).strip()) for item in key_input]
+        return [tuple(_normalized_key_name(k) for k in key_input if str(k).strip())]
+    return [(_normalized_key_name(key_input),)]
 
 
 def _format_hotkey(hotkey: tuple) -> str:
     return "+".join(str(k) for k in hotkey)
+
+
+_GENERIC_MODIFIER_ALIASES = {
+    "alt": {"alt", "alt_l", "alt_r"},
+    "ctrl": {"ctrl", "ctrl_l", "ctrl_r"},
+    "shift": {"shift", "shift_l", "shift_r"},
+    "cmd": {"cmd", "cmd_l", "cmd_r"},
+}
+
+_MODIFIER_TOKENS = {
+    token
+    for aliases in _GENERIC_MODIFIER_ALIASES.values()
+    for token in aliases
+}
+
+
+def _key_token(key) -> str:
+    if key in (kb.Key.alt, kb.Key.alt_l, kb.Key.alt_r):
+        return "alt" if key == kb.Key.alt else ("alt_l" if key == kb.Key.alt_l else "alt_r")
+    if key in (kb.Key.ctrl, kb.Key.ctrl_l, kb.Key.ctrl_r):
+        return "ctrl" if key == kb.Key.ctrl else ("ctrl_l" if key == kb.Key.ctrl_l else "ctrl_r")
+    if key in (kb.Key.shift, kb.Key.shift_r):
+        return "shift" if key == kb.Key.shift else "shift_r"
+    shift_l = getattr(kb.Key, "shift_l", None)
+    if shift_l is not None and key == shift_l:
+        return "shift_l"
+    if key in (kb.Key.cmd, kb.Key.cmd_r):
+        return "cmd" if key == kb.Key.cmd else "cmd_r"
+    cmd_l = getattr(kb.Key, "cmd_l", None)
+    if cmd_l is not None and key == cmd_l:
+        return "cmd_l"
+    if key == kb.Key.space:
+        return "space"
+    char = getattr(key, "char", None)
+    if char:
+        return str(char).lower()
+    return str(key)
+
+
+def _configured_token_matches_event(configured: str, event: str) -> bool:
+    configured = str(configured or "").strip().lower()
+    event = str(event or "").strip().lower()
+    if not configured or not event:
+        return False
+    aliases = _GENERIC_MODIFIER_ALIASES.get(configured)
+    if aliases is not None:
+        return event in aliases
+    return configured == event
+
+
+def _modifier_aliases_for_token(token: str) -> set[str]:
+    token = str(token or "").strip().lower()
+    for aliases in _GENERIC_MODIFIER_ALIASES.values():
+        if token in aliases:
+            return aliases
+    return {token} if token else set()
+
+
+def _key_matches(configured_key, event_key) -> bool:
+    return _configured_token_matches_event(
+        _key_token(configured_key),
+        _key_token(event_key),
+    )
+
+
+def _token_in_configured_hotkey(token: str, hotkey_tokens: tuple[str, ...]) -> bool:
+    return any(_configured_token_matches_event(configured, token) for configured in hotkey_tokens)
+
+
+def _configured_hotkey_satisfied(
+    hotkey_tokens: tuple[str, ...],
+    pressed_tokens: set[str],
+) -> bool:
+    return all(
+        any(_configured_token_matches_event(configured, pressed) for pressed in pressed_tokens)
+        for configured in hotkey_tokens
+    )
+
+
+def _configured_hotkey_has_other_pressed_token(
+    hotkey_tokens: tuple[str, ...],
+    current_token: str,
+    pressed_tokens: set[str],
+) -> bool:
+    for configured in hotkey_tokens:
+        if _configured_token_matches_event(configured, current_token):
+            continue
+        if any(_configured_token_matches_event(configured, pressed) for pressed in pressed_tokens):
+            return True
+    return False
 
 
 def _pcm_level(pcm: bytes) -> float:
@@ -125,6 +245,16 @@ def _win32_key_token(data) -> str:
     if 0x30 <= vk <= 0x39 or 0x41 <= vk <= 0x5A:
         return chr(vk).lower()
     return ""
+
+
+def _win32_alt_context_token(msg, data) -> str:
+    """Return the Alt token implied by WM_SYS* events when the Alt key event was missed."""
+    if msg not in {0x0104, 0x0105}:  # WM_SYSKEYDOWN / WM_SYSKEYUP
+        return ""
+    flags = int(data.flags)
+    if not flags & 0x20:  # LLKHF_ALTDOWN
+        return ""
+    return "alt"
 
 
 class PushToTalk:
@@ -311,19 +441,22 @@ class PushToTalk:
     def _on_release(self, key):
         if _typer.is_simulating():
             return
-        self._pressed_keys.discard(key)
+        self._discard_pressed_key(key)
 
         if self._pending_start is not None:
             _mode, hotkey, _timer = self._pending_start
-            if key in hotkey:
+            if self._key_in_hotkey(key, hotkey):
                 self._cancel_pending_start()
                 if _mode == "dictate":
                     self._handle_ptt_tap()
                 return
 
-        if self._active_trigger is None or key not in self._active_trigger:
+        if self._active_trigger is None or not self._key_in_hotkey(key, self._active_trigger):
             return
-        if any(trigger_key in self._pressed_keys for trigger_key in self._active_trigger):
+        if any(
+            self._pressed_has_key(trigger_key)
+            for trigger_key in self._active_trigger
+        ):
             return
         if self._active_key == "dictate":
             self._stop_recording(mode="dictate")
@@ -335,7 +468,7 @@ class PushToTalk:
 
     def _matching_hotkey(self, hotkeys: list[tuple]) -> tuple | None:
         for hotkey in sorted(hotkeys, key=len, reverse=True):
-            if all(k in self._pressed_keys for k in hotkey):
+            if all(self._pressed_has_key(k) for k in hotkey):
                 return hotkey
         return None
 
@@ -349,11 +482,30 @@ class PushToTalk:
         return None
 
     def _has_combo_extension(self, hotkey: tuple) -> bool:
-        base = set(hotkey)
         for candidate in self._ai_hotkeys + self._edit_hotkeys:
-            if len(candidate) > len(hotkey) and base.issubset(set(candidate)):
+            if len(candidate) > len(hotkey) and all(
+                any(_key_matches(candidate_key, base_key) for candidate_key in candidate)
+                for base_key in hotkey
+            ):
                 return True
         return False
+
+    def _pressed_has_key(self, configured_key) -> bool:
+        return any(_key_matches(configured_key, pressed_key) for pressed_key in self._pressed_keys)
+
+    def _key_in_hotkey(self, event_key, hotkey: tuple) -> bool:
+        return any(_key_matches(configured_key, event_key) for configured_key in hotkey)
+
+    def _discard_pressed_key(self, event_key) -> None:
+        event_token = _key_token(event_key)
+        aliases = _modifier_aliases_for_token(event_token)
+        if aliases & _MODIFIER_TOKENS:
+            self._pressed_keys = {
+                pressed_key for pressed_key in self._pressed_keys
+                if _key_token(pressed_key) not in aliases
+            }
+            return
+        self._pressed_keys.discard(event_key)
 
     def _schedule_pending_start(self, mode: str, hotkey: tuple):
         self._cancel_pending_start()
@@ -367,7 +519,7 @@ class PushToTalk:
             return
         mode, hotkey, _timer = self._pending_start
         self._pending_start = None
-        if not all(k in self._pressed_keys for k in hotkey):
+        if not all(self._pressed_has_key(k) for k in hotkey):
             return
         combo_match = self._matching_non_ptt_hotkey()
         if combo_match is not None:
@@ -448,16 +600,25 @@ class PushToTalk:
         if not is_press and not is_release:
             return True
 
+        implied_alt_token = _win32_alt_context_token(msg, data)
         candidate = set(self._filter_pressed_tokens)
+        if implied_alt_token and token != implied_alt_token:
+            candidate.add(implied_alt_token)
         if is_press:
             candidate.add(token)
 
         suppress = self._should_suppress_token(token, candidate)
 
         if is_press:
+            if implied_alt_token and token != implied_alt_token:
+                self._filter_pressed_tokens.add(implied_alt_token)
+                if suppress:
+                    self._on_press(_parse_key(implied_alt_token))
             self._filter_pressed_tokens.add(token)
         else:
             self._filter_pressed_tokens.discard(token)
+            if implied_alt_token and token == implied_alt_token:
+                self._filter_pressed_tokens.discard(implied_alt_token)
 
         if not suppress:
             return True
@@ -468,26 +629,19 @@ class PushToTalk:
         else:
             self._on_release(key)
         self._listener.suppress_event()
-        return True
+        return False
 
     def _should_suppress_token(self, token: str, pressed_tokens: set[str]) -> bool:
-        modifier_tokens = {
-            "alt", "alt_l", "alt_r",
-            "ctrl", "ctrl_l", "ctrl_r",
-            "shift", "shift_l", "shift_r",
-            "cmd", "cmd_l", "cmd_r",
-        }
         for hotkey in self._reserved_hotkey_tokens:
-            hotkey_set = set(hotkey)
-            if token not in hotkey_set:
+            if not _token_in_configured_hotkey(token, hotkey):
                 continue
-            if len(hotkey_set) == 1:
+            if len(set(hotkey)) == 1:
                 return True
-            if token in modifier_tokens:
+            if token in _MODIFIER_TOKENS:
                 return True
-            if hotkey_set.issubset(pressed_tokens):
+            if _configured_hotkey_satisfied(hotkey, pressed_tokens):
                 return True
-            if hotkey_set - {token} & pressed_tokens:
+            if _configured_hotkey_has_other_pressed_token(hotkey, token, pressed_tokens):
                 return True
         return False
 

@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pynput import keyboard as kb
 
-from agent.push_to_talk import PushToTalk
+from agent.push_to_talk import PushToTalk, _parse_key
 
 
 class _StatusRecorder:
@@ -33,6 +33,20 @@ class _FakeVad:
 
     def is_speech(self, _frame, _sample_rate):
         return self.speech
+
+
+class _FakeWin32KeyData:
+    def __init__(self, vk_code: int, flags: int = 0):
+        self.vkCode = vk_code
+        self.flags = flags
+
+
+class _SuppressRecorder:
+    def __init__(self):
+        self.count = 0
+
+    def suppress_event(self):
+        self.count += 1
 
 
 class PushToTalkStatusTests(unittest.TestCase):
@@ -127,6 +141,118 @@ class PushToTalkStatusTests(unittest.TestCase):
         ptt._on_release(kb.Key.alt_l)
         self.assertEqual(stopped, ["ai"])
         self.assertIsNone(ptt._active_trigger)
+
+    def test_generic_alt_combo_suppresses_space_when_left_alt_is_down(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+        )
+
+        self.assertTrue(
+            ptt._should_suppress_token("space", {"alt_l", "space"})
+        )
+
+    def test_generic_alt_combo_matches_left_alt_lifecycle(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+        )
+        started = []
+        stopped = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+        ptt._stop_recording = lambda *, mode: stopped.append(mode)
+
+        ptt._on_press(kb.Key.alt_l)
+        ptt._on_press(kb.Key.space)
+
+        self.assertEqual(started, ["ai"])
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt, kb.Key.space))
+
+        ptt._on_release(kb.Key.space)
+        self.assertEqual(stopped, [])
+
+        ptt._on_release(kb.Key.alt_l)
+        self.assertEqual(stopped, ["ai"])
+        self.assertIsNone(ptt._active_trigger)
+
+    def test_generic_alt_pending_dictation_starts_with_left_alt_still_down(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+        )
+        started = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+        ptt._pending_start = ("dictate", (kb.Key.alt,), object())
+        ptt._pressed_keys = {kb.Key.alt_l}
+
+        ptt._finish_pending_start()
+
+        self.assertEqual(started, ["dictate"])
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt,))
+
+    def test_documented_alt_alias_combo_suppresses_space_when_left_alt_is_down(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="left_alt",
+            ai_key=["left_alt", "space"],
+        )
+
+        self.assertTrue(
+            ptt._should_suppress_token("space", {"alt_l", "space"})
+        )
+
+    def test_win32_space_with_alt_context_is_suppressed_before_focused_input(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+        )
+        listener = _SuppressRecorder()
+        ptt._listener = listener
+        started = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+
+        result = ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0x20, 0x20))
+
+        self.assertFalse(result)
+        self.assertEqual(listener.count, 1)
+        self.assertEqual(started, ["ai"])
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt, kb.Key.space))
+
+    def test_win32_synthetic_alt_context_releases_on_physical_alt_up(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+        )
+        listener = _SuppressRecorder()
+        ptt._listener = listener
+        stopped = []
+        ptt._start_recording = lambda: None
+        ptt._stop_recording = lambda *, mode: stopped.append(mode)
+
+        ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0x20, 0x20))
+        ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0x20, 0x20))
+        ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0xA5, 0x01))
+
+        self.assertEqual(stopped, ["ai"])
+        self.assertIsNone(ptt._active_trigger)
+
+    def test_hotkey_parser_accepts_documented_key_aliases(self):
+        self.assertEqual(_parse_key("right_alt"), kb.Key.alt_r)
+        self.assertEqual(_parse_key("left_alt"), kb.Key.alt_l)
+        self.assertEqual(_parse_key("right_ctrl"), kb.Key.ctrl_r)
+        self.assertEqual(_parse_key("left_ctrl"), kb.Key.ctrl_l)
+        self.assertEqual(_parse_key("alt_gr"), kb.Key.alt_r)
 
     def test_release_after_mid_sentence_outputs_completion_marker(self):
         status = _StatusRecorder()

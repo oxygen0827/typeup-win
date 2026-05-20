@@ -1439,7 +1439,7 @@ function defaultAudioHotkeys(platform = "") {
   if (platform === "darwin") {
     return { pttKey: "shift_r", aiKey: "alt_r" };
   }
-  return { pttKey: "alt_l", aiKey: ["alt_l", "space"] };
+  return { pttKey: "alt", aiKey: ["alt", "space"] };
 }
 
 function withDynamicStatusCopy(meta, state, lang, pttKey, platform = "") {
@@ -1465,6 +1465,7 @@ function formatHotkey(value, lang, platform = "") {
   return tokens
     .map((token) => {
       const text = String(token || "").toLowerCase();
+      if (text === "alt") return "ALT";
       if (text === "alt_l" || text === "left_alt") return platform === "darwin" ? (lang === "zh" ? "左 OPTION" : "LEFT OPTION") : "ALT";
       if (text === "alt_r" || text === "right_alt") return platform === "darwin" ? (lang === "zh" ? "右 OPTION" : "RIGHT OPTION") : "RIGHT ALT";
       if (text === "ctrl_l" || text === "ctrl_r" || text === "right_ctrl" || text === "left_ctrl") return "CTRL";

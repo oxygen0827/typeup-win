@@ -63,17 +63,17 @@ audio:
 
   # 听写热键（按住说话，原样转文字）
   # macOS:   shift_r              右 Shift（无系统冲突；避开 Ctrl+Space 输入法切换）
-  # Windows: [alt_r]               右 Alt（或 alt_gr，中文键盘）
+  # Windows: alt                   通用 Alt，兼容 alt_l / alt_r / alt_gr
   # Linux:   [alt_r]               右 Alt
   # 不推荐 ctrl：会和 Ctrl+Space（macOS 切换输入法）、Ctrl+A/E/K（编辑光标）冲突
-  ptt_key: shift_r
+  ptt_key: alt
 
   # AI 键（快捷键/编辑/写作/撤回/聊天）
   # macOS:   alt_r                 右 Option（不和系统 Cmd 快捷键冲突）
-  # Windows: [ctrl_r]               右 Ctrl（左 Ctrl 占用太多系统快捷键）
+  # Windows: [alt, space]           Alt + Space；Space 会被钩子吞掉，避免覆盖选区
   # Linux:   [ctrl_r]               右 Ctrl
   # 不推荐 cmd / cmd_r：按住的瞬间所有 Cmd+X 系统快捷键都会被劫持
-  ai_key: alt_r
+  ai_key: [alt, space]
 
   device: auto              # auto = 自动查找 ESP32 UAC 麦克风，找不到用系统默认
                             # 其他示例：

@@ -292,7 +292,7 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
             memo_store = MemoStore()
             ai_handler = AIHandler(ai_stt, editor, buf, memo_store=memo_store,
                                    status_window=status_window, history=history)
-            ai_key_name = audio_cfg.get("ai_key", ["alt_l", "space"])
+            ai_key_name = audio_cfg.get("ai_key", ["alt", "space"])
             existing = memo_store.keys()
             if existing:
                 print(f"[memo] 已加载 {len(existing)} 条备忘录: {'、'.join(existing)}")
@@ -317,8 +317,8 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
             on_utterance=on_utterance,
             on_ai_utterance=on_ai,
             on_ai_key_down=on_ai_key_dwn,
-            ptt_key=audio_cfg.get("ptt_key", "alt_l"),
-            ai_key=audio_cfg.get("ai_key", ["alt_l", "space"]),
+            ptt_key=audio_cfg.get("ptt_key", "alt"),
+            ai_key=audio_cfg.get("ai_key", ["alt", "space"]),
             device=device,
             status_window=status_window,
             kbd_monitor=kbd_monitor,

@@ -7,11 +7,11 @@ const USER_DIR = path.join(resolveAppDataDir(), "TypeUp", "engine");
 const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
 const TYPEUP_DIR = path.join(resolveAppDataDir(), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");
-const CONFIG_VERSION = 3;
+const CONFIG_VERSION = 4;
 const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
 const DEFAULT_AUDIO_HOTKEYS = process.platform === "darwin"
   ? { ptt_key: "shift_r", ai_key: "alt_r" }
-  : { ptt_key: "alt_l", ai_key: ["alt_l", "space"] };
+  : { ptt_key: "alt", ai_key: ["alt", "space"] };
 
 const DEFAULT_CONFIG = {
   stt: {

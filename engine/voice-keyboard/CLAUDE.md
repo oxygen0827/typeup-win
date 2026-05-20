@@ -94,8 +94,8 @@ typing:
 
 audio:
   mode: ptt                 # ptt=按键触发 / vad=自动检测
-  ptt_key: shift_r          # macOS 右 Shift（推荐，避开 Ctrl+Space 输入法切换）；Windows/Linux alt_r
-  ai_key: alt_r             # macOS 右 Option（推荐，不和 Cmd 系统快捷键冲突）；Windows/Linux ctrl_r
+  ptt_key: alt              # Windows 桌面端默认 ALT，兼容 alt_l / alt_r / alt_gr
+  ai_key: [alt, space]      # Windows 桌面端默认 ALT + SPACE，SPACE 会被钩子吞掉避免覆盖选区
   device: auto              # 麦克风序号，auto=自动
 ```
 
@@ -119,7 +119,7 @@ audio:
 ## 已知约束
 
 - **VAD 模式**：依赖 `webrtcvad`，Python 3.13+ 暂无预编译包，请用 PTT 模式
-- **Windows 中文键盘**：右 Alt = `alt_gr`，右 Ctrl = `ctrl_r`（非 `right_alt` / `right_ctrl`）
+- **Windows 中文键盘**：右 Alt 可能上报为 `alt_gr`；热键解析已兼容 `left_alt` / `right_alt` / `alt_l` / `alt_r` / `alt_gr` 等别名
 - **Volcengine**：`/api/v1/asr` 端点不支持 `volcengine_input_common` 集群，若用火山引擎需换 WebSocket v2 协议
 - **GLM-4-Voice**：是对话模型，不适合做 STT，会用自己的措辞回复
 

@@ -1,5 +1,15 @@
 # Known Issues
 
+## 2026-05-20
+
+### 选中文字后按 ALT + SPACE 会先用空格覆盖选区
+
+- 状态：已修复
+- 复现：在任意输入框中选中一段文字，按住 `ALT + SPACE` 触发 AI 编辑。
+- 现象：AI 处理完成后会输出替换结果，但在说话期间选中的文字会先消失或变成空格。
+- 原因：Windows 热键配置和界面文案都显示为 `ALT`，但底层钩子实际可能收到 `alt_l`、`alt_r`、通用 `alt`，或者只在 `SPACE` 的 `WM_SYSKEY*` 事件 flags 中携带 Alt-down 上下文。旧逻辑按字面匹配热键，且没有把这个 Alt 上下文合成进候选组合键，导致某些路径里 `SPACE` 没被完整吞掉，前台输入框会把选区覆盖成空格。
+- 修复：`engine/voice-keyboard/agent/push_to_talk.py` 增加修饰键别名匹配，`alt`/`ctrl`/`shift`/`cmd` 可匹配左右键事件；Windows 默认托管配置升级为 `ALT` / `ALT + SPACE` 的通用形式；`win32_event_filter` 会从 `WM_SYSKEY*` 的 Alt-down flags 合成通用 Alt 状态并显式返回 `False` 阻止事件继续传给前台。回归测试已覆盖选区不被 `SPACE` 穿透破坏、合成 Alt 释放、听写延迟启动等路径。
+
 ## 2026-05-15
 
 ### ALT + SPACE AI 编辑在微信对话框中会输入空格
