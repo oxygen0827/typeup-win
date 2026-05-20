@@ -6,11 +6,13 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前测试版安装包为 `TypeUp-Setup-0.1.13.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前测试版安装包为 `TypeUp-Setup-0.1.14.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
 
-## 0.1.13 更新重点
+## 0.1.14 更新重点
 
+- 修复部分 Windows 环境检查更新时 GitHub Release 下载链路返回 `ERR_CONNECTION_RESET` 的问题：更新器会在官方 `electron-updater` 失败后自动走 GitHub Releases API 兜底判断最新版本。
+- 兜底下载会优先使用系统 PowerShell 网络栈，并校验安装包大小和 GitHub API 返回的 sha256 digest，避免下载链路不稳定时误装损坏文件。
 - 修复 Windows `ALT + SPACE` AI 编辑后的热键状态残留：普通空格不再被全局键盘钩子吞掉，只有真正按住 `ALT + SPACE` 时才进入 AI 编辑。
 - 底部状态栏已经放入主工作区网格，并按滚动条预留宽度收齐，右边界与上方主内容区视觉对齐。
 - Windows 桌面图标和安装器图标资源已重新生成，`ico/png` 各尺寸不再保留透明留白，桌面快捷方式图标会按正常软件大小显示。
