@@ -910,15 +910,15 @@ export default function App() {
               ) : null}
             </div>
           </div>
-        </section>
-      </div>
 
-      <div className={`status-dock ${statusMeta.tone}`}>
-        <span className="dock-dot" />
-        <div>
-          <strong>{text.statusDockReady}</strong>
-          <small>{statusDockHint || text.statusDockHint}</small>
-        </div>
+          <div className={`status-dock ${statusMeta.tone}`}>
+            <span className="dock-dot" />
+            <div>
+              <strong>{text.statusDockReady}</strong>
+              <small>{statusDockHint || text.statusDockHint}</small>
+            </div>
+          </div>
+        </section>
       </div>
     </main>
   );

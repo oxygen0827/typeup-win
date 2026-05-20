@@ -3,6 +3,7 @@ import unittest
 from contextlib import redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -246,6 +247,50 @@ class PushToTalkStatusTests(unittest.TestCase):
 
         self.assertEqual(stopped, ["ai"])
         self.assertIsNone(ptt._active_trigger)
+
+    def test_win32_plain_space_is_not_suppressed_after_ai_hotkey_releases(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+        )
+        listener = _SuppressRecorder()
+        ptt._listener = listener
+        ptt._start_recording = lambda: None
+        ptt._stop_recording = lambda *, mode: None
+
+        with mock.patch("agent.push_to_talk._win32_async_key_down", return_value=False):
+            ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0x20, 0x20))
+            ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0x20, 0x20))
+            ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0xA5, 0x01))
+
+            count_after_hotkey = listener.count
+            result = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0x20, 0x00))
+
+        self.assertTrue(result)
+        self.assertEqual(listener.count, count_after_hotkey)
+        self.assertNotIn("alt", ptt._filter_pressed_tokens)
+
+    def test_win32_plain_space_clears_stale_alt_before_listener_callback(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+        )
+        listener = _SuppressRecorder()
+        ptt._listener = listener
+        ptt._pressed_keys = {kb.Key.alt}
+        ptt._filter_pressed_tokens = {"alt"}
+
+        with mock.patch("agent.push_to_talk._win32_async_key_down", return_value=False):
+            result = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0x20, 0x00))
+
+        self.assertTrue(result)
+        self.assertEqual(listener.count, 0)
+        self.assertEqual(ptt._pressed_keys, set())
+        self.assertEqual(ptt._filter_pressed_tokens, {"space"})
 
     def test_hotkey_parser_accepts_documented_key_aliases(self):
         self.assertEqual(_parse_key("right_alt"), kb.Key.alt_r)

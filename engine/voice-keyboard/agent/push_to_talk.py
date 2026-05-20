@@ -157,6 +157,14 @@ def _modifier_aliases_for_token(token: str) -> set[str]:
     return {token} if token else set()
 
 
+def _discard_token_aliases(tokens: set[str], token: str) -> None:
+    aliases = _modifier_aliases_for_token(token)
+    if aliases & _MODIFIER_TOKENS:
+        tokens.difference_update(aliases)
+        return
+    tokens.discard(token)
+
+
 def _key_matches(configured_key, event_key) -> bool:
     return _configured_token_matches_event(
         _key_token(configured_key),
@@ -255,6 +263,28 @@ def _win32_alt_context_token(msg, data) -> str:
     if not flags & 0x20:  # LLKHF_ALTDOWN
         return ""
     return "alt"
+
+
+def _win32_async_key_down(vk: int) -> bool:
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+
+        return bool(ctypes.windll.user32.GetAsyncKeyState(vk) & 0x8000)
+    except Exception:
+        return False
+
+
+def _win32_modifier_token_is_down(token: str) -> bool:
+    normalized = _normalized_key_name(token)
+    if normalized.startswith("alt"):
+        return _win32_async_key_down(0x12)
+    if normalized.startswith("ctrl"):
+        return _win32_async_key_down(0x11)
+    if normalized.startswith("shift"):
+        return _win32_async_key_down(0x10)
+    return False
 
 
 class PushToTalk:
@@ -507,6 +537,16 @@ class PushToTalk:
             return
         self._pressed_keys.discard(event_key)
 
+    def _discard_pressed_token(self, token: str) -> None:
+        self._discard_pressed_key(_parse_key(token))
+
+    def _clear_stale_win32_modifiers(self) -> None:
+        for token in ("alt", "ctrl", "shift"):
+            if _win32_modifier_token_is_down(token):
+                continue
+            _discard_token_aliases(self._filter_pressed_tokens, token)
+            self._discard_pressed_token(token)
+
     def _schedule_pending_start(self, mode: str, hotkey: tuple):
         self._cancel_pending_start()
         timer = threading.Timer(self._chord_delay, self._finish_pending_start)
@@ -601,6 +641,9 @@ class PushToTalk:
             return True
 
         implied_alt_token = _win32_alt_context_token(msg, data)
+        if is_press and not implied_alt_token:
+            self._clear_stale_win32_modifiers()
+
         candidate = set(self._filter_pressed_tokens)
         if implied_alt_token and token != implied_alt_token:
             candidate.add(implied_alt_token)
@@ -616,9 +659,9 @@ class PushToTalk:
                     self._on_press(_parse_key(implied_alt_token))
             self._filter_pressed_tokens.add(token)
         else:
-            self._filter_pressed_tokens.discard(token)
+            _discard_token_aliases(self._filter_pressed_tokens, token)
             if implied_alt_token and token == implied_alt_token:
-                self._filter_pressed_tokens.discard(implied_alt_token)
+                _discard_token_aliases(self._filter_pressed_tokens, implied_alt_token)
 
         if not suppress:
             return True
