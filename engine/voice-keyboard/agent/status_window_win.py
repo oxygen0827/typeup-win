@@ -43,6 +43,14 @@ _AC_SRC_ALPHA = 1
 _BOTTOM_MARGIN = 18
 _CORNER_RADIUS = 30
 _WINDOW_ALPHA = 246
+_STATUS_HEIGHT = 58
+_PREVIEW_GAP = 10
+_PREVIEW_WIDTH = 720
+_PREVIEW_MIN_HEIGHT = 118
+_PREVIEW_MAX_HEIGHT = 286
+_PREVIEW_HORIZONTAL_PADDING = 18
+_PREVIEW_BODY_CHARS_PER_LINE = 34
+_PREVIEW_BODY_LINE_HEIGHT = 22
 
 _DT_SINGLELINE = 0x00000020
 _DT_VCENTER = 0x00000004
@@ -51,6 +59,7 @@ _DT_WORDBREAK = 0x00000010
 _DT_EDITCONTROL = 0x00002000
 _TRANSPARENT = 1
 _PS_SOLID = 0
+_RGN_OR = 2
 
 _BG = 0xFFFFFF
 _PAGE_BG = 0xF8F5F1
@@ -105,6 +114,8 @@ _gdi32.CreateRoundRectRgn.argtypes = [
     ctypes.c_int,
 ]
 _gdi32.CreateRoundRectRgn.restype = HRGN
+_gdi32.CombineRgn.argtypes = [HRGN, HRGN, HRGN, ctypes.c_int]
+_gdi32.CombineRgn.restype = ctypes.c_int
 _gdi32.CreateSolidBrush.argtypes = [ctypes.c_uint]
 _gdi32.CreateSolidBrush.restype = HBRUSH
 _gdi32.CreatePen.argtypes = [ctypes.c_int, ctypes.c_int, ctypes.c_uint]
@@ -289,6 +300,17 @@ def _compact_preview_text(text: str, limit: int) -> str:
     return "..." + clean[-limit:]
 
 
+def _estimate_preview_body_lines(text: str, chars_per_line: int = _PREVIEW_BODY_CHARS_PER_LINE) -> int:
+    clean = str(text or "").strip()
+    if not clean:
+        return 1
+    lines = 0
+    for part in clean.splitlines() or [clean]:
+        length = max(1, len(part.strip()))
+        lines += max(1, math.ceil(length / max(1, chars_per_line)))
+    return max(1, lines)
+
+
 def _premultiply(value: int, alpha: int) -> int:
     return int((max(0, min(255, value)) * max(0, min(255, alpha)) + 127) / 255)
 
@@ -337,7 +359,7 @@ class StatusWindow:
         self._window_size: tuple[int, int] | None = None
         self._use_per_pixel_alpha = True
         self._fallback_alpha_applied = False
-        self._alpha_mask_cache: dict[tuple[int, int], bytes] = {}
+        self._alpha_mask_cache: dict[tuple, bytes] = {}
         self._wndproc = WNDPROC(self._handle_message)
         self._hinst = _kernel32.GetModuleHandleW(None)
         self._class_name = "VoiceKeyboardStatusWindow"
@@ -615,9 +637,9 @@ class StatusWindow:
 
         preview_width = self._preview_width()
         width = max(preview_width, max(380, min(760, max(title_width, sub_width) + 154)))
-        height = 58
+        height = _STATUS_HEIGHT
         if self._preview_body:
-            height += self._preview_height()
+            height += _PREVIEW_GAP + self._preview_height()
         work = RECT()
         if _user32.SystemParametersInfoW(_SPI_GETWORKAREA, 0, ctypes.byref(work), 0):
             x = int(work.left + ((work.right - work.left - width) / 2))
@@ -630,7 +652,7 @@ class StatusWindow:
         if not _user32.SetWindowPos(self._hwnd, _HWND_TOPMOST, x, y, width, height, _SWP_NOACTIVATE):
             raise ctypes.WinError()
         if not self._use_per_pixel_alpha and self._window_size != (width, height):
-            region = _gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, _CORNER_RADIUS, _CORNER_RADIUS)
+            region = self._window_region(width, height)
             if region:
                 _user32.SetWindowRgn(self._hwnd, region, False)
                 self._window_size = (width, height)
@@ -638,10 +660,46 @@ class StatusWindow:
             self._window_size = (width, height)
 
     def _preview_width(self) -> int:
-        return 720 if self._preview_body else 0
+        return _PREVIEW_WIDTH if self._preview_body else 0
 
     def _preview_height(self) -> int:
-        return 168 if len(self._preview_body) > 80 else 136
+        lines = _estimate_preview_body_lines(self._preview_body)
+        content_height = 74 + lines * _PREVIEW_BODY_LINE_HEIGHT
+        return max(_PREVIEW_MIN_HEIGHT, min(_PREVIEW_MAX_HEIGHT, content_height))
+
+    def _window_region(self, width: int, height: int) -> HRGN:
+        if not self._preview_body:
+            return _gdi32.CreateRoundRectRgn(0, 0, width + 1, height + 1, _CORNER_RADIUS, _CORNER_RADIUS)
+        preview = self._preview_rect(width)
+        status = self._status_rect(width, height)
+        preview_region = _gdi32.CreateRoundRectRgn(
+            preview.left,
+            preview.top,
+            preview.right + 1,
+            preview.bottom + 1,
+            _CORNER_RADIUS,
+            _CORNER_RADIUS,
+        )
+        status_region = _gdi32.CreateRoundRectRgn(
+            status.left,
+            status.top,
+            status.right + 1,
+            status.bottom + 1,
+            _CORNER_RADIUS,
+            _CORNER_RADIUS,
+        )
+        if not preview_region:
+            return status_region
+        if not status_region:
+            return preview_region
+        combined = _gdi32.CreateRoundRectRgn(0, 0, 1, 1, 1, 1)
+        if not combined:
+            _gdi32.DeleteObject(status_region)
+            return preview_region
+        _gdi32.CombineRgn(combined, preview_region, status_region, _RGN_OR)
+        _gdi32.DeleteObject(preview_region)
+        _gdi32.DeleteObject(status_region)
+        return combined
 
     def _measure_text(self, hdc, text: str, size: int, weight: int) -> int:
         if not text:
@@ -708,8 +766,9 @@ class StatusWindow:
             self._fill_rounded_background(bits, width, height)
             self._paint_preview(memdc, RECT(0, 0, width, height))
             bar_rect = self._status_rect(width, height)
-            self._paint_text(memdc, bar_rect)
+            self._paint_panel(memdc, bar_rect)
             self._paint_accent(memdc, bar_rect)
+            self._paint_text(memdc, bar_rect)
             self._apply_alpha_mask_and_premultiply(bits, width, height)
 
             destination = POINT(window_rect.left, window_rect.top)
@@ -744,10 +803,10 @@ class StatusWindow:
         return _gdi32.CreateDIBSection(hdc, ctypes.byref(info), 0, ctypes.byref(bits), None, 0)
 
     def _fill_rounded_background(self, bits, width: int, height: int) -> None:
-        red, green, blue = _rgb_parts(_PAGE_BG if self._preview_body else _BG)
+        red, green, blue = _rgb_parts(_CLASS_BG)
         buffer_type = ctypes.c_ubyte * (width * height * 4)
         pixels = buffer_type.from_address(bits.value)
-        mask = self._rounded_alpha_mask(width, height)
+        mask = self._alpha_mask(width, height)
         idx = 0
         for alpha in mask:
             pixels[idx] = blue
@@ -759,7 +818,7 @@ class StatusWindow:
     def _apply_alpha_mask_and_premultiply(self, bits, width: int, height: int) -> None:
         buffer_type = ctypes.c_ubyte * (width * height * 4)
         pixels = buffer_type.from_address(bits.value)
-        mask = self._rounded_alpha_mask(width, height)
+        mask = self._alpha_mask(width, height)
         idx = 0
         for alpha in mask:
             pixels[idx] = _premultiply(pixels[idx], alpha)
@@ -796,6 +855,41 @@ class StatusWindow:
         self._alpha_mask_cache[key] = result
         return result
 
+    def _alpha_mask(self, width: int, height: int) -> bytes:
+        if not self._preview_body:
+            return self._rounded_alpha_mask(width, height)
+        key = ("split", width, height, self._preview_height())
+        cached = self._alpha_mask_cache.get(key)
+        if cached is not None:
+            return cached
+
+        radius = max(1.0, _CORNER_RADIUS / 2.0)
+        sample_count = 4
+        step = 1.0 / sample_count
+        preview_rect = self._preview_rect(width)
+        status_rect = self._status_rect(width, height)
+        mask = bytearray(width * height)
+        pos = 0
+        for y in range(height):
+            for x in range(width):
+                inside = 0
+                for sy in range(sample_count):
+                    py = y + (sy + 0.5) * step
+                    for sx in range(sample_count):
+                        px = x + (sx + 0.5) * step
+                        if (
+                            self._point_inside_rect_round_rect(px, py, preview_rect, radius)
+                            or self._point_inside_rect_round_rect(px, py, status_rect, radius)
+                        ):
+                            inside += 1
+                mask[pos] = int(_WINDOW_ALPHA * inside / (sample_count * sample_count))
+                pos += 1
+        result = bytes(mask)
+        if len(self._alpha_mask_cache) > 8:
+            self._alpha_mask_cache.clear()
+        self._alpha_mask_cache[key] = result
+        return result
+
     @staticmethod
     def _point_inside_round_rect(x: float, y: float, width: int, height: int, radius: float) -> bool:
         if radius <= x <= width - radius:
@@ -806,39 +900,58 @@ class StatusWindow:
         cy = radius if y < radius else height - radius
         return math.hypot(x - cx, y - cy) <= radius
 
+    @staticmethod
+    def _point_inside_rect_round_rect(x: float, y: float, rect: RECT, radius: float) -> bool:
+        width = max(0, rect.right - rect.left)
+        height = max(0, rect.bottom - rect.top)
+        if width <= 0 or height <= 0:
+            return False
+        return StatusWindow._point_inside_round_rect(x - rect.left, y - rect.top, width, height, radius)
+
     def _paint_content(self, hdc, rect: RECT) -> None:
-        bg = _gdi32.CreateSolidBrush(_PAGE_BG if self._preview_body else _BG)
+        bg = _gdi32.CreateSolidBrush(_CLASS_BG)
         _user32.FillRect(hdc, ctypes.byref(rect), bg)
         _gdi32.DeleteObject(bg)
 
         self._paint_preview(hdc, rect)
         status_rect = self._status_rect(rect.right - rect.left, rect.bottom - rect.top)
+        self._paint_panel(hdc, status_rect)
         self._paint_accent(hdc, status_rect)
         self._paint_text(hdc, status_rect)
 
     def _status_rect(self, width: int, height: int) -> RECT:
-        return RECT(0, max(0, height - 58), width, height)
+        return RECT(0, max(0, height - _STATUS_HEIGHT), width, height)
 
-    def _paint_preview(self, hdc, rect: RECT) -> None:
-        if not self._preview_body:
-            return
-        preview_bottom = max(0, rect.bottom - 70)
-        card = RECT(12, 10, rect.right - 12, preview_bottom)
+    def _preview_rect(self, width: int) -> RECT:
+        return RECT(0, 0, width, self._preview_height())
+
+    def _paint_panel(self, hdc, rect: RECT) -> None:
         brush = _gdi32.CreateSolidBrush(_BG)
         pen = _gdi32.CreatePen(_PS_SOLID, 1, _BORDER)
         old_brush = _gdi32.SelectObject(hdc, brush)
         old_pen = _gdi32.SelectObject(hdc, pen)
-        _gdi32.RoundRect(hdc, card.left, card.top, card.right, card.bottom, 18, 18)
+        _gdi32.RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, _CORNER_RADIUS, _CORNER_RADIUS)
         _gdi32.SelectObject(hdc, old_pen)
         _gdi32.SelectObject(hdc, old_brush)
         _gdi32.DeleteObject(pen)
         _gdi32.DeleteObject(brush)
 
+    def _paint_preview(self, hdc, rect: RECT) -> None:
+        if not self._preview_body:
+            return
+        card = self._preview_rect(rect.right - rect.left)
+        self._paint_panel(hdc, card)
+
         _gdi32.SetBkMode(hdc, _TRANSPARENT)
         title_font = self._font(size=-13, weight=700)
         old_font = _gdi32.SelectObject(hdc, title_font)
         _gdi32.SetTextColor(hdc, _MUTED)
-        title_rect = RECT(card.left + 18, card.top + 12, card.right - 18, card.top + 34)
+        title_rect = RECT(
+            card.left + _PREVIEW_HORIZONTAL_PADDING,
+            card.top + 12,
+            card.right - _PREVIEW_HORIZONTAL_PADDING,
+            card.top + 34,
+        )
         _user32.DrawTextW(hdc, self._preview_title, -1, ctypes.byref(title_rect), _DT_SINGLELINE | _DT_END_ELLIPSIS)
         _gdi32.SelectObject(hdc, old_font)
         _gdi32.DeleteObject(title_font)
@@ -846,8 +959,13 @@ class StatusWindow:
         body_font = self._font(size=-15, weight=600)
         old_font = _gdi32.SelectObject(hdc, body_font)
         _gdi32.SetTextColor(hdc, _TEXT)
-        body_rect = RECT(card.left + 18, card.top + 38, card.right - 18, card.bottom - 30)
-        body = _compact_preview_text(self._preview_body, 260)
+        body_rect = RECT(
+            card.left + _PREVIEW_HORIZONTAL_PADDING,
+            card.top + 38,
+            card.right - _PREVIEW_HORIZONTAL_PADDING,
+            card.bottom - 30,
+        )
+        body = _compact_preview_text(self._preview_body, 520)
         _user32.DrawTextW(hdc, body, -1, ctypes.byref(body_rect), _DT_WORDBREAK | _DT_EDITCONTROL | _DT_END_ELLIPSIS)
         _gdi32.SelectObject(hdc, old_font)
         _gdi32.DeleteObject(body_font)
@@ -856,7 +974,12 @@ class StatusWindow:
             phase_font = self._font(size=-12, weight=500)
             old_font = _gdi32.SelectObject(hdc, phase_font)
             _gdi32.SetTextColor(hdc, self._color)
-            phase_rect = RECT(card.left + 18, card.bottom - 24, card.right - 18, card.bottom - 8)
+            phase_rect = RECT(
+                card.left + _PREVIEW_HORIZONTAL_PADDING,
+                card.bottom - 24,
+                card.right - _PREVIEW_HORIZONTAL_PADDING,
+                card.bottom - 8,
+            )
             _user32.DrawTextW(hdc, self._preview_phase, -1, ctypes.byref(phase_rect), _DT_SINGLELINE | _DT_END_ELLIPSIS)
             _gdi32.SelectObject(hdc, old_font)
             _gdi32.DeleteObject(phase_font)

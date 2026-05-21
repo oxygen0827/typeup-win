@@ -6,8 +6,15 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前测试版安装包为 `TypeUp-Setup-0.1.16.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前测试版安装包为 `TypeUp-Setup-0.1.17.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
+
+## 0.1.17 更新重点
+
+- 微润色白色预览框调整为状态栏上方的独立同宽小框，不再和下方状态栏融合成一整块背景。
+- 预览框会根据文本行数自动增高，并设置最大高度，避免长文本遮挡桌面过多。
+- Windows 透明浮窗和回退绘制路径都改成“上方预览框 + 下方状态栏”两个独立圆角面板，视觉风格与已有状态栏保持一致。
+- 补充预览框高度增长和长文本上限的测试；本次发布前已验证 engine `unittest` 136 项、Python 编译检查、Vite 生产构建、Electron 语法检查和 `git diff --check`。
 
 ## 0.1.16 更新重点
 
@@ -332,7 +339,7 @@ macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双
 
 桌面端已经接入 `electron-updater`，更新源指向 GitHub Releases：`oxygen0827/typeup-win`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
 
-注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.1.16`。
+注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.1.17`。
 
 发布新版时需要：
 
@@ -342,7 +349,7 @@ npm.cmd version <next-version> --no-git-tag-version
 npm.cmd run build:win
 ```
 
-`build:win` 会先自动重建内嵌 Python engine，再构建 React UI 和 NSIS 安装包。然后在 GitHub 创建对应版本的 Release，例如 `v0.1.16`，上传 `release\` 目录里的安装包和更新元数据：
+`build:win` 会先自动重建内嵌 Python engine，再构建 React UI 和 NSIS 安装包。然后在 GitHub 创建对应版本的 Release，例如 `v0.1.17`，上传 `release\` 目录里的安装包和更新元数据：
 
 ```text
 TypeUp-Setup-<version>.exe

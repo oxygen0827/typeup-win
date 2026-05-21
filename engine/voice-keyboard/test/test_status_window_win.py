@@ -37,6 +37,26 @@ class StatusWindowWinAudioLevelTests(unittest.TestCase):
         self.assertTrue(compacted.endswith("最后一句"))
         self.assertLess(len(compacted), len(text))
 
+    def test_preview_body_lines_grow_with_text(self):
+        from agent.status_window_win import _estimate_preview_body_lines
+
+        short = _estimate_preview_body_lines("一句话")
+        long = _estimate_preview_body_lines("一" * 120)
+
+        self.assertGreater(long, short)
+
+    def test_preview_height_grows_and_is_capped(self):
+        from agent.status_window_win import StatusWindow
+
+        window = object.__new__(StatusWindow)
+        window._preview_body = "一" * 10
+        short_height = window._preview_height()
+        window._preview_body = "一" * 500
+        long_height = window._preview_height()
+
+        self.assertGreater(long_height, short_height)
+        self.assertLessEqual(long_height, 286)
+
 
 if __name__ == "__main__":
     unittest.main()
