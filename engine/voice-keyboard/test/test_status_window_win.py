@@ -26,6 +26,17 @@ class StatusWindowWinAudioLevelTests(unittest.TestCase):
         self.assertGreater(dropped, 0.2)
         self.assertLess(dropped, 0.8)
 
+    def test_preview_text_is_compacted_from_the_tail(self):
+        from agent.status_window_win import _compact_preview_text
+
+        text = "一" * 20 + "最后一句"
+
+        compacted = _compact_preview_text(text, 5)
+
+        self.assertTrue(compacted.startswith("..."))
+        self.assertTrue(compacted.endswith("最后一句"))
+        self.assertLess(len(compacted), len(text))
+
 
 if __name__ == "__main__":
     unittest.main()

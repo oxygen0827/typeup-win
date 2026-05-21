@@ -12,7 +12,7 @@ from ctypes import wintypes
 # COLORREF uses 0x00bbggrr.
 _STATES: dict[str, tuple[str, str, int]] = {
     "recording": ("正在聆听", "松开 ALT 后开始转写", 0xB19F0F),
-    "polish_recording": ("正在聆听 · 微润色", "松开 ALT 后输入润色结果", 0x6B8A1B),
+    "polish_recording": ("正在聆听 · 微润色", "松开 ALT 后整体润色并确认", 0x6B8A1B),
     "ai_recording": ("AI 编辑中", "按住 ALT + SPACE 处理当前文字", 0xD65676),
     "recognizing": ("正在转写", "正在整理语句并准备输入", 0xD65724),
     "empty_stt": ("未识别到语句", "请靠近麦克风后重试", 0x225DB8),
@@ -29,6 +29,7 @@ _WM_APP_STATE = 0x8001
 _WM_APP_STOP = 0x8002
 _WM_APP_MESSAGE = 0x8003
 _WM_APP_AUDIO_LEVEL = 0x8004
+_WM_APP_PREVIEW = 0x8005
 _WM_ERASEBKGND = 0x0014
 _TIMER_POLL = 1
 _TIMER_HIDE = 2
@@ -46,10 +47,14 @@ _WINDOW_ALPHA = 246
 _DT_SINGLELINE = 0x00000020
 _DT_VCENTER = 0x00000004
 _DT_END_ELLIPSIS = 0x00008000
+_DT_WORDBREAK = 0x00000010
+_DT_EDITCONTROL = 0x00002000
 _TRANSPARENT = 1
 _PS_SOLID = 0
 
 _BG = 0xFFFFFF
+_PAGE_BG = 0xF8F5F1
+_BORDER = 0xE7DCD2
 _TEXT = 0x332010
 _MUTED = 0x8F7866
 _CLASS_BG = 0xFFFFFF
@@ -277,6 +282,13 @@ def _rgb_parts(colorref: int) -> tuple[int, int, int]:
     return colorref & 0xFF, (colorref >> 8) & 0xFF, (colorref >> 16) & 0xFF
 
 
+def _compact_preview_text(text: str, limit: int) -> str:
+    clean = str(text or "").strip()
+    if len(clean) <= limit:
+        return clean
+    return "..." + clean[-limit:]
+
+
 def _premultiply(value: int, alpha: int) -> int:
     return int((max(0, min(255, value)) * max(0, min(255, alpha)) + 127) / 255)
 
@@ -318,6 +330,9 @@ class StatusWindow:
         self._audio_phase = 0
         self._message_token = 0
         self._width_text = ""
+        self._preview_title = ""
+        self._preview_body = ""
+        self._preview_phase = ""
         self._visible = False
         self._window_size: tuple[int, int] | None = None
         self._use_per_pixel_alpha = True
@@ -366,6 +381,16 @@ class StatusWindow:
             timer.start()
 
         threading.Thread(target=run, daemon=True, name="StatusTypingMessage").start()
+
+    def show_polish_preview(self, title: str, body: str, phase: str = "") -> None:
+        self._q.put(("preview", str(title or ""), str(body or ""), str(phase or "")))
+        if self._hwnd:
+            _user32.PostMessageW(self._hwnd, _WM_APP_PREVIEW, 0, 0)
+
+    def hide_polish_preview(self) -> None:
+        self._q.put(("hide_preview",))
+        if self._hwnd:
+            _user32.PostMessageW(self._hwnd, _WM_APP_PREVIEW, 0, 0)
 
     def _hide_message(self, token: int) -> None:
         self._q.put(("hide_message", token))
@@ -444,6 +469,9 @@ class StatusWindow:
         if msg == _WM_APP_AUDIO_LEVEL:
             self._poll()
             return 0
+        if msg == _WM_APP_PREVIEW:
+            self._poll()
+            return 0
         if msg == _WM_APP_STOP:
             _user32.DestroyWindow(hwnd)
             return 0
@@ -460,6 +488,11 @@ class StatusWindow:
                     _, text, token, *rest = item
                     width_text = rest[0] if rest else text
                     self._apply_message(text, token, width_text)
+                elif isinstance(item, tuple) and item and item[0] == "preview":
+                    _, title, body, phase = item
+                    self._apply_preview(title, body, phase)
+                elif isinstance(item, tuple) and item and item[0] == "hide_preview":
+                    self._hide_preview_now()
                 elif isinstance(item, tuple) and item and item[0] == "audio_level":
                     _, level = item
                     self._apply_audio_level(float(level))
@@ -479,6 +512,9 @@ class StatusWindow:
         if info is None or state == "idle":
             self._state = "idle"
             self._width_text = ""
+            self._preview_title = ""
+            self._preview_body = ""
+            self._preview_phase = ""
             self._audio_level = 0.0
             self._visible = False
             _user32.ShowWindow(self._hwnd, 0)
@@ -517,6 +553,24 @@ class StatusWindow:
         self._position()
         _user32.ShowWindow(self._hwnd, 8)
         self._visible = True
+        self._invalidate()
+
+    def _apply_preview(self, title: str, body: str, phase: str) -> None:
+        if not self._hwnd:
+            return
+        self._preview_title = title
+        self._preview_body = body
+        self._preview_phase = phase
+        if self._visible:
+            self._position()
+        self._invalidate()
+
+    def _hide_preview_now(self) -> None:
+        self._preview_title = ""
+        self._preview_body = ""
+        self._preview_phase = ""
+        if self._visible and self._hwnd:
+            self._position()
         self._invalidate()
 
     def _hide_message_now(self, token: int) -> None:
@@ -559,8 +613,11 @@ class StatusWindow:
         sub_width = self._measure_text(hdc, self._subtext, -12, 500)
         _user32.ReleaseDC(self._hwnd, hdc)
 
-        width = max(380, min(760, max(title_width, sub_width) + 154))
+        preview_width = self._preview_width()
+        width = max(preview_width, max(380, min(760, max(title_width, sub_width) + 154)))
         height = 58
+        if self._preview_body:
+            height += self._preview_height()
         work = RECT()
         if _user32.SystemParametersInfoW(_SPI_GETWORKAREA, 0, ctypes.byref(work), 0):
             x = int(work.left + ((work.right - work.left - width) / 2))
@@ -579,6 +636,12 @@ class StatusWindow:
                 self._window_size = (width, height)
         else:
             self._window_size = (width, height)
+
+    def _preview_width(self) -> int:
+        return 720 if self._preview_body else 0
+
+    def _preview_height(self) -> int:
+        return 168 if len(self._preview_body) > 80 else 136
 
     def _measure_text(self, hdc, text: str, size: int, weight: int) -> int:
         if not text:
@@ -643,8 +706,10 @@ class StatusWindow:
         old_bitmap = _gdi32.SelectObject(memdc, bitmap)
         try:
             self._fill_rounded_background(bits, width, height)
-            self._paint_text(memdc, RECT(0, 0, width, height))
-            self._paint_accent(memdc, RECT(0, 0, width, height))
+            self._paint_preview(memdc, RECT(0, 0, width, height))
+            bar_rect = self._status_rect(width, height)
+            self._paint_text(memdc, bar_rect)
+            self._paint_accent(memdc, bar_rect)
             self._apply_alpha_mask_and_premultiply(bits, width, height)
 
             destination = POINT(window_rect.left, window_rect.top)
@@ -679,7 +744,7 @@ class StatusWindow:
         return _gdi32.CreateDIBSection(hdc, ctypes.byref(info), 0, ctypes.byref(bits), None, 0)
 
     def _fill_rounded_background(self, bits, width: int, height: int) -> None:
-        red, green, blue = _rgb_parts(_BG)
+        red, green, blue = _rgb_parts(_PAGE_BG if self._preview_body else _BG)
         buffer_type = ctypes.c_ubyte * (width * height * 4)
         pixels = buffer_type.from_address(bits.value)
         mask = self._rounded_alpha_mask(width, height)
@@ -742,27 +807,75 @@ class StatusWindow:
         return math.hypot(x - cx, y - cy) <= radius
 
     def _paint_content(self, hdc, rect: RECT) -> None:
-        bg = _gdi32.CreateSolidBrush(_BG)
+        bg = _gdi32.CreateSolidBrush(_PAGE_BG if self._preview_body else _BG)
         _user32.FillRect(hdc, ctypes.byref(rect), bg)
         _gdi32.DeleteObject(bg)
 
-        self._paint_accent(hdc, rect)
-        self._paint_text(hdc, rect)
+        self._paint_preview(hdc, rect)
+        status_rect = self._status_rect(rect.right - rect.left, rect.bottom - rect.top)
+        self._paint_accent(hdc, status_rect)
+        self._paint_text(hdc, status_rect)
+
+    def _status_rect(self, width: int, height: int) -> RECT:
+        return RECT(0, max(0, height - 58), width, height)
+
+    def _paint_preview(self, hdc, rect: RECT) -> None:
+        if not self._preview_body:
+            return
+        preview_bottom = max(0, rect.bottom - 70)
+        card = RECT(12, 10, rect.right - 12, preview_bottom)
+        brush = _gdi32.CreateSolidBrush(_BG)
+        pen = _gdi32.CreatePen(_PS_SOLID, 1, _BORDER)
+        old_brush = _gdi32.SelectObject(hdc, brush)
+        old_pen = _gdi32.SelectObject(hdc, pen)
+        _gdi32.RoundRect(hdc, card.left, card.top, card.right, card.bottom, 18, 18)
+        _gdi32.SelectObject(hdc, old_pen)
+        _gdi32.SelectObject(hdc, old_brush)
+        _gdi32.DeleteObject(pen)
+        _gdi32.DeleteObject(brush)
+
+        _gdi32.SetBkMode(hdc, _TRANSPARENT)
+        title_font = self._font(size=-13, weight=700)
+        old_font = _gdi32.SelectObject(hdc, title_font)
+        _gdi32.SetTextColor(hdc, _MUTED)
+        title_rect = RECT(card.left + 18, card.top + 12, card.right - 18, card.top + 34)
+        _user32.DrawTextW(hdc, self._preview_title, -1, ctypes.byref(title_rect), _DT_SINGLELINE | _DT_END_ELLIPSIS)
+        _gdi32.SelectObject(hdc, old_font)
+        _gdi32.DeleteObject(title_font)
+
+        body_font = self._font(size=-15, weight=600)
+        old_font = _gdi32.SelectObject(hdc, body_font)
+        _gdi32.SetTextColor(hdc, _TEXT)
+        body_rect = RECT(card.left + 18, card.top + 38, card.right - 18, card.bottom - 30)
+        body = _compact_preview_text(self._preview_body, 260)
+        _user32.DrawTextW(hdc, body, -1, ctypes.byref(body_rect), _DT_WORDBREAK | _DT_EDITCONTROL | _DT_END_ELLIPSIS)
+        _gdi32.SelectObject(hdc, old_font)
+        _gdi32.DeleteObject(body_font)
+
+        if self._preview_phase:
+            phase_font = self._font(size=-12, weight=500)
+            old_font = _gdi32.SelectObject(hdc, phase_font)
+            _gdi32.SetTextColor(hdc, self._color)
+            phase_rect = RECT(card.left + 18, card.bottom - 24, card.right - 18, card.bottom - 8)
+            _user32.DrawTextW(hdc, self._preview_phase, -1, ctypes.byref(phase_rect), _DT_SINGLELINE | _DT_END_ELLIPSIS)
+            _gdi32.SelectObject(hdc, old_font)
+            _gdi32.DeleteObject(phase_font)
 
     def _paint_accent(self, hdc, rect: RECT) -> None:
+        offset_y = rect.top
         brush = _gdi32.CreateSolidBrush(self._color)
         pen = _gdi32.CreatePen(_PS_SOLID, 1, self._color)
         old_brush = _gdi32.SelectObject(hdc, brush)
         old_pen = _gdi32.SelectObject(hdc, pen)
 
-        _gdi32.Ellipse(hdc, 18, 22, 32, 36)
+        _gdi32.Ellipse(hdc, 18, offset_y + 22, 32, offset_y + 36)
 
         center = int((rect.bottom - rect.top) / 2)
         start_x = max(290, rect.right - 84)
         for idx, bar_h in enumerate(self._voice_bar_heights()):
             x = start_x + idx * 12
-            y1 = center - int(bar_h / 2)
-            y2 = center + int(bar_h / 2)
+            y1 = offset_y + center - int(bar_h / 2)
+            y2 = offset_y + center + int(bar_h / 2)
             _gdi32.RoundRect(hdc, x, y1, x + 5, y2, 5, 5)
 
         _gdi32.SelectObject(hdc, old_pen)
@@ -783,16 +896,17 @@ class StatusWindow:
         return tuple(heights)
 
     def _paint_text(self, hdc, rect: RECT) -> None:
+        offset_y = rect.top
         _gdi32.SetBkMode(hdc, _TRANSPARENT)
 
         title_font = self._font(size=-15, weight=700)
         old_font = _gdi32.SelectObject(hdc, title_font)
         _gdi32.SetTextColor(hdc, _TEXT)
         if self._subtext:
-            title_rect = RECT(44, 9, rect.right - 104, 31)
+            title_rect = RECT(44, offset_y + 9, rect.right - 104, offset_y + 31)
             title_flags = _DT_SINGLELINE | _DT_END_ELLIPSIS
         else:
-            title_rect = RECT(44, 0, rect.right - 104, rect.bottom)
+            title_rect = RECT(44, offset_y, rect.right - 104, rect.bottom)
             title_flags = _DT_SINGLELINE | _DT_VCENTER | _DT_END_ELLIPSIS
         _user32.DrawTextW(hdc, self._text, -1, ctypes.byref(title_rect), title_flags)
         _gdi32.SelectObject(hdc, old_font)
@@ -802,7 +916,7 @@ class StatusWindow:
             sub_font = self._font(size=-12, weight=500)
             old_font = _gdi32.SelectObject(hdc, sub_font)
             _gdi32.SetTextColor(hdc, _MUTED)
-            sub_rect = RECT(44, 31, rect.right - 104, 50)
+            sub_rect = RECT(44, offset_y + 31, rect.right - 104, offset_y + 50)
             _user32.DrawTextW(hdc, self._subtext, -1, ctypes.byref(sub_rect), _DT_SINGLELINE | _DT_END_ELLIPSIS)
             _gdi32.SelectObject(hdc, old_font)
             _gdi32.DeleteObject(sub_font)

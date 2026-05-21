@@ -7,11 +7,13 @@ const { TextDecoder } = require("node:util");
 const { ensureDefaultConfig, readSettings } = require("./settings-store");
 
 const MAX_LOGS = 220;
+const CONTROL_PREFIX = "[typeup-control] ";
 
 class AgentManager extends EventEmitter {
-  constructor({ electronApp }) {
+  constructor({ electronApp, confirmPolish }) {
     super();
     this.electronApp = electronApp;
+    this.confirmPolish = typeof confirmPolish === "function" ? confirmPolish : null;
     this.child = null;
     this.state = "stopped";
     this.pid = null;
@@ -21,6 +23,7 @@ class AgentManager extends EventEmitter {
     this.logLines = [];
     this._macEngineAppPath = null;
     this._activeLaunch = null;
+    this._outputRemainder = { stdout: "", stderr: "" };
   }
 
   engineDir() {
@@ -135,6 +138,7 @@ class AgentManager extends EventEmitter {
       this._setState("error", error.message);
     });
     this.child.once("exit", (code, signal) => {
+      this._flushOutputRemainders();
       this._appendLog(`[typeup] 引擎退出 code=${code ?? ""} signal=${signal ?? ""}`);
       this.child = null;
       this._activeLaunch = null;
@@ -443,12 +447,83 @@ class AgentManager extends EventEmitter {
   }
 
   _handleOutput(chunk, isError = false) {
-    const text = decodeProcessOutput(chunk);
-    for (const line of text.split(/\r?\n/)) {
-      const clean = line.trim();
-      if (!clean) continue;
-      this._appendLog(clean);
-      this._inferState(clean, isError);
+    const stream = isError ? "stderr" : "stdout";
+    const text = this._outputRemainder[stream] + decodeProcessOutput(chunk);
+    const lines = text.split(/\r?\n/);
+    this._outputRemainder[stream] = lines.pop() || "";
+    for (const line of lines) {
+      this._handleOutputLine(line, isError);
+    }
+  }
+
+  _flushOutputRemainders() {
+    for (const [stream, line] of Object.entries(this._outputRemainder)) {
+      if (line) this._handleOutputLine(line, stream === "stderr");
+      this._outputRemainder[stream] = "";
+    }
+  }
+
+  _handleOutputLine(line, isError = false) {
+    const clean = line.trim();
+    if (!clean) return;
+    if (this._handleControlLine(clean)) return;
+    this._appendLog(clean);
+    this._inferState(clean, isError);
+  }
+
+  _handleControlLine(line) {
+    if (!line.startsWith(CONTROL_PREFIX)) return false;
+    let payload;
+    try {
+      payload = JSON.parse(line.slice(CONTROL_PREFIX.length));
+    } catch (error) {
+      this._appendLog(`[typeup] 控制消息解析失败: ${error.message}`);
+      return true;
+    }
+    if (payload?.type === "polish_confirm") {
+      this._handlePolishConfirmation(payload);
+      return true;
+    }
+    this._appendLog(`[typeup] 未知控制消息: ${payload?.type || "unknown"}`);
+    return true;
+  }
+
+  async _handlePolishConfirmation(payload) {
+    this._appendLog("[typeup] 微润色等待确认");
+    this._setState("transcribing");
+    let accepted = false;
+    let text = payload.polished || "";
+    try {
+      if (this.confirmPolish) {
+        const result = await this.confirmPolish(payload);
+        accepted = Boolean(result?.accepted);
+        text = String(result?.text || payload.polished || "");
+      } else {
+        accepted = true;
+      }
+    } catch (error) {
+      this._appendLog(`[typeup] 微润色确认窗口失败: ${error.message}`);
+      accepted = false;
+    }
+    this._sendControlResponse({
+      type: "polish_confirm_response",
+      id: payload.id,
+      accepted,
+      text,
+    });
+    this._appendLog(accepted ? "[typeup] 微润色确认输出" : "[typeup] 微润色取消输出");
+    this._setState("listening");
+  }
+
+  _sendControlResponse(payload) {
+    if (!this.child?.stdin?.writable) {
+      this._appendLog("[typeup] 微润色确认响应发送失败: 引擎输入通道不可用");
+      return;
+    }
+    try {
+      this.child.stdin.write(`${JSON.stringify(payload)}\n`);
+    } catch (error) {
+      this._appendLog(`[typeup] 微润色确认响应发送失败: ${error.message}`);
     }
   }
 

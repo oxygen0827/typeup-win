@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from pynput import keyboard as kb
 
-from agent.push_to_talk import PushToTalk, _parse_key
+from agent.push_to_talk import SAMPLE_RATE, PushToTalk, _parse_key
 
 
 class _StatusRecorder:
@@ -81,6 +81,48 @@ class PushToTalkStatusTests(unittest.TestCase):
         ptt._run_mid_sentence_utterance(b"pcm", True)
 
         self.assertEqual(status.states[-1], "polish_recording")
+
+    def test_polish_mode_finishes_preview_session_when_vad_is_available(self):
+        class _Handler:
+            def __call__(self, _pcm, _polish=False):
+                pass
+
+            def __init__(self):
+                self.started = 0
+                self.finished = []
+
+            def polish_start(self):
+                self.started += 1
+
+            def polish_finish(self, *args):
+                self.finished.append(args)
+
+        handler = _Handler()
+        ptt = PushToTalk(on_utterance=handler, ptt_key="alt_l")
+        ptt._vad = _FakeVad(False)
+        ptt._polish_mode = True
+        ptt._active_key = "dictate"
+        ptt._buf = [b"\1" * int(SAMPLE_RATE * 2 * 0.4)]
+        ptt._vad_raw = bytearray()
+        ptt._close_stream = lambda: None
+        ptt._set_audio_level = lambda _level: None
+        ptt._set_status = lambda _state: None
+        started = []
+
+        class _Thread:
+            def __init__(self, target=None, args=(), daemon=None, name=None):
+                started.append((target, args, daemon, name))
+
+            def start(self):
+                pass
+
+        with mock.patch("agent.push_to_talk.threading.Thread", _Thread):
+            ptt._stop_recording("dictate")
+
+        self.assertEqual(len(started), 1)
+        self.assertEqual(started[0][0], handler.polish_finish)
+        self.assertEqual(started[0][1][1], 1)
+        self.assertEqual(started[0][3], "PTT-polish-finish")
 
     def test_mid_sentence_result_marks_complete_after_key_release(self):
         status = _StatusRecorder()

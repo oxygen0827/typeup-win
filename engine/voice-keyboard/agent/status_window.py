@@ -28,7 +28,7 @@ from Quartz import CGColorCreateGenericRGB
 # 状态 → (文字, 状态点 RGB)
 _STATES: dict[str, tuple[str, tuple[float, float, float]]] = {
     "recording":        ("录音中",            (0.94, 0.32, 0.31)),  # 红
-    "polish_recording": ("录音中 · 微润色",     (0.20, 0.78, 0.50)),  # 绿
+    "polish_recording": ("录音中 · 微润色确认", (0.20, 0.78, 0.50)),  # 绿
     "ai_recording":     ("AI 指令录音中",      (0.69, 0.40, 0.85)),  # 紫
     "recognizing":      ("识别中",            (0.96, 0.62, 0.07)),  # 橙
     "empty_stt":        ("未识别到语句",       (0.96, 0.62, 0.07)),  # 橙
@@ -283,6 +283,14 @@ class StatusWindow:
             threading.Timer(seconds, self._hide_message, args=(token,)).start()
 
         threading.Thread(target=run, daemon=True, name="StatusTypingMessage").start()
+
+    def show_polish_preview(self, title: str, body: str, phase: str = "") -> None:
+        text = "\n".join(part for part in (title, body, phase) if part)
+        self.show_message(text, seconds=3600)
+
+    def hide_polish_preview(self) -> None:
+        self._message_token += 1
+        self._hide_message(self._message_token)
 
     def _hide_message(self, token: int) -> None:
         self._q.put(("hide_message", token))

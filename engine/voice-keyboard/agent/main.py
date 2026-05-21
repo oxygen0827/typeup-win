@@ -85,13 +85,31 @@ def make_serial_handlers(buf: TextBuffer, history: History | None = None):
 
 # ── STT 回调 ───────────────────────────────────────────────────────
 
-_POLISH_SYSTEM = """你是文字润色助手。对用户说的话做最轻度的润色：
-- 去掉口语填充词（嗯、啊、呃、那个、就是说、然后呢之类）
-- 修正明显的错别字和不通顺的地方
-- 加上合适的标点
+_POLISH_SYSTEM = """你是 TypeUp 的“微润色”助手，只能对用户口述内容做非常轻微的文字整理。
 
-严格遵守：保留原意和说话风格，不要扩写、不要总结、不要改写措辞。
-直接输出润色后的文字，不要任何解释、前缀或引号。"""
+允许做：
+- 删除明显的口头填充词，例如“嗯、啊、呃、那个、就是说、然后呢”。
+- 修正确定无误的错别字、漏字和明显语病。
+- 补充自然标点，必要时做最小幅度断句。
+
+严格禁止：
+- 不要改变原意、语气、人称、时态、称呼和信息顺序。
+- 不要扩写、总结、解释、改写成书面稿、改写成列表。
+- 不要增删事实、不要合并多句话的逻辑、不要替用户补充没有说出的内容。
+- 如果原文已经通顺，只做标点整理或原样返回。
+
+只输出润色后的正文，不要任何解释、前缀、标题、引号或 Markdown。"""
+
+_POLISH_SENTENCE_SYSTEM = """你正在做语音输入的单句微润色。
+只允许删除明显口头填充词、修正确定无误的错别字、补充标点。
+不要改变语义、顺序、语气、人称或表达重点。不能确定时原样返回。
+只输出处理后的这一句话。"""
+
+_POLISH_FINAL_SYSTEM = """你正在做语音输入的最终整体微润色。
+输入可能由多句语音转写组成，请保持原来的信息顺序、语义、语气和人称。
+只允许做轻微口语清理、明显错别字修正、标点和最小幅度断句。
+严禁扩写、总结、改写逻辑、增删事实、替用户补充内容。
+如果任何改动可能改变意思，就保留原句。只输出最终正文。"""
 
 
 _POLISH_LABEL_RE = re.compile(r"^(?:润色后|润色结果|修改后|修改结果|优化后|优化结果|结果|输出)\s*[:：]\s*")
@@ -124,9 +142,196 @@ def _clean_polished_text(text: str) -> str:
     return _clean_generated_text(cleaned)
 
 
+def _safe_polish(editor, system_prompt: str, text: str) -> str:
+    if editor is None or not text:
+        return text
+    polished = _clean_polished_text(editor.chat(system_prompt, text))
+    if not polished:
+        return text
+    if not _polish_change_is_safe(text, polished):
+        print(f"[stt] 微润色改动过大，保留原文: {polished!r}")
+        return text
+    return polished
+
+
+def _polish_change_is_safe(original: str, polished: str) -> bool:
+    src_len = len(re.sub(r"\s+", "", original or ""))
+    out_len = len(re.sub(r"\s+", "", polished or ""))
+    if src_len == 0 or out_len == 0:
+        return False
+    ratio = out_len / src_len
+    if ratio < 0.55 or ratio > 1.75:
+        return False
+    if src_len <= 14 and abs(out_len - src_len) > 10:
+        return False
+    return True
+
+
+class _PolishPreviewSession:
+    def __init__(self, stt_client, editor, buf: TextBuffer, kbd_mon=None,
+                 status_window=None, history: History | None = None):
+        self._stt = stt_client
+        self._editor = editor
+        self._buf = buf
+        self._kbd_mon = kbd_mon
+        self._status = status_window
+        self._history = history
+        self._lock = threading.Condition()
+        self._generation = 0
+        self._segments: dict[int, tuple[str, str]] = {}
+        self._pending = 0
+
+    def start(self) -> None:
+        with self._lock:
+            self._generation += 1
+            self._segments = {}
+            self._pending = 0
+        self._show_preview("微润色预览", "正在聆听...", "语音会先显示在这里")
+        print("[stt] 微润色预览会话开始")
+
+    def cancel(self) -> None:
+        with self._lock:
+            self._generation += 1
+            self._segments = {}
+            self._pending = 0
+            self._lock.notify_all()
+        self._hide_preview()
+
+    def process_segment(self, pcm: bytes, index: int | None = None) -> None:
+        if not pcm:
+            return
+        with self._lock:
+            generation = self._generation
+            if index is None:
+                index = max(self._segments.keys(), default=0) + self._pending + 1
+            self._pending += 1
+        try:
+            raw = _clean_generated_text(self._stt.transcribe(pcm))
+            if not raw:
+                return
+            try:
+                polished = _safe_polish(self._editor, _POLISH_SENTENCE_SYSTEM, raw)
+            except Exception as e:
+                print(f"[stt] 分句微润色失败，保留原文: {e}")
+                polished = raw
+            with self._lock:
+                if generation != self._generation:
+                    return
+                self._segments[int(index)] = (raw, polished)
+                body = self._preview_body_locked()
+            self._show_preview("微润色预览", body, "正在整理分句")
+            print(f"[stt] 微润色分句{index}: {raw!r} -> {polished!r}")
+        except Exception as e:
+            print(f"[stt] 分句转写失败: {e}")
+        finally:
+            with self._lock:
+                self._pending = max(0, self._pending - 1)
+                self._lock.notify_all()
+
+    def finish(self, pcm: bytes | None = None, index: int | None = None) -> None:
+        if pcm:
+            self.process_segment(pcm, index)
+        with self._lock:
+            deadline = time.monotonic() + 45.0
+            while self._pending > 0:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    break
+                self._lock.wait(min(0.25, remaining))
+            raw_text = self._joined_text_locked(raw=True)
+            preview_text = self._joined_text_locked(raw=False)
+
+        if not raw_text:
+            print("[stt] 微润色预览没有识别到文本")
+            if self._history is not None:
+                self._history.append("polish", "", "empty")
+            if self._status is not None:
+                self._status.set_state("empty_stt")
+            self._hide_preview()
+            return
+
+        self._show_preview("整体润色中", preview_text, "正在做最终整理")
+        final_text = preview_text
+        try:
+            if self._status is not None:
+                self._status.set_state("polishing")
+            final_text = _safe_polish(self._editor, _POLISH_FINAL_SYSTEM, raw_text)
+        except Exception as e:
+            print(f"[stt] 整体润色失败，使用分句结果: {e}")
+
+        final_text = final_text or preview_text or raw_text
+        self._show_preview("整体润色结果", final_text, "等待确认输出")
+
+        from agent.polish_confirm import request_polish_confirmation
+        confirmation = request_polish_confirmation(raw_text, final_text)
+        if not confirmation.accepted:
+            print("[typeup] 微润色输出已取消")
+            if self._history is not None:
+                self._history.append("polish", raw_text, "cancelled", "polish confirmation rejected")
+            if self._status is not None:
+                self._status.set_state("idle")
+            self._hide_preview()
+            return
+
+        text = confirmation.text or final_text
+        try:
+            from agent.typer import type_text
+            type_text(text)
+            self._buf.push(text)
+        except Exception as e:
+            print(f"[stt] 打字失败: {e}")
+            if self._status is not None:
+                self._status.set_state("error_typing")
+            if self._history is not None:
+                self._history.append("polish", text, "error", f"typing: {e}")
+            self._hide_preview()
+            return
+
+        self._hide_preview()
+        if self._history is not None:
+            self._history.append("polish", text, "ok")
+        if self._kbd_mon is not None:
+            self._kbd_mon.notify_voice_output()
+        if self._status is not None:
+            self._status.set_state("idle")
+        print("[typeup] 输入完成")
+
+    def _joined_text_locked(self, raw: bool) -> str:
+        column = 0 if raw else 1
+        parts = [self._segments[idx][column] for idx in sorted(self._segments)]
+        return "\n".join(part for part in parts if part).strip()
+
+    def _preview_body_locked(self) -> str:
+        body = self._joined_text_locked(raw=False)
+        if len(body) > 420:
+            return "..." + body[-420:]
+        return body or "正在聆听..."
+
+    def _show_preview(self, title: str, body: str, phase: str) -> None:
+        if self._status is None:
+            return
+        if hasattr(self._status, "show_polish_preview"):
+            self._status.show_polish_preview(title, body, phase)
+        elif hasattr(self._status, "show_typing_message"):
+            self._status.show_typing_message(body, seconds=3600)
+
+    def _hide_preview(self) -> None:
+        if self._status is not None and hasattr(self._status, "hide_polish_preview"):
+            self._status.hide_polish_preview()
+
+
 def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=None,
                            status_window=None, history: History | None = None):
     from agent.typer import type_text
+    polish_session = _PolishPreviewSession(
+        stt_client,
+        editor,
+        buf,
+        kbd_mon=kbd_mon,
+        status_window=status_window,
+        history=history,
+    )
+
     def on_utterance(
         pcm: bytes,
         polish: bool = False,
@@ -134,6 +339,10 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
         progress_status: bool = True,
     ):
         mode = "polish" if polish else "dictate"
+        if polish and editor is not None:
+            polish_session.start()
+            polish_session.finish(pcm, 1)
+            return
         try:
             text = stt_client.transcribe(pcm)
         except Exception as e:
@@ -152,16 +361,6 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
                 status_window.set_state("empty_stt")
             return
         print(f"[stt] {text!r}")
-        if polish and editor is not None:
-            if status_window is not None and progress_status:
-                status_window.set_state("polishing")
-            try:
-                polished = _clean_polished_text(editor.chat(_POLISH_SYSTEM, text))
-                if polished:
-                    print(f"[stt] 微润色 → {polished!r}")
-                    text = polished
-            except Exception as e:
-                print(f"[stt] 润色失败，回退原文: {e}")
         try:
             type_text(text)
             buf.push(text)
@@ -180,6 +379,10 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             status_window.set_state("idle")
         if clear_status:
             print("[typeup] 输入完成")
+    on_utterance.polish_start = polish_session.start
+    on_utterance.polish_segment = polish_session.process_segment
+    on_utterance.polish_finish = polish_session.finish
+    on_utterance.polish_cancel = polish_session.cancel
     return on_utterance
 
 
