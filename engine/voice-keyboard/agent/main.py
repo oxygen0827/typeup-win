@@ -85,16 +85,25 @@ def make_serial_handlers(buf: TextBuffer, history: History | None = None):
 
 # ── STT 回调 ───────────────────────────────────────────────────────
 
-_POLISH_SYSTEM = """你是文字润色助手。对用户说的话做最轻度的润色：
-- 去掉口语填充词（嗯、啊、呃、那个、就是说、然后呢之类）
-- 修正明显的错别字和不通顺的地方
-- 加上合适的标点
+_POLISH_SYSTEM = """你是 TypeUp 的“微润色”引擎。用户会把语音转写结果直接输入到当前光标位置，你只做轻量清理，让文本更像可发送的原话。
 
-严格遵守：保留原意和说话风格，不要扩写、不要总结、不要改写措辞。
-直接输出润色后的文字，不要任何解释、前缀或引号。"""
+可以做：
+- 删除口语填充词、重复卡顿和无意义停顿词，例如“嗯、啊、呃、那个、就是说、然后呢”。
+- 修正明显错别字、同音误识别和不通顺的小语序问题。
+- 补齐自然标点，让句子读起来顺畅。
+
+必须遵守：
+- 保留原意、语气、称呼、数字、专有名词、代码、链接和语言种类。
+- 不要扩写、总结、翻译、升华、改成公文腔，也不要新增原文没有的信息。
+- 原文已经清楚时，只做标点和极少量清理。
+- 不确定时保留原文表达，不要猜测。
+- 只输出最终可输入文本，不要标题、列表、Markdown、解释、前缀或引号。"""
 
 
 _POLISH_LABEL_RE = re.compile(r"^(?:润色后|润色结果|修改后|修改结果|优化后|优化结果|结果|输出)\s*[:：]\s*")
+_POLISH_PREAMBLE_RE = re.compile(
+    r"^(?:好的[，,。.\s]*)?(?:以下是|下面是)?(?:我(?:帮你)?(?:稍微)?(?:润色|修改|优化)(?:后)?的?(?:文本|结果)?|(?:微润色|润色|修改|优化)(?:后)?(?:的)?(?:文本|结果)?)(?:如下)?\s*[:：]\s*"
+)
 _LEADING_INVISIBLE_RE = re.compile(r"^[\s\ufeff\u200b\u200c\u200d]+")
 _LEADING_HASH_MARK_RE = re.compile(r"^[#＃]{1,6}[\s:：、，。,.!?！？;；-]*")
 
@@ -117,6 +126,7 @@ def _clean_polished_text(text: str) -> str:
     for _ in range(3):
         before = cleaned
         cleaned = _POLISH_LABEL_RE.sub("", cleaned).strip()
+        cleaned = _POLISH_PREAMBLE_RE.sub("", cleaned).strip()
         cleaned = _clean_generated_text(cleaned)
         cleaned = re.sub(r"^[-*•]\s+", "", cleaned).strip()
         if cleaned == before:

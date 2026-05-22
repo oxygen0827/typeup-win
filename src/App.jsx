@@ -324,6 +324,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.20": {
+    releaseName: "TypeUp 0.1.20",
+    zh: {
+      summary: "本次重点优化微润色输出，让语音输入更稳地保留原意和说话风格。",
+      items: [
+        "微润色模式只做轻量清理：去口头填充词、修正明显错字并补齐自然标点。",
+        "进一步约束模型不要扩写、总结、翻译或改成公文腔，减少过度改写。",
+        "增强输出清洗，自动去掉“润色如下”等模型前缀，避免把说明文字打进输入框。",
+      ],
+    },
+    en: {
+      summary: "This update improves micro-polish output so dictated text keeps the original meaning and voice.",
+      items: [
+        "Micro-polish now focuses on light cleanup: filler words, obvious typos, and natural punctuation.",
+        "The model is more strongly guided not to expand, summarize, translate, or over-formalize your words.",
+        "Output cleanup now strips model preambles such as “polished text below” before typing.",
+      ],
+    },
+  },
   "0.1.19": {
     releaseName: "TypeUp 0.1.19",
     zh: {
