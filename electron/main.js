@@ -1,7 +1,6 @@
 const path = require("node:path");
 const { app, BrowserWindow, ipcMain, shell } = require("electron");
 const { createLocalServer } = require("./local-server");
-const { setupPolishConfirmation } = require("./polish-confirm");
 const { setupAutoUpdates } = require("./updater");
 
 let mainWindow;
@@ -62,13 +61,7 @@ const updates = setupAutoUpdates({
 });
 
 async function boot() {
-  const polishConfirmation = setupPolishConfirmation({
-    icon: windowIcon,
-  });
-  localServer = await createLocalServer({
-    electronApp: app,
-    confirmPolish: polishConfirmation.confirm,
-  });
+  localServer = await createLocalServer({ electronApp: app });
   await localServer.agent.ensureConfig();
   await localServer.agent.start();
   await createWindow();

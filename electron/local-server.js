@@ -252,10 +252,10 @@ function sendBackendError(res, error) {
   });
 }
 
-function createLocalServer({ electronApp, confirmPolish } = {}) {
+function createLocalServer({ electronApp }) {
   const app = express();
   const server = http.createServer(app);
-  const agent = new AgentManager({ electronApp, confirmPolish });
+  const agent = new AgentManager({ electronApp });
   const sseClients = new Set();
   applyBackendEngineConfig(readCloudBridge());
 

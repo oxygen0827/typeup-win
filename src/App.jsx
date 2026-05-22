@@ -118,7 +118,7 @@ const COPY = {
     shortcutAi: "AI 编辑",
     shortcutAiDetail: "按住组合键处理当前文字",
     shortcutPolish: "切换润色模式",
-    shortcutPolishDetail: "润色后确认再输出",
+    shortcutPolishDetail: "原生与微润色之间切换",
     modeDisplay: "润色模式",
     permissions: "权限",
     permissionCenter: "macOS 权限",
@@ -222,7 +222,7 @@ const COPY = {
     shortcutAi: "AI Edit",
     shortcutAiDetail: "Hold the combo to edit text",
     shortcutPolish: "Switch Polish Mode",
-    shortcutPolishDetail: "Confirm before output",
+    shortcutPolishDetail: "Toggle original and light polish",
     modeDisplay: "Polish Mode",
     permissions: "Permissions",
     permissionCenter: "macOS Permissions",
@@ -1450,9 +1450,9 @@ function formatStatusDockHint(lang, pttKey, aiKey, polishKey, platform = "") {
   const speak = formatHotkey(pttKey, lang, platform);
   const ai = formatHotkey(aiKey, lang, platform);
   if (lang === "zh") {
-    return `${speak} 说话，${ai} 进行 AI 编辑，${polishKey} 切换微润色确认`;
+    return `${speak} 说话，${ai} 进行 AI 编辑，${polishKey} 切换润色模式`;
   }
-  return `${speak} to speak, ${ai} for AI editing, ${polishKey} for polish confirmation`;
+  return `${speak} to speak, ${ai} for AI editing, ${polishKey} to switch polish mode`;
 }
 
 function formatHotkey(value, lang, platform = "") {

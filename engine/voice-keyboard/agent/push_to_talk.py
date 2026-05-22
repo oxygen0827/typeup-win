@@ -620,49 +620,6 @@ class PushToTalk:
             elif self._active_key is None:
                 self._mark_input_complete()
 
-    def _call_polish_hook(self, name: str, *args) -> bool:
-        hook = getattr(self._on_utterance, name, None)
-        if hook is None:
-            return False
-        hook(*args)
-        return True
-
-    def _start_polish_segment_thread(self, pcm: bytes, index: int) -> None:
-        hook = getattr(self._on_utterance, "polish_segment", None)
-        if hook is None:
-            threading.Thread(
-                target=self._run_mid_sentence_utterance,
-                args=(pcm, True),
-                daemon=True,
-                name=f"PTT-polish-mid-{index}",
-            ).start()
-            return
-        threading.Thread(
-            target=hook,
-            args=(pcm, index),
-            daemon=True,
-            name=f"PTT-polish-mid-{index}",
-        ).start()
-
-    def _start_polish_finish_thread(self, pcm: bytes | None, index: int | None) -> None:
-        hook = getattr(self._on_utterance, "polish_finish", None)
-        if hook is None:
-            if pcm is not None:
-                threading.Thread(
-                    target=self._on_utterance,
-                    args=(pcm, True),
-                    daemon=True,
-                    name="PTT-polish-finish",
-                ).start()
-            return
-        args = (pcm, index) if pcm is not None else ()
-        threading.Thread(
-            target=hook,
-            args=args,
-            daemon=True,
-            name="PTT-polish-finish",
-        ).start()
-
     # ── Windows 系统级热键拦截 ─────────────────────────────────────
 
     def _win32_event_filter(self, msg, data):
@@ -768,15 +725,12 @@ class PushToTalk:
             self._vad_sent_count += 1
             n = self._vad_sent_count
             print(f"[ptt] 分句{n} 识别中...    ", end="\r", flush=True)
-            if self._polish_mode:
-                self._start_polish_segment_thread(pcm, n)
-            else:
-                threading.Thread(
-                    target=self._run_mid_sentence_utterance,
-                    args=(pcm, self._polish_mode),
-                    daemon=True,
-                    name=f"PTT-mid-{n}",
-                ).start()
+            threading.Thread(
+                target=self._run_mid_sentence_utterance,
+                args=(pcm, self._polish_mode),
+                daemon=True,
+                name=f"PTT-mid-{n}",
+            ).start()
         self._vad_speech_frames = []
         self._vad_silent_count  = 0
         self._vad_in_speech     = False
@@ -789,8 +743,6 @@ class PushToTalk:
         self._vad_silent_count  = 0
         self._vad_sent_count    = 0
         self._set_audio_level(0.0)
-        if self._active_key == "dictate" and self._polish_mode:
-            self._call_polish_hook("polish_start")
         self._stream = sd.RawInputStream(
             samplerate=SAMPLE_RATE,
             channels=1,
@@ -829,40 +781,29 @@ class PushToTalk:
                 n = self._vad_sent_count
                 print(f"[ptt] 分句{n} 识别中...    ", end="\r", flush=True)
                 self._set_status("recognizing")
-                if self._polish_mode:
-                    self._start_polish_finish_thread(pcm, n)
-                else:
-                    threading.Thread(
-                        target=self._on_utterance,
-                        args=(pcm, self._polish_mode),
-                        daemon=True,
-                        name=f"PTT-mid-{n}",
-                    ).start()
+                threading.Thread(
+                    target=self._on_utterance,
+                    args=(pcm, self._polish_mode),
+                    daemon=True,
+                    name=f"PTT-mid-{n}",
+                ).start()
             elif self._vad_sent_count == 0:
                 # 全程未检测到任何句子（录音极短或全静音），回退到原有整段发送逻辑
                 pcm = b"".join(self._buf)
                 if len(pcm) < SAMPLE_RATE * 2 * 0.3:
                     print("[ptt] 录音太短，跳过    ")
                     self._set_status("idle")
-                    if self._polish_mode:
-                        self._call_polish_hook("polish_cancel")
                 else:
                     print("[ptt] 识别中...    ", end="\r", flush=True)
                     self._set_status("recognizing")
-                    if self._polish_mode:
-                        self._start_polish_finish_thread(pcm, 1)
-                    else:
-                        threading.Thread(
-                            target=self._on_utterance,
-                            args=(pcm, self._polish_mode),
-                            daemon=True,
-                            name="PTT-dictate",
-                        ).start()
+                    threading.Thread(
+                        target=self._on_utterance,
+                        args=(pcm, self._polish_mode),
+                        daemon=True,
+                        name="PTT-dictate",
+                    ).start()
             else:
-                if self._polish_mode:
-                    self._start_polish_finish_thread(None, None)
-                else:
-                    self._mark_input_complete()
+                self._mark_input_complete()
             self._buf = []
             return
 
