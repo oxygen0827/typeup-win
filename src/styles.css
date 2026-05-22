@@ -326,6 +326,36 @@ button:disabled {
   font-size: 13px;
 }
 
+.update-banner-actions .update-action-button {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+  box-shadow: 0 5px 14px rgba(36, 87, 214, 0.18);
+}
+
+.update-banner-actions .update-action-button svg {
+  color: currentColor;
+}
+
+.update-banner-actions .update-action-button:hover:not(:disabled) {
+  background: #fff;
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 6px 16px rgba(36, 87, 214, 0.16);
+}
+
+.update-banner-actions .update-action-button:active:not(:disabled) {
+  background: var(--primary-soft);
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.update-banner-actions .update-action-button:disabled {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
 .save-button.compact {
   width: auto;
 }

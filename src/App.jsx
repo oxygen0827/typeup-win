@@ -329,6 +329,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.22": {
+    releaseName: "TypeUp 0.1.22",
+    zh: {
+      summary: "本次继续修复更新按钮 hover 视觉，让安装按钮不会再白底白字。",
+      items: [
+        "更新横幅里的下载和安装按钮改为专用样式，不再复用通用保存按钮样式。",
+        "鼠标移到“立即安装并重启”上时会保持蓝色文字和图标，避免看起来整块变白。",
+        "继续保留 0.1.21 的更新说明 HTML 清洗修复。",
+      ],
+    },
+    en: {
+      summary: "This update tightens the update-button hover style so install actions stay readable.",
+      items: [
+        "Download and install buttons in the update banner now use a dedicated style.",
+        "Hovering install-and-restart keeps blue text and icons instead of white-on-white.",
+        "The release-note HTML cleanup from 0.1.21 remains included.",
+      ],
+    },
+  },
   "0.1.21": {
     releaseName: "TypeUp 0.1.21",
     zh: {
@@ -1045,7 +1064,7 @@ function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
     detail = formatUpdateDetail(text.updateAvailableDetail, version);
     icon = <Download size={18} />;
     action = (
-      <button type="button" className="save-button compact" onClick={onDownload}>
+      <button type="button" className="update-action-button" onClick={onDownload}>
         <Download size={16} />
         {text.updateDownload}
       </button>
@@ -1060,7 +1079,7 @@ function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
     detail = text.updateDownloadedDetail;
     icon = <CheckCircle2 size={18} />;
     action = (
-      <button type="button" className="save-button compact" onClick={onInstall}>
+      <button type="button" className="update-action-button" onClick={onInstall}>
         <RefreshCw size={16} />
         {text.updateInstall}
       </button>
