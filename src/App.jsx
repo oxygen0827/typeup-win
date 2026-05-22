@@ -329,6 +329,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.24": {
+    releaseName: "TypeUp 0.1.24",
+    zh: {
+      summary: "本次修复微润色把用户原话误当成指令、生成测试样例的问题。",
+      items: [
+        "微润色会把语音转写作为 JSON 字段传给模型，明确区分待处理文本和指令。",
+        "如果模型生成“当然可以”“以下是一段测试文本”等非原文内容，会自动回退到本地保守润色。",
+        "新增过长、过短总结和包装 JSON 的保护，优先保证不出差错。",
+      ],
+    },
+    en: {
+      summary: "This update prevents micro-polish from treating dictated text as a command.",
+      items: [
+        "Micro-polish now sends transcripts as JSON data so the model does not execute text inside them.",
+        "Generated examples or assistant-style replies fall back to conservative local cleanup.",
+        "Extra guards catch overlong output, over-short summaries, and JSON-wrapped model replies.",
+      ],
+    },
+  },
   "0.1.23": {
     releaseName: "TypeUp 0.1.23",
     zh: {
