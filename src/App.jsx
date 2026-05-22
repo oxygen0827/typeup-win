@@ -24,6 +24,11 @@ import {
   X,
 } from "lucide-react";
 import mark from "./assets/typeup-mark.svg";
+import {
+  localizedReleaseNoteItems,
+  localizedReleaseNoteSummary,
+  parseReleaseVersion,
+} from "./releaseNotes.mjs";
 
 const STATUS_COPY = {
   zh: {
@@ -324,6 +329,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.21": {
+    releaseName: "TypeUp 0.1.21",
+    zh: {
+      summary: "本次修复更新说明显示和更新按钮 hover 视觉问题。",
+      items: [
+        "更新说明会正确清洗 HTML 标签，不再显示 <h2>、<ul>、<li> 这类符号。",
+        "立即安装并重启按钮 hover 时会变为白底蓝字，图标不会再消失在白色背景里。",
+        "继续保留 0.1.20 的微润色输出优化。",
+      ],
+    },
+    en: {
+      summary: "This update fixes release-note rendering and update-button hover contrast.",
+      items: [
+        "Release notes now strip HTML tags such as <h2>, <ul>, and <li> before display.",
+        "The install-and-restart button now keeps clear blue text and icons on hover.",
+        "The micro-polish output improvements from 0.1.20 remain included.",
+      ],
+    },
+  },
   "0.1.20": {
     releaseName: "TypeUp 0.1.20",
     zh: {
@@ -1141,34 +1165,6 @@ function builtinReleaseNotes(version) {
     releaseUrl: "",
     localized: item,
   };
-}
-
-function localizedReleaseNoteSummary(notes, lang) {
-  return notes.localized?.[lang]?.summary || notes.localized?.en?.summary || firstPlainReleaseNote(notes.releaseNotes);
-}
-
-function localizedReleaseNoteItems(notes, lang) {
-  const localized = notes.localized?.[lang]?.items || notes.localized?.en?.items;
-  if (Array.isArray(localized)) return localized.filter(Boolean);
-  const items = parseReleaseNoteItems(notes.releaseNotes);
-  return items.length > 1 ? items.slice(1) : items;
-}
-
-function firstPlainReleaseNote(value) {
-  return parseReleaseNoteItems(value)[0] || String(value || "").trim();
-}
-
-function parseReleaseNoteItems(value) {
-  return String(value || "")
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*[-*]\s+/, "").trim())
-    .filter((line) => line && !/^#+\s+/.test(line))
-    .slice(0, 8);
-}
-
-function parseReleaseVersion(value) {
-  const match = String(value || "").match(/v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
-  return match ? match[1] : "";
 }
 
 function hasSeenReleaseNotes(version) {

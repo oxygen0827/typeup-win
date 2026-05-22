@@ -818,6 +818,20 @@ button:disabled {
   box-shadow: 0 5px 14px rgba(36, 87, 214, 0.18);
 }
 
+.actions .state-active:hover,
+.save-button:hover {
+  background: #fff;
+  border-color: var(--primary);
+  color: var(--primary);
+  box-shadow: 0 6px 16px rgba(36, 87, 214, 0.16);
+}
+
+.actions .state-active:active,
+.save-button:active {
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
 .shortcut-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
