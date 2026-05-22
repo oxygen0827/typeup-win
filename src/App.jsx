@@ -329,6 +329,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.23": {
+    releaseName: "TypeUp 0.1.23",
+    zh: {
+      summary: "本次修复 Windows 自动更新下载卡住或安装失败的问题。",
+      items: [
+        "Windows 打包版更新检查改为直接读取 GitHub Release，并使用已校验的安装包下载链路，避开损坏的 electron-updater 缓存。",
+        "点击“立即安装并重启”后，安装器会等待 TypeUp 主进程退出再启动，减少文件占用导致的安装失败。",
+        "安装包下载完成后会继续校验大小和 SHA256，避免损坏包进入安装流程。",
+      ],
+    },
+    en: {
+      summary: "This update fixes Windows auto-update downloads that could stall or fail to install.",
+      items: [
+        "Packaged Windows builds now check GitHub Releases directly and use the verified installer download path.",
+        "Install-and-restart now launches the installer after the TypeUp main process exits to avoid locked files.",
+        "Downloaded installers continue to be checked by size and SHA256 before installation.",
+      ],
+    },
+  },
   "0.1.22": {
     releaseName: "TypeUp 0.1.22",
     zh: {

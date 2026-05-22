@@ -11,6 +11,7 @@ const GITHUB_REPO = "typeup-win";
 const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
 const USER_AGENT = "TypeUpUpdater/1.0";
 const REQUEST_TIMEOUT_MS = 20000;
+const FALLBACK_INSTALL_ARGS = ["/S", "--updated", "--force-run"];
 const RETRYABLE_ERROR_CODES = new Set([
   "ECONNRESET",
   "ETIMEDOUT",
@@ -144,6 +145,10 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     fallbackInstallerPath = "";
     setState({ status: "checking", error: "", progress: 0 }, { silent: pendingSilentCheck });
     try {
+      if (shouldUseGithubApiUpdates()) {
+        await checkForUpdatesViaGithubApi({ silent: pendingSilentCheck });
+        return getState();
+      }
       await autoUpdater.checkForUpdates();
       if (state.status === "error" && isRetryableUpdateError(state.error)) {
         await checkForUpdatesViaGithubApi({ silent: pendingSilentCheck });
@@ -219,7 +224,7 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
   async function downloadUpdate() {
     if (!canUpdate) return getState();
     if (state.status === "downloading") return getState();
-    if (state.status !== "available" && state.status !== "error") {
+    if (shouldRefreshUpdateBeforeDownload(state.status, Boolean(fallbackUpdate))) {
       await checkForUpdates({ silent: false });
       if (state.status !== "available") return getState();
     }
@@ -259,11 +264,7 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
         await beforeInstall();
       }
       if (fallbackInstallerPath) {
-        spawn(fallbackInstallerPath, ["--updated", "/S", "--force-run"], {
-          detached: true,
-          stdio: "ignore",
-        }).unref();
-        app.quit();
+        launchFallbackInstaller(app, fallbackInstallerPath);
       } else {
         autoUpdater.quitAndInstall(true, true);
       }
@@ -418,6 +419,62 @@ async function verifyDownloadedFile(destination, update) {
   if (actual.toLowerCase() !== match[1].toLowerCase()) {
     throw new Error("Downloaded installer checksum mismatch");
   }
+}
+
+function shouldUseGithubApiUpdates(platform = process.platform) {
+  return platform === "win32";
+}
+
+function shouldRefreshUpdateBeforeDownload(status, hasFallbackUpdate, platform = process.platform) {
+  return status !== "available" || (shouldUseGithubApiUpdates(platform) && !hasFallbackUpdate);
+}
+
+function launchFallbackInstaller(app, installerPath) {
+  const child = process.platform === "win32"
+    ? spawnWindowsFallbackInstaller(installerPath, process.pid)
+    : spawn(installerPath, FALLBACK_INSTALL_ARGS, {
+      detached: true,
+      stdio: "ignore",
+    });
+  child.unref();
+  if (typeof app.exit === "function") {
+    app.exit(0);
+  } else {
+    app.quit();
+  }
+}
+
+function spawnWindowsFallbackInstaller(installerPath, waitForPid = process.pid) {
+  const command = windowsFallbackInstallerCommand(installerPath, waitForPid);
+  return spawn(command.command, command.args, command.options);
+}
+
+function windowsFallbackInstallerCommand(installerPath, waitForPid = process.pid) {
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    "$pidToWait = [int]$args[0]",
+    "$installer = $args[1]",
+    "Wait-Process -Id $pidToWait -ErrorAction SilentlyContinue",
+    "Start-Sleep -Milliseconds 500",
+    "Start-Process -FilePath $installer -ArgumentList @('/S', '--updated', '--force-run')",
+  ].join("; ");
+  return {
+    command: "powershell.exe",
+    args: [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      script,
+      String(waitForPid),
+      installerPath,
+    ],
+    options: {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    },
+  };
 }
 
 function hashFile(filePath, algorithm) {
@@ -579,4 +636,7 @@ module.exports = {
   compareVersions,
   isRetryableUpdateError,
   parseVersion,
+  shouldUseGithubApiUpdates,
+  shouldRefreshUpdateBeforeDownload,
+  windowsFallbackInstallerCommand,
 };
