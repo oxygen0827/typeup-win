@@ -31,6 +31,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     status: canUpdate ? "idle" : "disabled",
     currentVersion: app.getVersion(),
     availableVersion: "",
+    releaseName: "",
+    releaseNotes: "",
+    releaseUrl: "",
     progress: 0,
     error: "",
   };
@@ -64,6 +67,10 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     return setState({ status: "error", error: message, progress: 0 });
   }
 
+  function getReleaseNotesPath() {
+    return path.join(app.getPath("userData"), "pending-release-notes.json");
+  }
+
   if (canUpdate) {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
@@ -79,6 +86,8 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
         status: "available",
         availableVersion: info.version || "",
         releaseName: info.releaseName || "",
+        releaseNotes: normalizeReleaseNotes(info.releaseNotes),
+        releaseUrl: info.releaseUrl || "",
         progress: 0,
         error: "",
       });
@@ -91,6 +100,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
         {
           status: pendingSilentCheck ? "idle" : "latest",
           availableVersion: "",
+          releaseName: "",
+          releaseNotes: "",
+          releaseUrl: "",
           progress: 0,
           error: "",
         },
@@ -110,6 +122,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
       setState({
         status: "downloaded",
         availableVersion: info.version || state.availableVersion,
+        releaseName: info.releaseName || state.releaseName,
+        releaseNotes: normalizeReleaseNotes(info.releaseNotes) || state.releaseNotes,
+        releaseUrl: info.releaseUrl || state.releaseUrl,
         progress: 100,
         error: "",
       });
@@ -175,6 +190,8 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
       fallbackUpdate = {
         version: latestVersion,
         releaseName: release.name || `TypeUp ${latestVersion}`,
+        releaseNotes: normalizeReleaseNotes(release.body || ""),
+        releaseUrl: release.html_url || "",
         installerAssetId: installer.id,
         installerUrl: installer.browser_download_url,
         installerName: installer.name,
@@ -187,6 +204,8 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
           status: "available",
           availableVersion: latestVersion,
           releaseName: fallbackUpdate.releaseName,
+          releaseNotes: fallbackUpdate.releaseNotes,
+          releaseUrl: fallbackUpdate.releaseUrl,
           progress: 0,
           error: "",
         },
@@ -235,6 +254,7 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     if (!canUpdate || state.status !== "downloaded") return getState();
     try {
       setState({ status: "installing", error: "" });
+      await writePendingReleaseNotes().catch(() => {});
       if (typeof beforeInstall === "function") {
         await beforeInstall();
       }
@@ -253,10 +273,56 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     return getState();
   }
 
+  async function readPendingReleaseNotes() {
+    try {
+      const payload = JSON.parse(await fs.promises.readFile(getReleaseNotesPath(), "utf8"));
+      const version = parseVersion(payload?.version || "");
+      if (!version || payload.dismissed) return null;
+      if (compareVersions(version, app.getVersion()) !== 0) return null;
+      return {
+        version,
+        fromVersion: parseVersion(payload.fromVersion || ""),
+        releaseName: String(payload.releaseName || `TypeUp ${version}`),
+        releaseNotes: normalizeReleaseNotes(payload.releaseNotes || ""),
+        releaseUrl: String(payload.releaseUrl || ""),
+        createdAt: payload.createdAt || "",
+      };
+    } catch (_error) {
+      return null;
+    }
+  }
+
+  async function writePendingReleaseNotes() {
+    const version = parseVersion(state.availableVersion || fallbackUpdate?.version || "");
+    if (!version) return;
+    const releaseNotesPath = getReleaseNotesPath();
+    const payload = {
+      version,
+      fromVersion: app.getVersion(),
+      releaseName: state.releaseName || fallbackUpdate?.releaseName || `TypeUp ${version}`,
+      releaseNotes: normalizeReleaseNotes(state.releaseNotes || fallbackUpdate?.releaseNotes || ""),
+      releaseUrl: state.releaseUrl || fallbackUpdate?.releaseUrl || "",
+      createdAt: new Date().toISOString(),
+      dismissed: false,
+    };
+    await fs.promises.mkdir(path.dirname(releaseNotesPath), { recursive: true });
+    await fs.promises.writeFile(releaseNotesPath, JSON.stringify(payload, null, 2), "utf8");
+  }
+
+  async function dismissPendingReleaseNotes(version) {
+    const pending = await readPendingReleaseNotes();
+    const targetVersion = parseVersion(version || "");
+    if (!pending || (targetVersion && pending.version !== targetVersion)) return true;
+    await fs.promises.unlink(getReleaseNotesPath()).catch(() => {});
+    return true;
+  }
+
   ipcMain.handle("typeup:update:get-state", () => getState());
   ipcMain.handle("typeup:update:check", () => checkForUpdates({ silent: false }));
   ipcMain.handle("typeup:update:download", () => downloadUpdate());
   ipcMain.handle("typeup:update:install", () => installUpdate());
+  ipcMain.handle("typeup:update:get-release-notes", () => readPendingReleaseNotes());
+  ipcMain.handle("typeup:update:dismiss-release-notes", (_event, version) => dismissPendingReleaseNotes(version));
 
   return {
     getState,
@@ -475,6 +541,16 @@ function findReleaseAsset(release, version, extension) {
 function parseVersion(value) {
   const match = String(value || "").match(/v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
   return match ? match[1] : "";
+}
+
+function normalizeReleaseNotes(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item : item?.note || item?.notes || ""))
+      .filter(Boolean)
+      .join("\n");
+  }
+  return String(value || "").trim();
 }
 
 function compareVersions(left, right) {

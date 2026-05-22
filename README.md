@@ -6,8 +6,15 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前测试版安装包为 `TypeUp-Setup-0.1.18.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前测试版安装包为 `TypeUp-Setup-0.1.19.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
+
+## 0.1.19 更新重点
+
+- 新增“更新后首次打开”更新说明：TypeUp 安装新版并重新打开后，主界面顶部会显示本次更新内容。
+- 同一版本的更新说明只显示一次，用户关闭后不会反复打扰。
+- 更新器会在安装前记录目标版本、Release 标题、更新说明和发布页链接；新版启动后读取并展示。
+- 如果是从旧版更新到 `0.1.19`，由于旧版还没有记录能力，客户端会使用内置的 `0.1.19` 更新说明兜底展示。
 
 ## 0.1.18 回退说明
 
@@ -327,7 +334,9 @@ macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双
 
 桌面端已经接入 `electron-updater`，更新源指向 GitHub Releases：`oxygen0827/typeup-win`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
 
-注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.1.18`。
+注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.1.19`。
+
+`0.1.19` 起，点击“立即安装并重启”前会把目标版本、Release 标题、Release notes 和发布页链接写入本地用户数据。新版首次启动时，React 主界面会在顶部显示同风格更新说明卡片；同一版本关闭后只记录为已读，不会重复弹出。发布 GitHub Release 时请把用户能看懂的更新内容写进 Release notes，客户端会优先展示这份说明。
 
 发布新版时需要：
 
@@ -337,7 +346,7 @@ npm.cmd version <next-version> --no-git-tag-version
 npm.cmd run build:win
 ```
 
-`build:win` 会先自动重建内嵌 Python engine，再构建 React UI 和 NSIS 安装包。然后在 GitHub 创建对应版本的 Release，例如 `v0.1.18`，上传 `release\` 目录里的安装包和更新元数据：
+`build:win` 会先自动重建内嵌 Python engine，再构建 React UI 和 NSIS 安装包。然后在 GitHub 创建对应版本的 Release，例如 `v0.1.19`，上传 `release\` 目录里的安装包和更新元数据：
 
 ```text
 TypeUp-Setup-<version>.exe

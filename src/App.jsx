@@ -21,6 +21,7 @@ import {
   Square,
   UserRound,
   WandSparkles,
+  X,
 } from "lucide-react";
 import mark from "./assets/typeup-mark.svg";
 
@@ -256,6 +257,17 @@ const COPY = {
   },
 };
 
+COPY.zh.releaseNotesTitle = "已更新到 {version}";
+COPY.zh.releaseNotesSubtitle = "此次更新内容";
+COPY.zh.releaseNotesFallback = "本次更新包含稳定性与体验优化。";
+COPY.zh.releaseNotesOpen = "查看发布页";
+COPY.zh.releaseNotesClose = "关闭";
+COPY.en.releaseNotesTitle = "Updated to {version}";
+COPY.en.releaseNotesSubtitle = "What changed";
+COPY.en.releaseNotesFallback = "This update includes stability and experience improvements.";
+COPY.en.releaseNotesOpen = "View Release";
+COPY.en.releaseNotesClose = "Close";
+
 const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
 
 const EMPTY_SETTINGS = {
@@ -302,8 +314,35 @@ const DEFAULT_UPDATE_STATE = {
   status: "disabled",
   currentVersion: "",
   availableVersion: "",
+  releaseName: "",
+  releaseNotes: "",
+  releaseUrl: "",
   progress: 0,
   error: "",
+};
+
+const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
+
+const BUILTIN_RELEASE_NOTES = {
+  "0.1.19": {
+    releaseName: "TypeUp 0.1.19",
+    zh: {
+      summary: "本次加入更新后首次打开的版本说明，让你能直接看到这次更新改了什么。",
+      items: [
+        "更新安装完成并重新打开 TypeUp 后，主界面顶部会显示本次更新内容。",
+        "同一个版本的更新说明只显示一次，关闭后不会重复打扰。",
+        "后续版本会优先展示 GitHub Release 中填写的真实发布说明。",
+      ],
+    },
+    en: {
+      summary: "This update adds a first-launch changelog after TypeUp installs an update.",
+      items: [
+        "After TypeUp installs an update and reopens, the main screen shows what changed.",
+        "Release notes are shown once per version and stay dismissed afterward.",
+        "Future versions prefer the release notes published on GitHub Releases.",
+      ],
+    },
+  },
 };
 
 export default function App() {
@@ -324,6 +363,7 @@ export default function App() {
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS);
   const [saving, setSaving] = useState(false);
   const [updateState, setUpdateState] = useState(DEFAULT_UPDATE_STATE);
+  const [releaseNotes, setReleaseNotes] = useState(null);
   const [activeModule, setActiveModule] = useState("voice");
 
   function setStatus(next) {
@@ -382,6 +422,23 @@ export default function App() {
       if (typeof unsubscribe === "function") unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    const version = updateState.currentVersion;
+    if (!version || hasSeenReleaseNotes(version)) return undefined;
+    let cancelled = false;
+    async function loadReleaseNotes() {
+      const pending = await window.typeup?.updates?.getReleaseNotes?.();
+      const notes = normalizeReleaseNotesPayload(pending, version) || builtinReleaseNotes(version);
+      if (!cancelled && notes && !hasSeenReleaseNotes(notes.version)) {
+        setReleaseNotes(notes);
+      }
+    }
+    loadReleaseNotes();
+    return () => {
+      cancelled = true;
+    };
+  }, [updateState.currentVersion]);
 
   const text = COPY[lang];
   const defaultHotkeys = defaultAudioHotkeys(platform);
@@ -587,6 +644,18 @@ export default function App() {
     if (next) setUpdateState(next);
   }
 
+  async function openReleaseNotes() {
+    if (!releaseNotes?.releaseUrl) return;
+    await openPayment(releaseNotes.releaseUrl);
+  }
+
+  async function dismissReleaseNotes() {
+    if (!releaseNotes?.version) return;
+    markReleaseNotesSeen(releaseNotes.version);
+    await window.typeup?.updates?.dismissReleaseNotes?.(releaseNotes.version);
+    setReleaseNotes(null);
+  }
+
   return (
     <main className="app-shell">
       <header className="app-titlebar">
@@ -625,6 +694,12 @@ export default function App() {
           onCheck={checkForUpdates}
           onDownload={downloadUpdate}
           onInstall={installUpdate}
+        />
+        <ReleaseNotesBanner
+          lang={lang}
+          notes={releaseNotes}
+          onOpen={openReleaseNotes}
+          onClose={dismissReleaseNotes}
         />
 
         <section className="app-workspace">
@@ -982,8 +1057,118 @@ function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
   );
 }
 
+function ReleaseNotesBanner({ lang, notes, onOpen, onClose }) {
+  if (!notes) return null;
+  const text = COPY[lang];
+  const items = localizedReleaseNoteItems(notes, lang);
+  const summary = localizedReleaseNoteSummary(notes, lang) || text.releaseNotesFallback || "This update includes improvements.";
+  const title = formatUpdateDetail(text.releaseNotesTitle || "Updated to {version}", notes.version);
+
+  return (
+    <section className="release-notes-banner">
+      <div className="release-notes-main">
+        <WandSparkles size={19} />
+        <div>
+          <span>{text.releaseNotesSubtitle || "What changed"}</span>
+          <strong>{title}</strong>
+          <p>{summary}</p>
+          {items.length ? (
+            <ul>
+              {items.slice(0, 5).map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      </div>
+      <div className="release-notes-actions">
+        {notes.releaseUrl ? (
+          <button type="button" onClick={onOpen}>
+            <ExternalLink size={15} />
+            {text.releaseNotesOpen || "View Release"}
+          </button>
+        ) : null}
+        <button type="button" className="icon-button" onClick={onClose} aria-label={text.releaseNotesClose || "Close"} title={text.releaseNotesClose || "Close"}>
+          <X size={17} />
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function formatUpdateDetail(template, version) {
   return String(template || "").replace("{version}", version ? `v${version}` : "新版本");
+}
+
+function normalizeReleaseNotesPayload(payload, currentVersion) {
+  const version = parseReleaseVersion(payload?.version || currentVersion);
+  if (!version) return null;
+  return {
+    version,
+    releaseName: payload?.releaseName || `TypeUp ${version}`,
+    releaseNotes: String(payload?.releaseNotes || ""),
+    releaseUrl: String(payload?.releaseUrl || ""),
+  };
+}
+
+function builtinReleaseNotes(version) {
+  const normalized = parseReleaseVersion(version);
+  const item = BUILTIN_RELEASE_NOTES[normalized];
+  if (!item) return null;
+  return {
+    version: normalized,
+    releaseName: item.releaseName || `TypeUp ${normalized}`,
+    releaseNotes: "",
+    releaseUrl: "",
+    localized: item,
+  };
+}
+
+function localizedReleaseNoteSummary(notes, lang) {
+  return notes.localized?.[lang]?.summary || notes.localized?.en?.summary || firstPlainReleaseNote(notes.releaseNotes);
+}
+
+function localizedReleaseNoteItems(notes, lang) {
+  const localized = notes.localized?.[lang]?.items || notes.localized?.en?.items;
+  if (Array.isArray(localized)) return localized.filter(Boolean);
+  const items = parseReleaseNoteItems(notes.releaseNotes);
+  return items.length > 1 ? items.slice(1) : items;
+}
+
+function firstPlainReleaseNote(value) {
+  return parseReleaseNoteItems(value)[0] || String(value || "").trim();
+}
+
+function parseReleaseNoteItems(value) {
+  return String(value || "")
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*[-*]\s+/, "").trim())
+    .filter((line) => line && !/^#+\s+/.test(line))
+    .slice(0, 8);
+}
+
+function parseReleaseVersion(value) {
+  const match = String(value || "").match(/v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
+  return match ? match[1] : "";
+}
+
+function hasSeenReleaseNotes(version) {
+  try {
+    const seen = JSON.parse(window.localStorage.getItem(RELEASE_NOTES_SEEN_KEY) || "{}");
+    return Boolean(seen[parseReleaseVersion(version)]);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function markReleaseNotesSeen(version) {
+  try {
+    const seen = JSON.parse(window.localStorage.getItem(RELEASE_NOTES_SEEN_KEY) || "{}");
+    seen[parseReleaseVersion(version)] = Date.now();
+    window.localStorage.setItem(RELEASE_NOTES_SEEN_KEY, JSON.stringify(seen));
+  } catch (_error) {
+    // Ignore storage failures; the user can still close the banner for this session.
+  }
 }
 
 function Shortcut({ label, detail, keys }) {

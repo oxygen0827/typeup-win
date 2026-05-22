@@ -1,6 +1,6 @@
 {
   "name": "typeup",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "private": true,
   "description": "TypeUp desktop client for always-on voice transcription.",
   "main": "electron/main.js",
