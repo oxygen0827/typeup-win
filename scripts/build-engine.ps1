@@ -4,6 +4,7 @@ $root = Split-Path -Parent $PSScriptRoot
 $setup = Join-Path $PSScriptRoot "setup-engine.ps1"
 $engine = Join-Path $root "engine\voice-keyboard"
 $venvPython = Join-Path $engine ".venv\Scripts\python.exe"
+$agentExe = Join-Path $engine "dist\TypeUpAgent\TypeUpAgent.exe"
 
 function Invoke-NativeChecked {
   param(
@@ -20,6 +21,13 @@ function Invoke-NativeChecked {
 }
 
 & $setup
+
+if (Test-Path $agentExe) {
+  $agentPath = (Resolve-Path $agentExe).Path
+  Get-Process -Name "TypeUpAgent" -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -eq $agentPath } |
+    Stop-Process -Force
+}
 
 Set-Location $engine
 Invoke-NativeChecked { & $venvPython -m pip install pyinstaller } "Installing PyInstaller"

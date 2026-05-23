@@ -23,7 +23,7 @@ import {
   WandSparkles,
   X,
 } from "lucide-react";
-import mark from "./assets/typeup-mark.svg";
+import mark from "./assets/typeup-mark.png";
 import {
   localizedReleaseNoteItems,
   localizedReleaseNoteSummary,
@@ -273,6 +273,62 @@ COPY.en.releaseNotesFallback = "This update includes stability and experience im
 COPY.en.releaseNotesOpen = "View Release";
 COPY.en.releaseNotesClose = "Close";
 
+Object.assign(COPY.zh, {
+  features: "功能介绍",
+  featuresNavDetail: "核心能力",
+  featuresSub: "了解 TypeUp 如何把语音、输入和轻量 AI 编辑组合成一个顺手的桌面工具。",
+  featureVoiceTitle: "语音输入",
+  featureVoiceDetail: "按住快捷键说话，松开后自动转写并写入当前光标位置。",
+  featureAiTitle: "AI 编辑",
+  featureAiDetail: "用组合快捷键处理当前文字，适合改写、整理和轻量润色。",
+  featurePolishTitle: "微润色模式",
+  featurePolishDetail: "保留原意和语气，只修正口语填充、错别字和轻微表达问题。",
+  featurePrivateTitle: "本地常驻",
+  featurePrivateDetail: "桌面端负责热键、录音和输入，模型调用通过订阅后端代理完成。",
+  feedback: "改进意见",
+  feedbackNavDetail: "提交建议",
+  feedbackSub: "把你觉得别扭、缺失或值得优化的地方记下来，点击按钮会带着内容打开 GitHub Issue。",
+  feedbackLabel: "你的建议",
+  feedbackPlaceholder: "例如：希望微润色保留更多口语感，或者希望更新下载源可以自定义...",
+  feedbackOpenIssues: "提交到 Issues",
+  feedbackIssueTitle: "TypeUp 改进意见",
+  feedbackIssueBody: "请描述你遇到的问题、期待的体验，以及相关截图或复现步骤。",
+  community: "社区",
+  communityNavDetail: "项目链接",
+  communitySub: "查看源码、发布记录和问题反馈入口。",
+  openRepo: "打开仓库",
+  openReleases: "查看发布记录",
+  openIssues: "查看 Issues",
+});
+
+Object.assign(COPY.en, {
+  features: "Features",
+  featuresNavDetail: "Core flow",
+  featuresSub: "See how TypeUp combines voice, typing, and light AI editing into a fast desktop workflow.",
+  featureVoiceTitle: "Voice Input",
+  featureVoiceDetail: "Hold the shortcut to speak, then release to transcribe and type at the cursor.",
+  featureAiTitle: "AI Editing",
+  featureAiDetail: "Use the edit shortcut to process selected or current text with lightweight AI help.",
+  featurePolishTitle: "Light Polish",
+  featurePolishDetail: "Keep intent and tone while fixing filler words, typos, and small phrasing issues.",
+  featurePrivateTitle: "Local Companion",
+  featurePrivateDetail: "The desktop app handles hotkeys, recording, and typing while model calls go through the subscription backend.",
+  feedback: "Feedback",
+  feedbackNavDetail: "Share ideas",
+  feedbackSub: "Write down what feels awkward, missing, or worth improving. The button opens a GitHub Issue with your notes.",
+  feedbackLabel: "Your feedback",
+  feedbackPlaceholder: "For example: keep more spoken style in light polish, or allow custom update mirrors...",
+  feedbackOpenIssues: "Send to Issues",
+  feedbackIssueTitle: "TypeUp feedback",
+  feedbackIssueBody: "Please describe the issue, expected experience, screenshots, or reproduction steps.",
+  community: "Community",
+  communityNavDetail: "Project links",
+  communitySub: "Open the source repository, release history, and issue tracker.",
+  openRepo: "Open Repository",
+  openReleases: "View Releases",
+  openIssues: "View Issues",
+});
+
 const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
 
 const EMPTY_SETTINGS = {
@@ -329,6 +385,27 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.26": {
+    releaseName: "TypeUp 0.1.26",
+    zh: {
+      summary: "本次更新图标资源、左侧功能栏和底部状态栏对齐，并增强 Windows 打包稳定性。",
+      items: [
+        "更新 TypeUp 应用图标、安装器图标和安装器展示图，安装版会随包携带运行时图标资源。",
+        "左侧功能栏新增功能介绍、改进意见和社区，方便测试用户了解能力、提交反馈和查看发布记录。",
+        "底部状态栏会跟随窗口宽度变化，并与上方内容右边界对齐。",
+        "build:win 会先处理运行中的源码版 TypeUpAgent，减少文件占用导致的打包失败。",
+      ],
+    },
+    en: {
+      summary: "This update refreshes icons, adds side navigation pages, aligns the status dock, and hardens Windows packaging.",
+      items: [
+        "TypeUp now ships refreshed app, installer, and runtime icon assets.",
+        "The sidebar adds Features, Feedback, and Community pages for testers.",
+        "The bottom status dock now follows the content width and aligns with the main panels.",
+        "build:win handles a running source TypeUpAgent before packaging to avoid locked-file failures.",
+      ],
+    },
+  },
   "0.1.25": {
     releaseName: "TypeUp 0.1.25",
     zh: {
@@ -588,6 +665,9 @@ export default function App() {
       icon: <UserRound size={18} />,
     },
     { id: "usage", label: text.usage, detail: text.usageRange, icon: <Activity size={18} /> },
+    { id: "features", label: text.features, detail: text.featuresNavDetail, icon: <ShieldCheck size={18} /> },
+    { id: "feedback", label: text.feedback, detail: text.feedbackNavDetail, icon: <FileText size={18} /> },
+    { id: "community", label: text.community, detail: text.communityNavDetail, icon: <ExternalLink size={18} /> },
     { id: "settings", label: text.settings, detail: text.speechModel, icon: <Settings size={18} /> },
     { id: "logs", label: text.logs, detail: text.backend, icon: <Pause size={18} /> },
   ];
@@ -961,6 +1041,18 @@ export default function App() {
               </section>
             </div>
 
+            <div className={activeModule === "features" ? "module-view active" : "module-view"}>
+              <FeaturesPanel text={text} />
+            </div>
+
+            <div className={activeModule === "feedback" ? "module-view active" : "module-view"}>
+              <FeedbackPanel text={text} lang={lang} onOpen={openPayment} />
+            </div>
+
+            <div className={activeModule === "community" ? "module-view active" : "module-view"}>
+              <CommunityPanel text={text} onOpen={openPayment} />
+            </div>
+
             <div className={activeModule === "logs" ? "module-view active" : "module-view"}>
               <section className="log-panel">
                 <div className="panel-heading compact">
@@ -1076,10 +1168,19 @@ export default function App() {
           </div>
 
           <div className={`status-dock ${statusMeta.tone}`}>
-            <span className="dock-dot" />
-            <div>
+            <div className="dock-core">
+              <span className="dock-dot" />
+            </div>
+            <div className="dock-copy">
               <strong>{text.statusDockReady}</strong>
               <small>{statusDockHint || text.statusDockHint}</small>
+            </div>
+            <div className="dock-meter" aria-hidden="true">
+              <i />
+              <i />
+              <i />
+              <i />
+              <i />
             </div>
           </div>
         </section>
@@ -1474,6 +1575,95 @@ function AccountPanel({
           </div>
         </div>
       ) : null}
+    </section>
+  );
+}
+
+function FeaturesPanel({ text }) {
+  const items = [
+    [text.featureVoiceTitle, text.featureVoiceDetail, <Mic size={20} />],
+    [text.featureAiTitle, text.featureAiDetail, <WandSparkles size={20} />],
+    [text.featurePolishTitle, text.featurePolishDetail, <FileText size={20} />],
+    [text.featurePrivateTitle, text.featurePrivateDetail, <ShieldCheck size={20} />],
+  ];
+
+  return (
+    <section className="feature-panel">
+      <div className="page-hero">
+        <p className="eyebrow">{text.features}</p>
+        <h2>TypeUp</h2>
+        <p>{text.featuresSub}</p>
+      </div>
+      <div className="feature-grid">
+        {items.map(([title, detail, icon]) => (
+          <article className="feature-card" key={title}>
+            <div className="feature-icon">{icon}</div>
+            <strong>{title}</strong>
+            <span>{detail}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FeedbackPanel({ text, lang, onOpen }) {
+  const [value, setValue] = useState("");
+
+  function openIssue() {
+    const title = encodeURIComponent(text.feedbackIssueTitle);
+    const body = encodeURIComponent(value.trim() || text.feedbackIssueBody);
+    onOpen(`https://github.com/oxygen0827/typeup-win/issues/new?title=${title}&body=${body}`);
+  }
+
+  return (
+    <section className="feedback-panel">
+      <div className="page-hero">
+        <p className="eyebrow">{text.feedback}</p>
+        <h2>{text.feedback}</h2>
+        <p>{text.feedbackSub}</p>
+      </div>
+      <label className="feedback-box">
+        <span>{text.feedbackLabel}</span>
+        <textarea
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+          placeholder={text.feedbackPlaceholder}
+          lang={lang === "zh" ? "zh-CN" : "en"}
+        />
+      </label>
+      <div className="feedback-actions">
+        <button type="button" className="save-button compact" onClick={openIssue}>
+          <ExternalLink size={18} />
+          {text.feedbackOpenIssues}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function CommunityPanel({ text, onOpen }) {
+  const links = [
+    [text.openRepo, "https://github.com/oxygen0827/typeup-win", <Cloud size={18} />],
+    [text.openReleases, "https://github.com/oxygen0827/typeup-win/releases", <Download size={18} />],
+    [text.openIssues, "https://github.com/oxygen0827/typeup-win/issues", <ExternalLink size={18} />],
+  ];
+
+  return (
+    <section className="community-panel">
+      <div className="page-hero">
+        <p className="eyebrow">{text.community}</p>
+        <h2>{text.community}</h2>
+        <p>{text.communitySub}</p>
+      </div>
+      <div className="community-grid">
+        {links.map(([label, url, icon]) => (
+          <button type="button" key={label} onClick={() => onOpen(url)}>
+            {icon}
+            <span>{label}</span>
+          </button>
+        ))}
+      </div>
     </section>
   );
 }
