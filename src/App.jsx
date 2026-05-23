@@ -385,6 +385,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.27": {
+    releaseName: "TypeUp 0.1.27",
+    zh: {
+      summary: "本次修复 Windows 桌面和开始菜单快捷方式仍显示旧图标的问题。",
+      items: [
+        "安装器会把快捷方式图标直接指向安装目录里的新 ico 文件。",
+        "不再只依赖 TypeUp.exe,0，降低 Windows 图标缓存导致旧图标残留的概率。",
+        "安装完成后会通知 Windows Shell 刷新图标显示。",
+      ],
+    },
+    en: {
+      summary: "This update fixes stale shortcut icons on Windows desktops and Start menus.",
+      items: [
+        "Installer-created shortcuts now point directly to the installed ico file.",
+        "Shortcuts no longer depend only on TypeUp.exe,0, reducing stale Windows icon-cache cases.",
+        "The installer notifies Windows Shell to refresh icons after installation.",
+      ],
+    },
+  },
   "0.1.26": {
     releaseName: "TypeUp 0.1.26",
     zh: {
