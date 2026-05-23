@@ -4,6 +4,10 @@ const {
   shouldUseGithubApiUpdates,
   windowsFallbackInstallerCommand,
   shouldRefreshUpdateBeforeDownload,
+  isRetryableUpdateError,
+  parseLatestYmlPath,
+  parseLatestYmlSize,
+  parseLatestYmlVersion,
 } = require("../electron/updater");
 
 assert.equal(shouldUseGithubApiUpdates("win32"), true);
@@ -13,6 +17,19 @@ assert.equal(shouldRefreshUpdateBeforeDownload("idle", true, "win32"), true);
 assert.equal(shouldRefreshUpdateBeforeDownload("available", false, "win32"), true);
 assert.equal(shouldRefreshUpdateBeforeDownload("available", true, "win32"), false);
 assert.equal(shouldRefreshUpdateBeforeDownload("available", false, "darwin"), false);
+assert.equal(isRetryableUpdateError(new Error("GitHub request timed out")), true);
+assert.equal(isRetryableUpdateError(new Error("request timeout")), true);
+
+const latestYml = [
+  "version: 0.1.24",
+  "files:",
+  "  - url: TypeUp-Setup-0.1.24.exe",
+  "    size: 124285748",
+  "path: TypeUp-Setup-0.1.24.exe",
+].join("\n");
+assert.equal(parseLatestYmlVersion(latestYml), "0.1.24");
+assert.equal(parseLatestYmlPath(latestYml), "TypeUp-Setup-0.1.24.exe");
+assert.equal(parseLatestYmlSize(latestYml), 124285748);
 
 const installerPath = "C:\\Users\\TypeUp User\\Downloads\\TypeUp-Setup-0.1.23.exe";
 const command = windowsFallbackInstallerCommand(installerPath, 1234);

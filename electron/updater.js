@@ -9,8 +9,9 @@ const UPDATE_EVENT = "typeup:update:event";
 const GITHUB_OWNER = "oxygen0827";
 const GITHUB_REPO = "typeup-win";
 const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
+const GITHUB_RELEASE_BASE = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 const USER_AGENT = "TypeUpUpdater/1.0";
-const REQUEST_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 45000;
 const FALLBACK_INSTALL_ARGS = ["/S", "--updated", "--force-run"];
 const RETRYABLE_ERROR_CODES = new Set([
   "ECONNRESET",
@@ -168,7 +169,7 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
 
   async function checkForUpdatesViaGithubApi(options = {}) {
     try {
-      const release = await requestJson(`${GITHUB_API_BASE}/releases/latest`);
+      const release = await findLatestGithubRelease();
       const latestVersion = parseVersion(release?.tag_name || release?.name || "");
       if (!latestVersion) {
         throw new Error("GitHub release does not include a valid version");
@@ -197,7 +198,7 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
         releaseName: release.name || `TypeUp ${latestVersion}`,
         releaseNotes: normalizeReleaseNotes(release.body || ""),
         releaseUrl: release.html_url || "",
-        installerAssetId: installer.id,
+        installerAssetId: installer.id || "",
         installerUrl: installer.browser_download_url,
         installerName: installer.name,
         installerSize: Number(installer.size || 0),
@@ -348,6 +349,47 @@ function requestJson(url) {
   }).then((buffer) => JSON.parse(buffer.toString("utf8")));
 }
 
+async function findLatestGithubRelease() {
+  try {
+    return await requestJson(`${GITHUB_API_BASE}/releases/latest`);
+  } catch (error) {
+    if (!isRetryableUpdateError(error)) {
+      throw error;
+    }
+    return requestLatestReleaseViaYml();
+  }
+}
+
+async function requestLatestReleaseViaYml() {
+  const latestYmlUrl = `${GITHUB_RELEASE_BASE}/latest/download/latest.yml`;
+  const yaml = await requestTextWithRetry(latestYmlUrl, {
+    headers: {
+      "User-Agent": USER_AGENT,
+    },
+  });
+  const version = parseLatestYmlVersion(yaml);
+  if (!version) {
+    throw new Error("GitHub latest.yml does not include a valid version");
+  }
+  const installerName = parseLatestYmlPath(yaml) || `TypeUp-Setup-${version}.exe`;
+  const installerSize = parseLatestYmlSize(yaml);
+  return {
+    tag_name: `v${version}`,
+    name: `TypeUp v${version}`,
+    body: "",
+    html_url: `${GITHUB_RELEASE_BASE}/tag/v${version}`,
+    assets: [
+      {
+        id: "",
+        name: installerName,
+        browser_download_url: `${GITHUB_RELEASE_BASE}/download/v${version}/${installerName}`,
+        size: installerSize,
+        digest: "",
+      },
+    ],
+  };
+}
+
 async function downloadFallbackInstaller(update, onProgress) {
   const cacheDir = path.join(os.tmpdir(), "typeup-updater-fallback");
   await fs.promises.mkdir(cacheDir, { recursive: true });
@@ -363,7 +405,9 @@ async function downloadFallbackInstaller(update, onProgress) {
       await fs.promises.unlink(destination).catch(() => {});
     }
   }
-  const url = `${GITHUB_API_BASE}/releases/assets/${update.installerAssetId}`;
+  const url = update.installerAssetId
+    ? `${GITHUB_API_BASE}/releases/assets/${update.installerAssetId}`
+    : update.installerUrl;
   await requestFileWithRetry(url, destination, {
     expectedSize: update.installerSize,
     onProgress,
@@ -515,6 +559,11 @@ async function requestBufferWithRetry(url, options = {}) {
   throw lastError;
 }
 
+async function requestTextWithRetry(url, options = {}) {
+  const buffer = await requestBufferWithRetry(url, options);
+  return buffer.toString("utf8");
+}
+
 function requestFile(url, destination, options = {}) {
   return new Promise((resolve, reject) => {
     const output = fs.createWriteStream(destination);
@@ -595,6 +644,21 @@ function findReleaseAsset(release, version, extension) {
     || assets.find((asset) => asset.name?.endsWith(extension) && /^TypeUp-Setup-/i.test(asset.name));
 }
 
+function parseLatestYmlVersion(value) {
+  const match = String(value || "").match(/^version:\s*['"]?([^'"\r\n]+)['"]?/m);
+  return parseVersion(match ? match[1] : "");
+}
+
+function parseLatestYmlPath(value) {
+  const match = String(value || "").match(/^path:\s*['"]?([^'"\r\n]+)['"]?/m);
+  return match ? match[1].trim() : "";
+}
+
+function parseLatestYmlSize(value) {
+  const match = String(value || "").match(/^\s*size:\s*(\d+)\s*$/m);
+  return match ? Number(match[1]) : 0;
+}
+
 function parseVersion(value) {
   const match = String(value || "").match(/v?(\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)/);
   return match ? match[1] : "";
@@ -624,7 +688,7 @@ function isRetryableUpdateError(error) {
   const text = error?.message || String(error || "");
   const code = error?.code || "";
   return RETRYABLE_ERROR_CODES.has(code)
-    || /ERR_CONNECTION_RESET|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|network/i.test(text);
+    || /ERR_CONNECTION_RESET|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|network|timed out|timeout/i.test(text);
 }
 
 function delay(ms) {
@@ -636,6 +700,9 @@ module.exports = {
   compareVersions,
   isRetryableUpdateError,
   parseVersion,
+  parseLatestYmlPath,
+  parseLatestYmlSize,
+  parseLatestYmlVersion,
   shouldUseGithubApiUpdates,
   shouldRefreshUpdateBeforeDownload,
   windowsFallbackInstallerCommand,

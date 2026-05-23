@@ -329,6 +329,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.25": {
+    releaseName: "TypeUp 0.1.25",
+    zh: {
+      summary: "本次修复 GitHub 更新检查偶发超时导致无法下载更新的问题。",
+      items: [
+        "更新检查超时时会被正确识别为可重试错误，不再直接停在失败状态。",
+        "GitHub API 不稳定时会改从 Release 的 latest.yml 读取最新版本和安装包地址。",
+        "更新请求超时时间从 20 秒提高到 45 秒，降低国内网络抖动造成的失败概率。",
+      ],
+    },
+    en: {
+      summary: "This update makes GitHub update checks more tolerant of timeouts.",
+      items: [
+        "Timed-out update checks are now treated as retryable network errors.",
+        "If the GitHub API is unstable, TypeUp falls back to the Release latest.yml metadata.",
+        "The update request timeout has been raised from 20s to 45s.",
+      ],
+    },
+  },
   "0.1.24": {
     releaseName: "TypeUp 0.1.24",
     zh: {
