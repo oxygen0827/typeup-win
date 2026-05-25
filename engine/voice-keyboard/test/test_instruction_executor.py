@@ -74,6 +74,22 @@ class InstructionModeExecutorTests(unittest.TestCase):
         self.assertTrue(keep_status)
         self.assertEqual(messages, ["快捷键执行失败：窗口左半屏"])
 
+    def test_open_app_operation_launches_local_application(self):
+        env = MagicMock()
+        env.open_application.return_value = True
+        messages = []
+        executor = InstructionModeExecutor(MagicMock(), env, show=messages.append)
+
+        keep_status = executor.execute(
+            VoiceTextOperation("open_app", name="微信"),
+            "打开微信",
+            "",
+        )
+
+        self.assertTrue(keep_status)
+        env.open_application.assert_called_once_with("微信")
+        self.assertEqual(messages, ["已打开：微信"])
+
     def test_selected_edit_uses_structured_replacement_plan_for_subtarget(self):
         buf = TextBuffer()
         buf.push("hello world")
@@ -114,6 +130,49 @@ class InstructionModeExecutorTests(unittest.TestCase):
             patch("agent.typer.replace_selection") as replace_selection,
         ):
             executor.execute(VoiceTextOperation("edit"), "改一个 hello", "")
+
+        replace_selection.assert_not_called()
+        self.assertEqual(messages, ["没有找到明确可替换的内容"])
+
+    def test_selected_whole_edit_falls_back_when_plan_target_misses(self):
+        buf = TextBuffer()
+        llm = MagicMock()
+        llm.plan_replacement.return_value = ReplacementPlan(
+            target_text="模型误返回的目标",
+            replacement_text="这是一段更自然的文字。",
+            confidence="medium",
+        )
+        env = TyperInputEnvironment(buf)
+        executor = InstructionModeExecutor(llm, env)
+
+        with (
+            patch("agent.typer.get_selection", return_value="这是一段需要润色的文字"),
+            patch("agent.typer.replace_selection") as replace_selection,
+        ):
+            executor.execute(VoiceTextOperation("edit"), "润色一下", "")
+
+        replace_selection.assert_called_once_with(
+            "这是一段更自然的文字。",
+            original="这是一段需要润色的文字",
+        )
+
+    def test_selected_specific_edit_does_not_fallback_when_plan_target_misses(self):
+        buf = TextBuffer()
+        llm = MagicMock()
+        llm.plan_replacement.return_value = ReplacementPlan(
+            target_text="模型误返回的目标",
+            replacement_text="earth",
+            confidence="medium",
+        )
+        messages = []
+        env = TyperInputEnvironment(buf)
+        executor = InstructionModeExecutor(llm, env, show=messages.append)
+
+        with (
+            patch("agent.typer.get_selection", return_value="hello world"),
+            patch("agent.typer.replace_selection") as replace_selection,
+        ):
+            executor.execute(VoiceTextOperation("edit"), "把 world 改成 earth", "")
 
         replace_selection.assert_not_called()
         self.assertEqual(messages, ["没有找到明确可替换的内容"])

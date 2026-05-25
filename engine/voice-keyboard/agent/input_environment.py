@@ -5,6 +5,7 @@ platform typing details.
 """
 
 from dataclasses import dataclass
+import threading
 from typing import Literal
 
 from agent.text_buffer import TextBuffer
@@ -96,6 +97,8 @@ class TyperInputEnvironment:
     ):
         self._buf = buf
         self._text_io = text_io or TyperTextIO()
+        self._snapshot_lock = threading.Lock()
+        self._target_snapshot: TextTarget | None = None
 
     @property
     def buffer(self) -> TextBuffer:
@@ -103,10 +106,36 @@ class TyperInputEnvironment:
 
     def target_for_instruction(self) -> TextTarget:
         selected = self._text_io.get_selection()
+        tracked_segment = self._buf.last
+        with self._snapshot_lock:
+            snapshot = self._target_snapshot
+        if not selected and snapshot is not None and snapshot.selected:
+            return TextTarget(
+                selected=snapshot.selected,
+                tracked_segment=tracked_segment or snapshot.tracked_segment,
+            )
         return TextTarget(
+            selected=selected,
+            tracked_segment=tracked_segment,
+        )
+
+    def capture_target_snapshot(self) -> TextTarget:
+        """Capture the explicit selection before AI recording can disturb it."""
+        selected = self._text_io.get_selection()
+        snapshot = TextTarget(
             selected=selected,
             tracked_segment=self._buf.last,
         )
+        with self._snapshot_lock:
+            current = self._target_snapshot
+            if selected or current is None or not current.selected:
+                self._target_snapshot = snapshot
+                return snapshot
+            return current
+
+    def clear_target_snapshot(self) -> None:
+        with self._snapshot_lock:
+            self._target_snapshot = None
 
     def operation_window_for_instruction(
         self,
@@ -215,6 +244,9 @@ class TyperInputEnvironment:
         if not decision.allowed:
             return False
         return self._text_io.send_shortcut(name)
+
+    def open_application(self, name: str) -> bool:
+        return self._text_io.open_application(name)
 
     def delete_all_text_by_shortcut(self) -> bool:
         if not self.send_shortcut("全选"):

@@ -86,8 +86,13 @@ class AIHandler:
         threading.Thread(target=self._run, args=(pcm,), daemon=True, name="AIHandler").start()
 
     def on_ai_key_down(self) -> None:
-        """Keep the Windows push-to-talk lifecycle hook available."""
-        return None
+        """Snapshot the selection before the AI hotkey/recording flow can disturb it."""
+        try:
+            target = self._env.capture_target_snapshot()
+            if target.selected:
+                print(f"[ai] 捕获选区快照: len={len(target.selected)}")
+        except Exception as e:
+            print(f"[ai] 捕获选区失败: {e}")
 
     # ── 内部流程 ──────────────────────────────────────────────────────
 
@@ -96,6 +101,12 @@ class AIHandler:
         try:
             keep_status = bool(self._run_inner(pcm))
         finally:
+            clear_snapshot = getattr(self._env, "clear_target_snapshot", None)
+            if clear_snapshot is not None:
+                try:
+                    clear_snapshot()
+                except Exception as e:
+                    print(f"[ai] 清理选区快照失败: {e}")
             if self._status is not None and not keep_status:
                 self._status.set_state("idle")
             print("[typeup] 输入完成")

@@ -9,6 +9,11 @@ class VoiceTextOperationTests(unittest.TestCase):
 
         self.assertEqual(operation, VoiceTextOperation(kind="shortcut", name="保存"))
 
+    def test_converts_open_app_intent(self):
+        operation = operation_from_intent({"type": "open_app", "name": " 微信 "})
+
+        self.assertEqual(operation, VoiceTextOperation(kind="open_app", name="微信"))
+
     def test_unknown_intent_becomes_chat_operation(self):
         operation = operation_from_intent({"type": "unknown", "reply": " 稍后再试 "})
 

@@ -6,6 +6,7 @@ from typing import Literal
 
 OperationKind = Literal[
     "shortcut",
+    "open_app",
     "undo",
     "delete",
     "edit",
@@ -41,6 +42,7 @@ def operation_from_intent(result: dict) -> VoiceTextOperation:
 def _normalize_kind(raw: object) -> OperationKind:
     if raw in {
         "shortcut",
+        "open_app",
         "undo",
         "delete",
         "edit",

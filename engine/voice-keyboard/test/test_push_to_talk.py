@@ -143,6 +143,26 @@ class PushToTalkStatusTests(unittest.TestCase):
         self.assertEqual(stopped, ["ai"])
         self.assertIsNone(ptt._active_trigger)
 
+    def test_ai_stop_captures_context_after_hotkey_release(self):
+        captured = []
+        handled = []
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda pcm: handled.append(pcm),
+            on_ai_key_down=lambda: captured.append("snapshot"),
+            ptt_key="alt_l",
+            ai_key=["alt_l", "space"],
+        )
+        ptt._active_key = "ai"
+        ptt._buf = [_pcm(4000, count=6000)]
+        ptt._close_stream = lambda: None
+        ptt._set_audio_level = lambda _level: None
+
+        ptt._stop_recording("ai")
+
+        self.assertEqual(captured, ["snapshot"])
+        self.assertEqual(len(handled), 1)
+
     def test_generic_alt_combo_suppresses_space_when_left_alt_is_down(self):
         ptt = PushToTalk(
             on_utterance=lambda _pcm: None,

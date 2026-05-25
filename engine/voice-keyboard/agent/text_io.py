@@ -93,6 +93,9 @@ class TextIO(Protocol):
     def send_shortcut(self, name: str) -> bool:
         ...
 
+    def open_application(self, name: str) -> bool:
+        ...
+
     def current_application_label(self) -> str:
         ...
 
@@ -175,6 +178,9 @@ class TyperTextIO:
 
     def send_shortcut(self, name: str) -> bool:
         return typer.send_shortcut(name)
+
+    def open_application(self, name: str) -> bool:
+        return typer.open_application(name)
 
     def current_application_label(self) -> str:
         return typer.current_application().label

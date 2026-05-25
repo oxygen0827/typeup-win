@@ -72,6 +72,8 @@ class InstructionModeExecutor:
             else:
                 self._show(f"快捷键需要确认：{operation.name}")
                 return True
+        elif operation.kind == "open_app":
+            return self._do_open_app(operation.name or instruction)
         elif operation.kind == "undo":
             self._do_undo()
         elif operation.kind == "delete":
@@ -91,6 +93,17 @@ class InstructionModeExecutor:
         else:
             return self._do_chat(instruction, operation)
         return False
+
+    def _do_open_app(self, name: str) -> bool:
+        app_name = str(name or "").strip()
+        if not app_name:
+            self._show("没有找到可打开的应用")
+            return True
+        if self._env.open_application(app_name):
+            self._show(f"已打开：{app_name}")
+            return True
+        self._show(f"没有找到可打开的应用：{app_name}")
+        return True
 
     def _io(self) -> ContextManager:
         return self._text_io if self._text_io is not None else nullcontext()
@@ -172,6 +185,15 @@ class InstructionModeExecutor:
         with self._io():
             result = self._env.apply_replacement_plan(window, plan)
         if result.ok:
+            return
+        if (
+            result.failure == "target_not_found"
+            and window.source == "explicit_selection"
+            and _can_replace_whole_selection_on_plan_miss(instruction, plan)
+        ):
+            print("[ai] 替换目标未命中，按显式选区整体替换")
+            with self._io():
+                self._env.replace_selection(window.text, plan.replacement_text)
             return
         elif result.failure in {"target_not_found", "ambiguous_target", "low_confidence"}:
             self._show("没有找到明确可替换的内容")
@@ -411,5 +433,41 @@ def _is_whole_scope_edit_instruction(text: str) -> bool:
             "输入框内容",
             "输入框里的内容",
             "输入框里面的内容",
+        )
+    )
+
+
+def _can_replace_whole_selection_on_plan_miss(
+    instruction: str,
+    plan: ReplacementPlan,
+) -> bool:
+    if plan.confidence == "low" or not plan.replacement_text:
+        return False
+    compact = "".join(str(instruction or "").split()).strip("。.!！？?，,；;：:")
+    if not compact:
+        return False
+    if any(
+        hint in compact
+        for hint in (
+            "第一句", "第二句", "第三句", "最后一句", "第1句", "第2句", "第3句",
+            "第一段", "第二段", "最后一段", "开头", "结尾", "前半", "后半",
+        )
+    ):
+        return False
+    if any(
+        marker in compact
+        for marker in (
+            "这段", "这段话", "这句话", "这部分", "这个", "它",
+            "选中", "所选", "当前选区", "全文", "全部", "整体", "整段",
+        )
+    ):
+        return True
+    if any(marker in compact for marker in ("改成", "改为", "变成", "替换", "删掉", "删除", "去掉", "换成")):
+        return False
+    return any(
+        marker in compact
+        for marker in (
+            "润色", "优化", "整理", "改写", "修饰", "通顺", "正式", "礼貌",
+            "口语", "翻译", "英文", "中文", "精简", "缩短", "扩写", "总结",
         )
     )

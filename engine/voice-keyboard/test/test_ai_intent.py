@@ -267,16 +267,17 @@ class AIIntentTests(unittest.TestCase):
 
         self.assertEqual(result, {"type": "shortcut", "name": "打开飞书"})
 
-    def test_unknown_open_app_does_not_fall_back_to_open_settings(self):
+    def test_unknown_open_app_uses_local_open_app_operation(self):
         llm = MagicMock()
         llm.chat.return_value = '{"type":"shortcut","name":"打开系统设置"}'
 
         result = classify_intent(llm, IntentContext(
-            text="打开不存在的应用。",
+            text="打开微信。",
             shortcuts=("打开系统设置", "打开飞书"),
         ))
 
-        self.assertEqual(result, {"type": "chat", "reply": "没有找到可打开的应用"})
+        self.assertEqual(result, {"type": "open_app", "name": "微信"})
+        llm.chat.assert_not_called()
 
     def test_google_browser_open_utterance_matches_catalog(self):
         llm = MagicMock()

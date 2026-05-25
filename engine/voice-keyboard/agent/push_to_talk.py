@@ -827,6 +827,8 @@ class PushToTalk:
             args     = (pcm,)
             self._set_status("recognizing")
         else:
+            if self._on_ai_key_down:
+                self._on_ai_key_down()
             label    = "解析AI指令"
             callback = self._on_ai_utterance
             args     = (pcm,)

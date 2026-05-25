@@ -1,6 +1,10 @@
+import os
 import platform
+import shutil
+import subprocess
 import time
 from dataclasses import dataclass
+from pathlib import Path
 from pynput.keyboard import Controller, Key, KeyCode
 
 _kb = Controller()
@@ -17,6 +21,8 @@ if _OS == "Windows":
     _KEYEVENTF_KEYUP   = 0x0002
     _INPUT_KEYBOARD    = 1
     _WM_CHAR           = 0x0102
+    _SW_SHOW           = 5
+    _SW_RESTORE        = 9
     _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
     _WECHAT_PROCESS_NAMES = {
         "wechat.exe",
@@ -44,6 +50,19 @@ if _OS == "Windows":
     _user32   = ctypes.windll.user32
     _kernel32 = ctypes.windll.kernel32
     _user32.GetForegroundWindow.restype = ctypes.wintypes.HWND
+    _user32.EnumWindows.restype = ctypes.wintypes.BOOL
+    _user32.EnumWindows.argtypes = [
+        ctypes.WINFUNCTYPE(ctypes.wintypes.BOOL, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM),
+        ctypes.wintypes.LPARAM,
+    ]
+    _user32.IsWindowVisible.restype = ctypes.wintypes.BOOL
+    _user32.IsWindowVisible.argtypes = [ctypes.wintypes.HWND]
+    _user32.IsIconic.restype = ctypes.wintypes.BOOL
+    _user32.IsIconic.argtypes = [ctypes.wintypes.HWND]
+    _user32.ShowWindow.restype = ctypes.wintypes.BOOL
+    _user32.ShowWindow.argtypes = [ctypes.wintypes.HWND, ctypes.c_int]
+    _user32.SetForegroundWindow.restype = ctypes.wintypes.BOOL
+    _user32.SetForegroundWindow.argtypes = [ctypes.wintypes.HWND]
     _user32.GetWindowThreadProcessId.restype = ctypes.wintypes.DWORD
     _user32.GetWindowThreadProcessId.argtypes = [
         ctypes.wintypes.HWND,
@@ -146,6 +165,14 @@ class ShortcutPolicyDecision:
     kind: str = "shortcut"
 
 
+@dataclass(frozen=True)
+class ApplicationLaunchTarget:
+    aliases: tuple[str, ...]
+    executables: tuple[str, ...] = ()
+    start_commands: tuple[tuple[str, ...], ...] = ()
+    relative_paths: tuple[str, ...] = ()
+
+
 def init(cfg: dict) -> None:
     """由 main.py 在启动时调用，根据 config.yaml 的 typing.method 配置打字方式。"""
     global _use_clipboard_mode
@@ -180,6 +207,66 @@ def current_application() -> ActiveApplication:
         except Exception:
             return ActiveApplication(name="Windows foreground window")
     return ActiveApplication(name=_OS or "未知活动应用")
+
+
+_APPLICATION_TARGETS: tuple[ApplicationLaunchTarget, ...] = (
+    ApplicationLaunchTarget(
+        aliases=("微信", "wechat", "weixin"),
+        executables=("wechat.exe", "weixin.exe", "wechatapp.exe", "wechatappex.exe"),
+        relative_paths=(
+            r"Tencent\WeChat\WeChat.exe",
+            r"Tencent\WeChat\Weixin.exe",
+            r"Tencent\WeChatApp\WeChatApp.exe",
+        ),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("企业微信", "wecom", "wxwork"),
+        executables=("wxwork.exe", "wecom.exe"),
+        relative_paths=(r"Tencent\WXWork\WXWork.exe",),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("qq", "腾讯qq"),
+        executables=("qq.exe",),
+        relative_paths=(r"Tencent\QQ\Bin\QQ.exe",),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("钉钉", "dingtalk"),
+        executables=("dingtalk.exe",),
+        relative_paths=(r"DingDing\DingtalkLauncher.exe", r"Alibaba\DingTalk\DingtalkLauncher.exe"),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("飞书", "lark", "feishu"),
+        executables=("lark.exe", "feishu.exe"),
+        relative_paths=(r"Lark\Lark.exe", r"Feishu\Feishu.exe"),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("谷歌浏览器", "谷歌", "chrome", "googlechrome"),
+        executables=("chrome.exe",),
+        start_commands=(("chrome",),),
+        relative_paths=(r"Google\Chrome\Application\chrome.exe",),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("edge", "微软浏览器", "edge浏览器"),
+        executables=("msedge.exe",),
+        start_commands=(("msedge",),),
+        relative_paths=(r"Microsoft\Edge\Application\msedge.exe",),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("记事本", "notepad"),
+        executables=("notepad.exe",),
+        start_commands=(("notepad.exe",),),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("计算器", "calculator", "calc"),
+        executables=("calculatorapp.exe", "calc.exe"),
+        start_commands=(("calc.exe",), ("explorer.exe", "shell:AppsFolder\\Microsoft.WindowsCalculator_8wekyb3d8bbwe!App")),
+    ),
+    ApplicationLaunchTarget(
+        aliases=("设置", "系统设置", "windows设置"),
+        executables=("systemsettings.exe",),
+        start_commands=(("explorer.exe", "ms-settings:"),),
+    ),
+)
 
 
 # 语音指令 → 快捷键映射
@@ -298,6 +385,47 @@ def _foreground_window_and_pid():
     pid = ctypes.wintypes.DWORD(0)
     _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return hwnd, int(pid.value)
+
+
+def _find_window_by_process_names(process_names: tuple[str, ...]):
+    if _OS != "Windows" or not process_names:
+        return None
+    names = {name.lower() for name in process_names}
+    found = {"hwnd": None}
+
+    def callback(hwnd, _lparam):
+        if found["hwnd"]:
+            return False
+        if not _user32.IsWindowVisible(hwnd):
+            return True
+        pid = ctypes.wintypes.DWORD(0)
+        _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if _process_name(int(pid.value)) in names:
+            found["hwnd"] = hwnd
+            return False
+        return True
+
+    enum_proc = ctypes.WINFUNCTYPE(
+        ctypes.wintypes.BOOL,
+        ctypes.wintypes.HWND,
+        ctypes.wintypes.LPARAM,
+    )(callback)
+    _user32.EnumWindows(enum_proc, 0)
+    return found["hwnd"]
+
+
+def _bring_window_to_front(hwnd) -> bool:
+    if _OS != "Windows" or not hwnd:
+        return False
+    try:
+        if _user32.IsIconic(hwnd):
+            _user32.ShowWindow(hwnd, _SW_RESTORE)
+        else:
+            _user32.ShowWindow(hwnd, _SW_SHOW)
+        time.sleep(0.05)
+        return bool(_user32.SetForegroundWindow(hwnd))
+    except Exception:
+        return False
 
 
 def _focused_child_hwnd(foreground):
@@ -691,6 +819,31 @@ def register_shortcut(name: str, keys: list) -> None:
     _SHORTCUTS[name] = keys
 
 
+def _application_target_for_name(name: str) -> ApplicationLaunchTarget | None:
+    query = _normalize_application_name(name)
+    if not query:
+        return None
+    for target in _APPLICATION_TARGETS:
+        for alias in target.aliases:
+            normalized_alias = _normalize_application_name(alias)
+            if normalized_alias == query or normalized_alias in query or query in normalized_alias:
+                return target
+    return None
+
+
+def _normalize_application_name(value: str) -> str:
+    text = str(value or "").strip().lower()
+    for prefix in ("帮我", "请", "给我", "帮忙"):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+    if text.startswith("打开"):
+        text = text[len("打开"):]
+    for suffix in ("一下", "应用程序", "应用", "软件", "浏览器", "app"):
+        if text.endswith(suffix):
+            text = text[:-len(suffix)]
+    return "".join(char for char in text if char not in " \t\r\n。.!！?？,，;；:：\"'“”‘’")
+
+
 def list_shortcuts() -> list[str]:
     return list(_SHORTCUTS.keys())
 
@@ -725,6 +878,148 @@ def shortcut_policy_for_invocation(
         allowed=False,
         reason="not_in_shortcut_catalog",
     )
+
+
+def open_application(name: str) -> bool:
+    """Open a local app by spoken name and bring an existing window forward."""
+    target = _application_target_for_name(name)
+    if _OS == "Windows":
+        return _open_application_windows(name, target)
+    return _open_application_generic(name, target)
+
+
+def _open_application_generic(name: str, target: ApplicationLaunchTarget | None) -> bool:
+    commands = target.start_commands if target else ()
+    if not commands:
+        command = _normalize_application_name(name) or str(name or "").strip()
+        commands = ((command,),)
+    for command in commands:
+        if _start_process(command):
+            return True
+    return False
+
+
+def _open_application_windows(name: str, target: ApplicationLaunchTarget | None) -> bool:
+    if target is not None:
+        hwnd = _find_window_by_process_names(target.executables)
+        if hwnd and _bring_window_to_front(hwnd):
+            return True
+
+    for command in _windows_application_commands(name, target):
+        if _start_process(command):
+            time.sleep(0.8)
+            if target is None:
+                return True
+            hwnd = _find_window_by_process_names(target.executables)
+            if hwnd:
+                _bring_window_to_front(hwnd)
+            return True
+    return False
+
+
+def _windows_application_commands(
+    name: str,
+    target: ApplicationLaunchTarget | None,
+) -> list[tuple[str, ...]]:
+    commands: list[tuple[str, ...]] = []
+    if target is not None:
+        commands.extend(target.start_commands)
+        for executable in target.executables:
+            resolved = shutil.which(executable)
+            if resolved:
+                commands.append((resolved,))
+        for path in _candidate_application_paths(target):
+            commands.append((str(path),))
+        shortcut = _find_start_menu_shortcut(target.aliases)
+        if shortcut:
+            commands.append((str(shortcut),))
+    fallback = _normalize_application_name(name)
+    if fallback:
+        shortcut = _find_start_menu_shortcut((fallback, name))
+        if shortcut:
+            commands.append((str(shortcut),))
+        resolved = shutil.which(fallback)
+        if resolved:
+            commands.append((resolved,))
+        elif not target:
+            commands.append((fallback,))
+    return _dedupe_commands(commands)
+
+
+def _candidate_application_paths(target: ApplicationLaunchTarget) -> list[Path]:
+    roots = [
+        os.environ.get("LOCALAPPDATA", ""),
+        os.environ.get("APPDATA", ""),
+        os.environ.get("ProgramFiles", ""),
+        os.environ.get("ProgramFiles(x86)", ""),
+    ]
+    paths: list[Path] = []
+    for root in roots:
+        if not root:
+            continue
+        base = Path(root)
+        for relative_path in target.relative_paths:
+            path = base / relative_path
+            if path.exists():
+                paths.append(path)
+    return paths
+
+
+def _find_start_menu_shortcut(aliases: tuple[str, ...]) -> Path | None:
+    roots = [
+        Path(root) / r"Microsoft\Windows\Start Menu\Programs"
+        for root in (
+            os.environ.get("APPDATA", ""),
+            os.environ.get("ProgramData", ""),
+        )
+        if root
+    ]
+    normalized_aliases = [_normalize_application_name(alias) for alias in aliases]
+    for root in roots:
+        if not root.exists():
+            continue
+        try:
+            for shortcut in root.rglob("*.lnk"):
+                normalized_name = _normalize_application_name(shortcut.stem)
+                if any(
+                    alias
+                    and (
+                        alias == normalized_name
+                        or alias in normalized_name
+                        or normalized_name in alias
+                    )
+                    for alias in normalized_aliases
+                ):
+                    return shortcut
+        except OSError:
+            continue
+    return None
+
+
+def _dedupe_commands(commands: list[tuple[str, ...]]) -> list[tuple[str, ...]]:
+    seen: set[tuple[str, ...]] = set()
+    deduped: list[tuple[str, ...]] = []
+    for command in commands:
+        cleaned = tuple(str(part) for part in command if str(part or "").strip())
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        deduped.append(cleaned)
+    return deduped
+
+
+def _start_process(command: tuple[str, ...]) -> bool:
+    if not command:
+        return False
+    try:
+        if _OS == "Windows" and len(command) == 1:
+            os.startfile(command[0])  # type: ignore[attr-defined]
+        else:
+            subprocess.Popen(command, close_fds=True)
+        return True
+    except Exception as e:
+        print(f"[typer] 打开应用失败: command={command!r} error={e}")
+        return False
 
 
 def jump_to_end() -> None:

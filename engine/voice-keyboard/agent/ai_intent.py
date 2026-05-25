@@ -72,7 +72,7 @@ _CLASSIFY_SYSTEM = """你是 Voice Keyboard Engine 的 Instruction Mode 意图�
 - Dictation Mode：语音转文字，原样打入当前输入框
 - Instruction Mode，有以下几种 Voice Keyboard Operation：
   * 快捷键/系统动作：说出操作名称直接执行本地 Shortcut Catalog 里的快捷键或系统动作
-  * 打开应用：打开本地应用，动作名称必须来自本地 Shortcut Catalog，例如"打开飞书"
+  * 打开应用：打开本地应用并把窗口切到前台，例如"打开微信"
   * 编辑：优先修改/润色/删除 Explicit Selection（明确选区）；没有明确选区时，默认修改最近一次由引擎输出的 Tracked Segment；用户明确说“全文/全部/整个输入框”等整体范围时处理当前输入环境窗口
   * 写作：给出主题或要求，由引擎生成内容并逐句打入
   * 撤回：触发当前输入环境的撤销快捷键，优先使用应用自己的撤销栈
@@ -81,7 +81,8 @@ _CLASSIFY_SYSTEM = """你是 Voice Keyboard Engine 的 Instruction Mode 意图�
 
 规则（按优先级）：
 1. 当前运行时只执行一个主要 Voice Keyboard Operation。用户明确说出多个步骤（例如"先...再..."、"...然后..."、"...并且..."）时，返回 {"type":"chat","reply":"这个需要分步执行，请先说第一步"}，不要自行合并或规划。
-2. 明确的快捷键或系统动作 → {"type":"shortcut","name":"动作名称"}。动作必须来自本地 Shortcut Catalog，表示触发该名称对应的本地动作；打开应用、打开系统设置也走这个类型。name 必须优先使用可用快捷键列表里的原始名称。
+2. 明确的快捷键或系统动作 → {"type":"shortcut","name":"动作名称"}。动作必须来自本地 Shortcut Catalog，表示触发该名称对应的本地动作；name 必须优先使用可用快捷键列表里的原始名称。
+2a. 打开应用 → {"type":"open_app","name":"应用名称"}。例如"打开微信"返回 {"type":"open_app","name":"微信"}。不要把打开应用伪装成普通聊天。
 3. 撤回/撤销/恢复上一步操作 → {"type":"shortcut","name":"撤销"}。只有在本地 Shortcut Catalog 没有"撤销"时才返回 {"type":"undo"}。
 4. 明确要求删除/清除 Explicit Selection（明确选区），或说“删除/清空/全部删除”等整体删除（不是修改，是直接删掉） → {"type":"delete"}
 5. 用户要保存备忘片段（"记一下"、"记住"、"备忘"、"存一下"等关键词）。key 是用户给这条文本起的名字（如"手机号"、"邮箱"、"家庭地址"），value 是要保存的文本：
@@ -145,7 +146,7 @@ def classify_local_intent(
         shortcut_name = _open_app_shortcut_from_text(ctx.text, ctx.shortcuts)
         if shortcut_name:
             return {"type": "shortcut", "name": shortcut_name}
-        return {"type": "chat", "reply": "没有找到可打开的应用"}
+        return {"type": "open_app", "name": _open_app_target(ctx.text)}
 
     if _looks_like_undo_instruction(ctx.text) and "撤销" in ctx.shortcuts:
         return {"type": "shortcut", "name": "撤销"}
@@ -191,6 +192,7 @@ def apply_intent_fallbacks(
             return {"type": "shortcut", "name": shortcut_name}
         if result.get("type") == "shortcut":
             return {"type": "chat", "reply": "没有找到可打开的应用"}
+        return {"type": "open_app", "name": _open_app_target(ctx.text)}
     if intent == "undo" and "撤销" in ctx.shortcuts:
         return {"type": "shortcut", "name": "撤销"}
     if looks_like_whole_delete_instruction(ctx.text):
