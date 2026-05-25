@@ -394,30 +394,34 @@ async function downloadFallbackInstaller(update, onProgress) {
   const cacheDir = path.join(os.tmpdir(), "typeup-updater-fallback");
   await fs.promises.mkdir(cacheDir, { recursive: true });
   const destination = path.join(cacheDir, update.installerName);
-  if (process.platform === "win32" && update.installerUrl) {
-    if (typeof onProgress === "function") onProgress(5);
-    try {
-      await downloadWithPowerShell(update.installerUrl, destination);
-      await verifyDownloadedFile(destination, update);
-      if (typeof onProgress === "function") onProgress(100);
-      return destination;
-    } catch (error) {
-      await fs.promises.unlink(destination).catch(() => {});
-    }
-  }
   const url = update.installerAssetId
     ? `${GITHUB_API_BASE}/releases/assets/${update.installerAssetId}`
     : update.installerUrl;
-  await requestFileWithRetry(url, destination, {
-    expectedSize: update.installerSize,
-    onProgress,
-    headers: {
-      Accept: "application/octet-stream",
-      "User-Agent": USER_AGENT,
-    },
-  });
-  await verifyDownloadedFile(destination, update);
-  return destination;
+  try {
+    await requestFileWithRetry(url, destination, {
+      expectedSize: update.installerSize,
+      onProgress,
+      headers: {
+        Accept: "application/octet-stream",
+        "User-Agent": USER_AGENT,
+      },
+    });
+    await verifyDownloadedFile(destination, update);
+    return destination;
+  } catch (error) {
+    await fs.promises.unlink(destination).catch(() => {});
+    if (!shouldFallbackToPowerShellDownload(error, process.platform, update.installerUrl)) {
+      throw error;
+    }
+  }
+  if (process.platform === "win32" && update.installerUrl) {
+    if (typeof onProgress === "function") onProgress(5);
+    await downloadWithPowerShell(update.installerUrl, destination);
+    await verifyDownloadedFile(destination, update);
+    if (typeof onProgress === "function") onProgress(100);
+    return destination;
+  }
+  throw new Error("TypeUp update download failed");
 }
 
 function downloadWithPowerShell(url, destination) {
@@ -471,6 +475,10 @@ function shouldUseGithubApiUpdates(platform = process.platform) {
 
 function shouldRefreshUpdateBeforeDownload(status, hasFallbackUpdate, platform = process.platform) {
   return status !== "available" || (shouldUseGithubApiUpdates(platform) && !hasFallbackUpdate);
+}
+
+function shouldFallbackToPowerShellDownload(error, platform = process.platform, installerUrl = "") {
+  return platform === "win32" && Boolean(installerUrl) && isRetryableUpdateError(error);
 }
 
 function launchFallbackInstaller(app, installerPath) {
@@ -705,5 +713,6 @@ module.exports = {
   parseLatestYmlVersion,
   shouldUseGithubApiUpdates,
   shouldRefreshUpdateBeforeDownload,
+  shouldFallbackToPowerShellDownload,
   windowsFallbackInstallerCommand,
 };

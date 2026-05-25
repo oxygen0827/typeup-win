@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const {
   shouldUseGithubApiUpdates,
   windowsFallbackInstallerCommand,
+  shouldFallbackToPowerShellDownload,
   shouldRefreshUpdateBeforeDownload,
   isRetryableUpdateError,
   parseLatestYmlPath,
@@ -19,6 +20,10 @@ assert.equal(shouldRefreshUpdateBeforeDownload("available", true, "win32"), fals
 assert.equal(shouldRefreshUpdateBeforeDownload("available", false, "darwin"), false);
 assert.equal(isRetryableUpdateError(new Error("GitHub request timed out")), true);
 assert.equal(isRetryableUpdateError(new Error("request timeout")), true);
+assert.equal(shouldFallbackToPowerShellDownload(new Error("GitHub request timed out"), "win32", "https://example.com/app.exe"), true);
+assert.equal(shouldFallbackToPowerShellDownload(new Error("GitHub request timed out"), "darwin", "https://example.com/app.exe"), false);
+assert.equal(shouldFallbackToPowerShellDownload(new Error("GitHub request failed: HTTP 404"), "win32", "https://example.com/app.exe"), false);
+assert.equal(shouldFallbackToPowerShellDownload(new Error("GitHub request timed out"), "win32", ""), false);
 
 const latestYml = [
   "version: 0.1.24",
