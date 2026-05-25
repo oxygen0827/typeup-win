@@ -6,8 +6,14 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前测试版安装包为 `TypeUp-Setup-0.1.27.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前测试版安装包为 `TypeUp-Setup-0.1.28.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
+
+## 0.1.28 更新重点
+
+- 修复源码版或安装版被重复打开时可能出现两个相同 TypeUp 窗口的问题；现在第二次打开会聚焦已有窗口。
+- 增加主窗口显示兜底，避免开发环境或慢加载时 Electron 进程已启动但窗口一直不显示。
+- 保留 `0.1.27` 的 AI 指令打开应用、显式选区快照和桌面图标修复。
 
 ## 0.1.27 更新重点
 

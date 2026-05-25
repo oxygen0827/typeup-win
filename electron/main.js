@@ -9,6 +9,19 @@ let quittingForUpdate = false;
 
 const isDev = process.env.NODE_ENV === "development";
 const windowIcon = path.join(__dirname, "..", "build", process.platform === "darwin" ? "icon.png" : "icon.ico");
+const singleInstanceLock = app.requestSingleInstanceLock();
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isVisible()) return;
+  mainWindow.show();
+}
+
+function focusMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  showMainWindow();
+  mainWindow.focus();
+}
 
 async function createWindow() {
   mainWindow = new BrowserWindow({
@@ -28,7 +41,9 @@ async function createWindow() {
     },
   });
 
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.once("ready-to-show", showMainWindow);
+  mainWindow.webContents.once("did-finish-load", showMainWindow);
+  setTimeout(showMainWindow, isDev ? 2500 : 5000);
 
   if (isDev) {
     await mainWindow.loadURL("http://127.0.0.1:5173");
@@ -68,33 +83,39 @@ async function boot() {
   updates.startupCheck();
 }
 
-app.whenReady().then(boot);
+if (!singleInstanceLock) {
+  app.quit();
+} else {
+  app.whenReady().then(boot);
 
-app.on("activate", async () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    await createWindow();
-  }
-});
+  app.on("second-instance", focusMainWindow);
 
-app.on("before-quit", async (event) => {
-  if (quittingForUpdate || !localServer) return;
-  event.preventDefault();
-  try {
-    await closeLocalServer();
-  } finally {
-    app.exit(0);
-  }
-});
+  app.on("activate", async () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      await createWindow();
+    }
+  });
 
-ipcMain.handle("typeup:api-base", () => {
-  if (!localServer) return null;
-  return `http://127.0.0.1:${localServer.port}`;
-});
+  app.on("before-quit", async (event) => {
+    if (quittingForUpdate || !localServer) return;
+    event.preventDefault();
+    try {
+      await closeLocalServer();
+    } finally {
+      app.exit(0);
+    }
+  });
 
-ipcMain.handle("typeup:platform", () => process.platform);
+  ipcMain.handle("typeup:api-base", () => {
+    if (!localServer) return null;
+    return `http://127.0.0.1:${localServer.port}`;
+  });
 
-ipcMain.handle("typeup:open-external", async (_event, url) => {
-  if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
-  await shell.openExternal(url);
-  return true;
-});
+  ipcMain.handle("typeup:platform", () => process.platform);
+
+  ipcMain.handle("typeup:open-external", async (_event, url) => {
+    if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
+    await shell.openExternal(url);
+    return true;
+  });
+}
