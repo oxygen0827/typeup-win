@@ -1,15 +1,17 @@
 # -*- mode: python ; coding: utf-8 -*-
 
 import os
+from PyInstaller.utils.hooks import collect_dynamic_libs
 
 project_root = os.getcwd()
 entry = os.path.join(project_root, "packaging", "windows", "typeup_agent_entry.py")
 hooks = os.path.join(project_root, "packaging", "windows", "hooks")
+uiautomation_binaries = collect_dynamic_libs("uiautomation", destdir=".")
 
 a = Analysis(
     [entry],
     pathex=[project_root],
-    binaries=[],
+    binaries=uiautomation_binaries,
     datas=[],
     hiddenimports=["webrtcvad"],
     hookspath=[hooks],

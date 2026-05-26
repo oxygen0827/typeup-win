@@ -136,6 +136,7 @@ Local Node server
 - Electron 本地 server 保存登录态并自动刷新 token。
 - 登录态保存在 `%APPDATA%\TypeUp\cloud-bridge.json`。
 - Python engine 配置保存在 `%USERPROFILE%\.voice-keyboard\config.yaml`。
+- 个人纠正记忆保存在 `%APPDATA%\TypeUp\engine\corrections.json`，只在本机使用，不上传后端。
 - 登录成功后，Electron 会把 engine 的 STT/LLM provider 自动切到 `typeup_backend`。
 - 语音识别和 AI 编辑统一走后端代理，并由后端做权益和额度校验。
 
@@ -246,6 +247,7 @@ npm.cmd run start
 - 后端返回 `401` 或 `403` 时，本地 server 会清空登录态，并同步清掉 Python engine 配置里的 access/refresh token。
 - `typeup_backend` 模式下，LLM 会使用后端 token 初始化，因此 `ALT + SPACE` AI 编辑热键会被正确注册和拦截。
 - 语音输入会在最终打字前清理 STT/LLM 偶发生成的开头 Markdown/井号标记，例如 `#`、`＃`、`润色结果：`、代码围栏等，避免正文前多出井号。
+- 语音输入后 30 秒内，如果用户删除刚输出的小片段并手动输入替代文本，engine 会把这类 `原识别片段 -> 用户修正片段` 记录为本地候选；同一修正确认两次后会在下一次 STT 后处理里自动生效。
 - Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时通过平滑衰减回到静止状态。
 - Windows 悬浮状态框已改为双缓冲绘制，并禁止音量条刷新时擦除背景，减少透明窗口闪烁；React 底部状态栏也会去重相同状态更新，避免“处理中/就绪”反复重绘。
 - 语音控制台的「启动 / 停止」按钮会按本地 engine 状态互斥高亮：运行时启动按钮为蓝色，停止或异常时停止按钮为蓝色，不需要再只看顶部状态标签判断当前状态。
@@ -258,6 +260,18 @@ npm.cmd run start
 - Windows 端当前无法稳定读取所有第三方应用的光标周边文本，因此无选区且无 TypeUp 追踪片段时，会要求用户先选中文本或改用生成输入。
 - 已知可继续优化项：原生 Win32 圆角裁剪仍可能在个别屏幕缩放下出现轻微边缘毛刺，后续可改成 per-pixel alpha layered window 继续打磨。
 - 未登录时启动 engine 会进入 `needs_config` 状态，提示先登录后端账号。
+
+## 个人词库与纠正记忆
+
+TypeUp 会在本地学习用户手动修正过的专有名词、人名和产品名，例如把“胡仁远”改成“胡任远”、把“胡少宏”改成“胡少鸿”、把 `claude codecs` 改成 `claude codex`。学习数据保存在 `%APPDATA%\TypeUp\engine\corrections.json`；测试时可以用 `TYPEUP_ENGINE_USER_DIR` 覆盖用户目录。
+
+自动学习只采样短窗口、小范围替换：语音输出前后会用 Windows UI Automation 非侵入式读取当前焦点输入框文本快照；用户在 30 秒内手动改错后，遇到 Enter、下一次语音输入、鼠标点击或超时会再次读取快照，并用前后文本 diff 推断 `原识别片段 -> 用户修正片段`。读不到 UIA 快照时不会扰动输入框，只会跳过快照学习并保留原有键盘事件兜底。整段大改写、多处无关修改、删除后未输入、纯标点、过短片段和与本次语音输出区域无关的修改不会生成规则。
+
+纠正规则字段包括 `id`、`source`、`target`、`count`、`confidence`、`enabled`、`created_at`、`updated_at`、`last_seen_at`。同一个 `source + target` 重复出现会累加次数并提升置信度；同一个 source 出现多个 target 时会保留多条，只应用已启用且置信度最高的规则。
+
+STT 返回后、真正输入前会先应用本地高置信规则。规则需要满足 `confidence >= 2` 或 `count >= 2` 才会自动替换，所以第一次学习先作为候选，第二次确认后生效。替换支持中文连续文本、英文大小写保留，以及简单的英文空格/标点边界。
+
+桌面端新增“个人词库”管理页，可以搜索、手动新增、启用/禁用和删除纠正记忆，并展示候选/已生效状态与最后学习时间；页面打开和停留期间会自动刷新，便于看到 engine 自动学习到的新记录。这些操作只改本机文件。对于本地 `glm_asr_2512` provider，engine 会把已启用 target 合并为最多 100 个 hotwords；`typeup_backend` provider 暂时只做本地后处理，因为后端 `/v1/stt/transcribe` 当前不接收 hotwords。AI 微润色和编辑提示也会带上近期高置信个人词汇，提醒模型优先保留这些写法。
 
 ## AI 编辑与指令模式
 
@@ -298,6 +312,8 @@ npm.cmd run build
 npm.cmd run build:win
 engine\voice-keyboard\.venv\Scripts\python.exe -m unittest discover -s engine\voice-keyboard\test
 engine\voice-keyboard\.venv\Scripts\python.exe -m compileall engine\voice-keyboard\agent engine\voice-keyboard\test
+node scripts\test-corrections-store.cjs
+node --check electron\corrections-store.js
 node --check electron\local-server.js
 node --check electron\settings-store.js
 node --check electron\main.js
@@ -337,6 +353,11 @@ POST /api/agent/restart
 GET  /api/usage
 GET  /api/settings
 PUT  /api/settings
+
+GET    /api/corrections
+POST   /api/corrections
+PATCH  /api/corrections/:id
+DELETE /api/corrections/:id
 ```
 
 本地接口会把后端错误保持为统一格式：
@@ -385,6 +406,8 @@ POST /v1/auth/refresh
 后端 refresh token 是旋转式的。engine 启动时会读取 `cloud-bridge.json` 中的最新凭证；STT/LLM 请求遇到 `401` 时，会先从 `cloud-bridge.json` 重新同步一次 access/refresh token 再重试，只有仍失败时才调用 `/v1/auth/refresh`。engine 如果刷新 token，会把新 token 同步回 `cloud-bridge.json`，避免 UI 和 engine 登录态分叉。
 
 如果后端返回 `401` 或 `403`，Electron 本地 server 会清空 `cloud-bridge.json` 中的登录态，并把 engine 配置中的 `access_token` / `refresh_token` 清空；用户需要重新登录后端账号。`403` 通常表示账号已被禁用。
+
+个人纠正记忆不改变后端 API contract。`typeup_backend` 模式继续只调用后端 STT/LLM 代理，纠正规则在本地 STT 后处理链路里执行；本地 `glm_asr_2512` provider 才会把个人词库 target 作为 hotwords 传给模型。
 
 ## 快捷键
 
