@@ -68,11 +68,20 @@ def _parse_key(key_str: str):
         return kb.KeyCode.from_char(key_name)
 
 
+def _split_hotkey_string(key_input: str) -> list[str]:
+    text = str(key_input or "").strip()
+    if not text:
+        return []
+    if "+" not in text and "," not in text:
+        return [text]
+    return [part.strip() for part in text.replace("+", ",").split(",") if part.strip()]
+
+
 def _parse_keys(key_input) -> list:
     """支持单个字符串或字符串列表，统一返回 pynput key 列表。"""
     if isinstance(key_input, list):
         return [_parse_key(k) for k in key_input]
-    return [_parse_key(key_input)]
+    return [_parse_key(k) for k in _split_hotkey_string(key_input)]
 
 
 def _parse_hotkeys(key_input) -> list[tuple]:
@@ -86,7 +95,7 @@ def _parse_hotkeys(key_input) -> list[tuple]:
         if key_input and all(isinstance(item, list) for item in key_input):
             return [tuple(_parse_key(k) for k in item) for item in key_input]
         return [tuple(_parse_key(k) for k in key_input)]
-    return [( _parse_key(key_input), )]
+    return [tuple(_parse_key(k) for k in _split_hotkey_string(key_input))]
 
 
 def _hotkey_tokens(key_input) -> list[tuple[str, ...]]:
@@ -94,7 +103,7 @@ def _hotkey_tokens(key_input) -> list[tuple[str, ...]]:
         if key_input and all(isinstance(item, list) for item in key_input):
             return [tuple(_normalized_key_name(k) for k in item if str(k).strip()) for item in key_input]
         return [tuple(_normalized_key_name(k) for k in key_input if str(k).strip())]
-    return [(_normalized_key_name(key_input),)]
+    return [tuple(_normalized_key_name(k) for k in _split_hotkey_string(key_input))]
 
 
 def _format_hotkey(hotkey: tuple) -> str:
@@ -297,6 +306,7 @@ class PushToTalk:
         ptt_key:           str = "right_alt",
         edit_key:          str = "right_ctrl",
         ai_key:            str = "right_shift",
+        toggle_key=None,
         device:            Optional[str] = "auto",
         status_window=None,
         kbd_monitor=None,
@@ -309,10 +319,12 @@ class PushToTalk:
         self._ptt_hotkeys       = _parse_hotkeys(ptt_key)
         self._edit_hotkeys      = _parse_hotkeys(edit_key) if on_edit_utterance else []
         self._ai_hotkeys        = _parse_hotkeys(ai_key)   if on_ai_utterance   else []
+        self._toggle_hotkeys    = _parse_hotkeys(toggle_key) if toggle_key else []
         self._reserved_hotkey_tokens = (
             _hotkey_tokens(ptt_key)
             + (_hotkey_tokens(edit_key) if on_edit_utterance else [])
             + (_hotkey_tokens(ai_key) if on_ai_utterance else [])
+            + (_hotkey_tokens(toggle_key) if toggle_key else [])
         )
         self._filter_pressed_tokens: set[str] = set()
         self._device_hint       = device
@@ -416,8 +428,23 @@ class PushToTalk:
             except Exception:
                 pass
         if self._active_key is not None:
+            toggle_hotkey = self._matching_hotkey(self._toggle_hotkeys)
+            if toggle_hotkey is not None and self._active_key == "dictate":
+                self._cancel_pending_start()
+                if self._active_trigger is None:
+                    self._stop_toggle_dictation(toggle_hotkey)
+                elif self._active_trigger_is_part_of(toggle_hotkey):
+                    self._active_trigger = None
+                    self._discard_hotkey_pressed_keys(toggle_hotkey)
+                return
             self._maybe_upgrade_dictate_to_combo()
             return  # 已有键按下，忽略另一个
+
+        toggle_hotkey = self._matching_hotkey(self._toggle_hotkeys)
+        if toggle_hotkey is not None:
+            self._cancel_pending_start()
+            self._start_toggle_dictation(toggle_hotkey)
+            return
 
         combo_match = self._matching_non_ptt_hotkey()
         if combo_match is not None:
@@ -451,6 +478,17 @@ class PushToTalk:
         self._active_trigger = hotkey
         self._recording_started_at = time.monotonic()
         self._start_recording()
+
+    def _start_toggle_dictation(self, hotkey: tuple):
+        self._active_key = "dictate"
+        self._active_trigger = None
+        self._recording_started_at = time.monotonic()
+        self._start_recording()
+
+    def _stop_toggle_dictation(self, hotkey: tuple):
+        self._active_trigger = None
+        self._discard_hotkey_pressed_keys(hotkey)
+        self._stop_recording(mode="dictate")
 
     def _handle_ptt_tap(self):
         now = time.monotonic()
@@ -512,13 +550,21 @@ class PushToTalk:
         return None
 
     def _has_combo_extension(self, hotkey: tuple) -> bool:
-        for candidate in self._ai_hotkeys + self._edit_hotkeys:
+        for candidate in self._ai_hotkeys + self._edit_hotkeys + self._toggle_hotkeys:
             if len(candidate) > len(hotkey) and all(
                 any(_key_matches(candidate_key, base_key) for candidate_key in candidate)
                 for base_key in hotkey
             ):
                 return True
         return False
+
+    def _active_trigger_is_part_of(self, hotkey: tuple) -> bool:
+        if self._active_trigger is None:
+            return False
+        return all(
+            any(_key_matches(candidate_key, trigger_key) for candidate_key in hotkey)
+            for trigger_key in self._active_trigger
+        )
 
     def _pressed_has_key(self, configured_key) -> bool:
         return any(_key_matches(configured_key, pressed_key) for pressed_key in self._pressed_keys)
@@ -539,6 +585,10 @@ class PushToTalk:
 
     def _discard_pressed_token(self, token: str) -> None:
         self._discard_pressed_key(_parse_key(token))
+
+    def _discard_hotkey_pressed_keys(self, hotkey: tuple) -> None:
+        for configured_key in hotkey:
+            self._discard_pressed_key(configured_key)
 
     def _clear_stale_win32_modifiers(self) -> None:
         for token in ("alt", "ctrl", "shift"):
@@ -681,7 +731,11 @@ class PushToTalk:
             if len(set(hotkey)) == 1:
                 return True
             if token in _MODIFIER_TOKENS:
-                return True
+                if _configured_hotkey_satisfied(hotkey, pressed_tokens):
+                    return True
+                if _configured_hotkey_has_other_pressed_token(hotkey, token, pressed_tokens):
+                    return True
+                continue
             if _configured_hotkey_satisfied(hotkey, pressed_tokens):
                 return True
             if _configured_hotkey_has_other_pressed_token(hotkey, token, pressed_tokens):

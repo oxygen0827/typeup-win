@@ -68,6 +68,11 @@ audio:
   # 不推荐 ctrl：会和 Ctrl+Space（macOS 切换输入法）、Ctrl+A/E/K（编辑光标）冲突
   ptt_key: alt
 
+  # Toggle transcription: press once to start, press again to stop and type.
+  # Windows: [ctrl, alt]           Ctrl + Alt
+  # macOS/Linux: leave unset unless you want a dedicated toggle shortcut.
+  toggle_key: [ctrl, alt]
+
   # AI 键（快捷键/编辑/写作/撤回/聊天）
   # macOS:   alt_r                 右 Option（不和系统 Cmd 快捷键冲突）
   # Windows: [alt, space]           Alt + Space；Space 会被钩子吞掉，避免覆盖选区

@@ -9,6 +9,13 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 当前测试版安装包为 `TypeUp-Setup-0.1.29.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
 
+## 0.1.34 更新重点
+
+- Windows 新增切换式转写热键：按一下 `CTRL + ALT` 开始持续转写，再按一下停止录音并把转写结果输入到当前光标。
+- 原有热键保持不变：`ALT` 仍然是按住说话、松开转写，`ALT + SPACE` 仍然进入 AI 指令编辑。
+- 本地 engine 的 `audio.toggle_key` 支持 `[ctrl, alt]` YAML 写法，也支持 `.env` 中的 `TOGGLE_KEY=ctrl+alt`。
+- 快捷键展示会读取当前配置并显示 `ALT`、`CTRL + ALT`、`ALT + SPACE` 和双击 `ALT`。
+
 ## 0.1.29 更新重点
 
 - 优化 Windows 自动更新下载体验：优先使用 Node 流式下载显示真实进度，网络超时或连接重置时再回退到 PowerShell 稳定下载。
@@ -217,7 +224,8 @@ npm.cmd run start
 6. 点击刷新订单或刷新账号，确认权益为 active。
 7. 点击启动本地引擎。
 8. 按住 `ALT` 说话，松开后通过后端 STT 代理转写。
-9. 按住 `ALT + SPACE` 进行 AI 编辑，通过后端 LLM 代理处理。
+9. 按一下 `CTRL + ALT` 开启转写模式，再按一下停止录音并输入结果。
+10. 按住 `ALT + SPACE` 进行 AI 编辑，通过后端 LLM 代理处理。
 
 ### 4. 测试版安装包使用
 
@@ -227,7 +235,7 @@ npm.cmd run start
 2. 注册账号，邮箱需要是标准邮箱格式，密码至少 8 位。
 3. 注册成功后会自动获得 `free_trial` 免费权益：30 天、600 分钟语音额度、3000 次 AI 请求额度。
 4. 点击「启动」启动本地引擎。
-5. 按住 `ALT` 说话转写，按住 `ALT + SPACE` 使用 AI 编辑。
+5. 按住 `ALT` 说话转写；按一下 `CTRL + ALT` 开启或关闭转写模式；按住 `ALT + SPACE` 使用 AI 编辑。
 
 如果注册时密码少于 8 位，前端会直接提示「注册密码至少 8 位」；后端也会返回「密码至少 8 位」，不会再只显示笼统的「请求参数不正确」。
 
@@ -246,6 +254,7 @@ npm.cmd run start
 - engine 启动、STT/LLM 请求遇到 `401`、以及刷新后端 token 后，都会优先同步 `%APPDATA%\TypeUp\cloud-bridge.json` 和 `%USERPROFILE%\.voice-keyboard\config.yaml`，避免 UI 与 engine 登录态分叉导致“刷新凭证无效”。
 - 后端返回 `401` 或 `403` 时，本地 server 会清空登录态，并同步清掉 Python engine 配置里的 access/refresh token。
 - `typeup_backend` 模式下，LLM 会使用后端 token 初始化，因此 `ALT + SPACE` AI 编辑热键会被正确注册和拦截。
+- Windows 默认还提供 `CTRL + ALT` 切换式转写热键；该组合不会在只按下第一枚修饰键时被钩子吞掉，只有组合成立时才拦截。
 - 语音输入会在最终打字前清理 STT/LLM 偶发生成的开头 Markdown/井号标记，例如 `#`、`＃`、`润色结果：`、代码围栏等，避免正文前多出井号。
 - 语音输入后 30 秒内，如果用户删除刚输出的小片段并手动输入替代文本，engine 会把这类 `原识别片段 -> 用户修正片段` 记录为本地候选；同一修正确认两次后会在下一次 STT 后处理里自动生效。
 - Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时通过平滑衰减回到静止状态。
@@ -321,6 +330,16 @@ node --check electron\preload.js
 node --check electron\updater.js
 node --check electron\agent-manager.js
 node --check electron\usage-store.js
+```
+
+本次 `CTRL + ALT` 切换转写最终检查使用：
+
+```powershell
+git diff --check
+engine\voice-keyboard\.venv\Scripts\python.exe -m unittest discover -s engine\voice-keyboard\test
+engine\voice-keyboard\.venv\Scripts\python.exe -m compileall -q engine\voice-keyboard\agent engine\voice-keyboard\test
+node --check electron\settings-store.js
+npm.cmd run build
 ```
 
 ## 前端本地接口
@@ -414,10 +433,11 @@ POST /v1/auth/refresh
 TypeUp 默认 Windows 快捷键：
 
 - `ALT`：按住说话，松开后转写到当前光标。
+- `CTRL + ALT`：按一下开启转写模式，再按一下停止并输入结果。
 - `ALT + SPACE`：按住进行 AI 编辑。
 - 双击 `ALT`：切换原生/微润色模式。
 
-macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双击右 `Shift` 切换润色模式。桌面 UI 会读取当前平台和 `settings.audio.ptt_key` / `settings.audio.ai_key` 后再显示提示文案。
+macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双击右 `Shift` 切换润色模式。桌面 UI 会读取当前平台和 `settings.audio.ptt_key` / `settings.audio.toggle_key` / `settings.audio.ai_key` 后再显示提示文案。
 
 按住 `ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。音量条刷新使用平滑衰减和双缓冲绘制，减少闪烁；如果只剩轻微边缘毛刺，属于后续视觉优化项。
 

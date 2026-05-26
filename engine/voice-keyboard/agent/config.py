@@ -177,6 +177,7 @@ def _env_audio() -> dict | None:
         "mode":             os.getenv("AUDIO_MODE", "").strip(),
         "ptt_key":          os.getenv("PTT_KEY", "").strip(),
         "edit_key":         os.getenv("EDIT_KEY", "").strip(),
+        "toggle_key":       os.getenv("TOGGLE_KEY", "").strip(),
         "device":           os.getenv("AUDIO_DEVICE", "").strip(),
         "vad_aggressiveness": os.getenv("VAD_AGGRESSIVENESS", "").strip(),
     }

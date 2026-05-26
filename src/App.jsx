@@ -136,6 +136,8 @@ const COPY = {
     statusDockHint: "快捷键会根据当前平台和配置显示。",
     shortcutSpeak: "开始说话",
     shortcutSpeakDetail: "松开后转写到当前光标",
+    shortcutToggle: "转写模式",
+    shortcutToggleDetail: "按一下开启，再按一下关闭",
     shortcutAi: "AI 编辑",
     shortcutAiDetail: "按住组合键处理当前文字",
     shortcutPolish: "切换润色模式",
@@ -255,6 +257,8 @@ const COPY = {
     statusDockHint: "Shortcuts follow the current platform and settings.",
     shortcutSpeak: "Start Speaking",
     shortcutSpeakDetail: "Release to type at the cursor",
+    shortcutToggle: "Transcription Mode",
+    shortcutToggleDetail: "Press once to start, again to stop",
     shortcutAi: "AI Edit",
     shortcutAiDetail: "Hold the combo to edit text",
     shortcutPolish: "Switch Polish Mode",
@@ -702,8 +706,9 @@ export default function App() {
   const defaultHotkeys = defaultAudioHotkeys(platform);
   const pttKey = settings.audio?.ptt_key || defaultHotkeys.pttKey;
   const aiKey = settings.audio?.ai_key || defaultHotkeys.aiKey;
+  const toggleKey = settings.audio?.toggle_key || defaultHotkeys.toggleKey;
   const polishKey = `${lang === "zh" ? "双击" : "Double"} ${formatHotkey(pttKey, lang, platform)}`;
-  const statusDockHint = formatStatusDockHint(lang, pttKey, aiKey, polishKey, platform);
+  const statusDockHint = formatStatusDockHint(lang, pttKey, aiKey, toggleKey, polishKey, platform);
   const statusMeta = withDynamicStatusCopy(
     STATUS_COPY[lang][status.state] || STATUS_COPY[lang].stopped,
     status.state,
@@ -1115,12 +1120,13 @@ export default function App() {
                 <div className="panel-heading compact">
                   <div>
                     <p className="eyebrow">{text.shortcuts}</p>
-                    <h2>{formatHotkey(pttKey, lang, platform)} / {formatHotkey(aiKey, lang, platform)} / {polishKey}</h2>
+                    <h2>{formatHotkey(pttKey, lang, platform)} / {formatHotkey(toggleKey, lang, platform)} / {formatHotkey(aiKey, lang, platform)} / {polishKey}</h2>
                   </div>
                   <WandSparkles size={22} />
                 </div>
                 <div className="shortcut-grid">
                   <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang, platform)} />
+                  <Shortcut label={text.shortcutToggle} detail={text.shortcutToggleDetail} keys={formatHotkey(toggleKey, lang, platform)} />
                   <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang, platform)} />
                   <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={polishKey} />
                 </div>
@@ -2126,9 +2132,9 @@ function validateAuthForm(form, text) {
 
 function defaultAudioHotkeys(platform = "") {
   if (platform === "darwin") {
-    return { pttKey: "shift_r", aiKey: "alt_r" };
+    return { pttKey: "shift_r", aiKey: "alt_r", toggleKey: "" };
   }
-  return { pttKey: "alt", aiKey: ["alt", "space"] };
+  return { pttKey: "alt", aiKey: ["alt", "space"], toggleKey: ["ctrl", "alt"] };
 }
 
 function withDynamicStatusCopy(meta, state, lang, pttKey, platform = "") {
@@ -2140,18 +2146,23 @@ function withDynamicStatusCopy(meta, state, lang, pttKey, platform = "") {
   };
 }
 
-function formatStatusDockHint(lang, pttKey, aiKey, polishKey, platform = "") {
+function formatStatusDockHint(lang, pttKey, aiKey, toggleKey, polishKey, platform = "") {
   const speak = formatHotkey(pttKey, lang, platform);
   const ai = formatHotkey(aiKey, lang, platform);
+  const toggle = toggleKey ? formatHotkey(toggleKey, lang, platform) : "";
   if (lang === "zh") {
-    return `${speak} 说话，${ai} 进行 AI 编辑，${polishKey} 切换润色模式`;
+    const togglePart = toggle ? `${toggle} 切换转写，` : "";
+    return `${speak} 说话，${togglePart}${ai} 进行 AI 编辑，${polishKey} 切换润色模式`;
   }
-  return `${speak} to speak, ${ai} for AI editing, ${polishKey} to switch polish mode`;
+  const togglePart = toggle ? `${toggle} toggles transcription, ` : "";
+  return `${speak} to speak, ${togglePart}${ai} for AI editing, ${polishKey} to switch polish mode`;
 }
 
 function formatHotkey(value, lang, platform = "") {
   const tokens = Array.isArray(value) ? value : [value];
-  return tokens
+  const visibleTokens = tokens.filter((token) => String(token || "").trim());
+  if (!visibleTokens.length) return "-";
+  return visibleTokens
     .map((token) => {
       const text = String(token || "").toLowerCase();
       if (text === "alt") return "ALT";

@@ -470,6 +470,7 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
             on_ai_key_down=on_ai_key_dwn,
             ptt_key=audio_cfg.get("ptt_key", "alt"),
             ai_key=audio_cfg.get("ai_key", ["alt", "space"]),
+            toggle_key=audio_cfg.get("toggle_key"),
             device=device,
             status_window=status_window,
             kbd_monitor=kbd_monitor,

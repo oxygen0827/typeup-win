@@ -7,11 +7,11 @@ const USER_DIR = path.join(resolveAppDataDir(), "TypeUp", "engine");
 const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
 const TYPEUP_DIR = path.join(resolveAppDataDir(), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");
-const CONFIG_VERSION = 4;
+const CONFIG_VERSION = 5;
 const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
 const DEFAULT_AUDIO_HOTKEYS = process.platform === "darwin"
   ? { ptt_key: "shift_r", ai_key: "alt_r" }
-  : { ptt_key: "alt", ai_key: ["alt", "space"] };
+  : { ptt_key: "alt", ai_key: ["alt", "space"], toggle_key: ["ctrl", "alt"] };
 
 const DEFAULT_CONFIG = {
   stt: {
@@ -68,6 +68,7 @@ function ensureDefaultConfig() {
           mode: DEFAULT_CONFIG.audio.mode,
           ptt_key: DEFAULT_CONFIG.audio.ptt_key,
           ai_key: DEFAULT_CONFIG.audio.ai_key,
+          toggle_key: DEFAULT_CONFIG.audio.toggle_key,
         },
         typing: current.typing || DEFAULT_CONFIG.typing,
         typeup: { managed: true, version: CONFIG_VERSION },
@@ -84,6 +85,7 @@ function ensureDefaultConfig() {
           mode: DEFAULT_CONFIG.audio.mode,
           ptt_key: DEFAULT_CONFIG.audio.ptt_key,
           ai_key: DEFAULT_CONFIG.audio.ai_key,
+          toggle_key: DEFAULT_CONFIG.audio.toggle_key,
         },
         typeup: { managed: true, version: CONFIG_VERSION },
       });
@@ -217,6 +219,7 @@ function normalizePatch(patch) {
       vad_aggressiveness: Number(patch.audio.vad_aggressiveness ?? 2),
       ptt_key: hotkeyValue(patch.audio.ptt_key || DEFAULT_CONFIG.audio.ptt_key),
       ai_key: hotkeyValue(patch.audio.ai_key || DEFAULT_CONFIG.audio.ai_key),
+      toggle_key: hotkeyValue(patch.audio.toggle_key || DEFAULT_CONFIG.audio.toggle_key),
     };
   }
   if (patch.typing) {

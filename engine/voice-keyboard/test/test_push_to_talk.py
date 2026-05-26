@@ -50,6 +50,11 @@ class _SuppressRecorder:
         self.count += 1
 
 
+class _FakeTimer:
+    def cancel(self):
+        pass
+
+
 class PushToTalkStatusTests(unittest.TestCase):
     def test_mid_sentence_result_restores_recording_status_while_key_is_held(self):
         status = _StatusRecorder()
@@ -142,6 +147,74 @@ class PushToTalkStatusTests(unittest.TestCase):
         ptt._on_release(kb.Key.alt_l)
         self.assertEqual(stopped, ["ai"])
         self.assertIsNone(ptt._active_trigger)
+
+    def test_toggle_hotkey_starts_and_stops_dictation_on_press(self):
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_r", toggle_key=["ctrl", "alt"])
+        started = []
+        stopped = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+
+        def stop_recording(*, mode):
+            stopped.append(mode)
+            ptt._active_key = None
+
+        ptt._stop_recording = stop_recording
+
+        ptt._on_press(kb.Key.ctrl_l)
+        ptt._on_press(kb.Key.alt_l)
+
+        self.assertEqual(started, ["dictate"])
+        self.assertIsNone(ptt._active_trigger)
+
+        ptt._on_release(kb.Key.alt_l)
+        ptt._on_release(kb.Key.ctrl_l)
+        self.assertEqual(stopped, [])
+        self.assertEqual(ptt._active_key, "dictate")
+
+        ptt._on_press(kb.Key.ctrl_l)
+        ptt._on_press(kb.Key.alt_l)
+
+        self.assertEqual(stopped, ["dictate"])
+        self.assertIsNone(ptt._active_key)
+
+    def test_toggle_hotkey_can_start_when_alt_is_pressed_first(self):
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt", toggle_key=["ctrl", "alt"])
+        started = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+        ptt._schedule_pending_start = lambda mode, hotkey: setattr(ptt, "_pending_start", (mode, hotkey, _FakeTimer()))
+
+        ptt._on_press(kb.Key.alt_l)
+        self.assertEqual(started, [])
+
+        ptt._on_press(kb.Key.ctrl_l)
+
+        self.assertEqual(started, ["dictate"])
+        self.assertIsNone(ptt._active_trigger)
+
+    def test_toggle_hotkey_upgrades_active_alt_dictation_to_toggle(self):
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt", toggle_key=["ctrl", "alt"])
+        stopped = []
+        ptt._start_recording = lambda: None
+        ptt._stop_recording = lambda *, mode: stopped.append(mode)
+
+        ptt._on_press(kb.Key.alt_l)
+        ptt._finish_pending_start()
+        self.assertEqual(ptt._active_key, "dictate")
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt,))
+
+        ptt._on_press(kb.Key.ctrl_l)
+
+        self.assertIsNone(ptt._active_trigger)
+        ptt._on_release(kb.Key.alt_l)
+        ptt._on_release(kb.Key.ctrl_l)
+        self.assertEqual(stopped, [])
+        self.assertEqual(ptt._active_key, "dictate")
+
+    def test_modifier_combo_does_not_suppress_first_toggle_modifier(self):
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_r", toggle_key=["ctrl", "alt"])
+
+        self.assertFalse(ptt._should_suppress_token("ctrl_l", {"ctrl_l"}))
+        self.assertTrue(ptt._should_suppress_token("alt_l", {"ctrl_l", "alt_l"}))
 
     def test_ai_stop_captures_context_after_hotkey_release(self):
         captured = []
