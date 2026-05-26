@@ -97,11 +97,25 @@ def _read_text_pattern(control) -> str | None:
 
 def _control_identity(control) -> str:
     parts = []
-    for name in ("ProcessId", "ControlTypeName", "ClassName", "AutomationId", "Name"):
+    for name in ("ProcessId", "ControlTypeName", "ClassName", "AutomationId"):
         try:
             value = getattr(control, name, "")
         except Exception:
             value = ""
         if value:
             parts.append(str(value))
+    runtime_id = _runtime_id(control)
+    if runtime_id:
+        parts.append(runtime_id)
     return "win:" + ":".join(parts[:5]) if parts else "win:focused"
+
+
+def _runtime_id(control) -> str:
+    try:
+        getter = getattr(control, "GetRuntimeId", None)
+        runtime_id = getter() if callable(getter) else None
+    except Exception:
+        runtime_id = None
+    if isinstance(runtime_id, (list, tuple)) and runtime_id:
+        return "rid:" + ".".join(str(item) for item in runtime_id)
+    return ""

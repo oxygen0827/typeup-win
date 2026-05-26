@@ -56,6 +56,7 @@ class _SnapshotSession:
     after_output: TextSnapshot
     edited: bool = False
     edit_kind: str = ""
+    latest_edit_snapshot: TextSnapshot | None = None
 
 
 def default_corrections_path() -> Path:
@@ -387,11 +388,13 @@ class SnapshotCorrectionTracker:
         snapshot_reader=None,
         timeout_seconds: float = TRACK_TIMEOUT_SECONDS,
         debug: bool | None = None,
+        edit_snapshot_delay: float = 0.12,
     ):
         self._store = store
         self._snapshot_reader = snapshot_reader
         self._timeout_seconds = timeout_seconds
         self._debug = bool(os.getenv("TYPEUP_DEBUG_CORRECTIONS")) if debug is None else debug
+        self._edit_snapshot_delay = max(0.0, float(edit_snapshot_delay))
         self._session: _SnapshotSession | None = None
 
     @property
@@ -460,6 +463,7 @@ class SnapshotCorrectionTracker:
         self._session.edited = True
         self._session.edit_kind = str(kind or "")
         self._session.updated_at = now
+        self._schedule_edit_snapshot_cache(now)
 
     def finalize_if_edited(self, reason: str = "manual", now: float | None = None) -> dict | None:
         if not self.edited:
@@ -480,22 +484,34 @@ class SnapshotCorrectionTracker:
         if (now - session.started_at) > self._timeout_seconds and reason != "timeout":
             self._debug_reject("expired_before_finalize")
             return None
-        if after_snapshot is None:
-            after_snapshot = self._read_snapshot()
-        if after_snapshot is None:
+        snapshots = []
+        if after_snapshot is not None:
+            snapshots.append(after_snapshot)
+        else:
+            current_snapshot = self._read_snapshot()
+            if current_snapshot is not None:
+                snapshots.append(current_snapshot)
+        if session.latest_edit_snapshot is not None:
+            snapshots.append(session.latest_edit_snapshot)
+        if not snapshots:
             self._debug_reject("missing_edit_snapshot")
             return None
-        if not _identity_strings_match(session.identity, after_snapshot.identity):
-            self._debug_reject("edit_identity_changed")
-            return None
-        candidate = infer_snapshot_correction(
-            session.after_output.text,
-            after_snapshot.text,
-            session.output_start,
-            session.output_end,
-        )
+        candidate = None
+        rejected_identity = False
+        for snapshot in snapshots:
+            if not _identity_strings_match(session.identity, snapshot.identity):
+                rejected_identity = True
+                continue
+            candidate = infer_snapshot_correction(
+                session.after_output.text,
+                snapshot.text,
+                session.output_start,
+                session.output_end,
+            )
+            if candidate is not None:
+                break
         if candidate is None:
-            self._debug_reject("diff_rejected")
+            self._debug_reject("edit_identity_changed" if rejected_identity else "diff_rejected")
             return None
         return self._store.upsert_observation(candidate.source, candidate.target)
 
@@ -521,6 +537,40 @@ class SnapshotCorrectionTracker:
         except Exception as e:
             self._debug_reject(f"snapshot_read_failed:{e}")
             return None
+
+    def _schedule_edit_snapshot_cache(self, now: float) -> None:
+        if self._snapshot_reader is None or self._session is None:
+            return
+        if self._edit_snapshot_delay <= 0:
+            self._cache_edit_snapshot(now)
+            return
+        session_started_at = self._session.started_at
+        timer = threading.Timer(
+            self._edit_snapshot_delay,
+            self._cache_edit_snapshot_if_current,
+            args=(session_started_at,),
+        )
+        timer.daemon = True
+        timer.start()
+
+    def _cache_edit_snapshot_if_current(self, session_started_at: float) -> None:
+        session = self._session
+        if session is None or session.started_at != session_started_at:
+            return
+        self._cache_edit_snapshot(time.monotonic())
+
+    def _cache_edit_snapshot(self, now: float) -> None:
+        session = self._session
+        if session is None or (now - session.started_at) > self._timeout_seconds:
+            return
+        snapshot = self._read_snapshot()
+        if snapshot is None:
+            return
+        if not _identity_strings_match(session.identity, snapshot.identity):
+            return
+        if snapshot.text == session.after_output.text:
+            return
+        session.latest_edit_snapshot = snapshot
 
     def _debug_reject(self, reason: str) -> None:
         if self._debug:

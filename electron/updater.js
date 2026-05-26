@@ -146,10 +146,6 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     fallbackInstallerPath = "";
     setState({ status: "checking", error: "", progress: 0 }, { silent: pendingSilentCheck });
     try {
-      if (shouldUseGithubApiUpdates()) {
-        await checkForUpdatesViaGithubApi({ silent: pendingSilentCheck });
-        return getState();
-      }
       await autoUpdater.checkForUpdates();
       if (state.status === "error" && isRetryableUpdateError(state.error)) {
         await checkForUpdatesViaGithubApi({ silent: pendingSilentCheck });
@@ -470,11 +466,11 @@ async function verifyDownloadedFile(destination, update) {
 }
 
 function shouldUseGithubApiUpdates(platform = process.platform) {
-  return platform === "win32";
+  return false;
 }
 
 function shouldRefreshUpdateBeforeDownload(status, hasFallbackUpdate, platform = process.platform) {
-  return status !== "available" || (shouldUseGithubApiUpdates(platform) && !hasFallbackUpdate);
+  return status !== "available";
 }
 
 function shouldFallbackToPowerShellDownload(error, platform = process.platform, installerUrl = "") {

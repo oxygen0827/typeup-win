@@ -11,11 +11,11 @@ const {
   parseLatestYmlVersion,
 } = require("../electron/updater");
 
-assert.equal(shouldUseGithubApiUpdates("win32"), true);
+assert.equal(shouldUseGithubApiUpdates("win32"), false);
 assert.equal(shouldUseGithubApiUpdates("darwin"), false);
 assert.equal(shouldUseGithubApiUpdates("linux"), false);
 assert.equal(shouldRefreshUpdateBeforeDownload("idle", true, "win32"), true);
-assert.equal(shouldRefreshUpdateBeforeDownload("available", false, "win32"), true);
+assert.equal(shouldRefreshUpdateBeforeDownload("available", false, "win32"), false);
 assert.equal(shouldRefreshUpdateBeforeDownload("available", true, "win32"), false);
 assert.equal(shouldRefreshUpdateBeforeDownload("available", false, "darwin"), false);
 assert.equal(isRetryableUpdateError(new Error("GitHub request timed out")), true);

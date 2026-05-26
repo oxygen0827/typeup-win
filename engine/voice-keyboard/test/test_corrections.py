@@ -210,6 +210,39 @@ class SnapshotCorrectionTests(unittest.TestCase):
             self.assertEqual(record["source"], "胡人元")
             self.assertEqual(record["target"], "胡任远")
 
+    def test_snapshot_tracker_uses_cached_edit_when_enter_clears_input(self):
+        class Reader:
+            def __init__(self):
+                self.snapshot = TextSnapshot("胡志宇今天去吃面了。", "test:wechat")
+
+            def read(self):
+                return self.snapshot
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = CorrectionStore(Path(tmp) / "corrections.json")
+            reader = Reader()
+            tracker = SnapshotCorrectionTracker(
+                store,
+                snapshot_reader=reader,
+                timeout_seconds=30,
+                edit_snapshot_delay=0,
+            )
+
+            tracker.record_voice_output(
+                "胡志宇今天去吃面了。",
+                TextSnapshot("", "test:wechat"),
+                TextSnapshot("胡志宇今天去吃面了。", "test:wechat"),
+                now=1.0,
+            )
+            reader.snapshot = TextSnapshot("胡智宇今天去吃面了。", "test:wechat")
+            tracker.mark_user_edit("typed", now=2.0)
+            reader.snapshot = TextSnapshot("", "test:wechat")
+            record = tracker.finalize("enter", now=2.2)
+
+            self.assertIsNotNone(record)
+            self.assertEqual(record["source"], "胡志宇")
+            self.assertEqual(record["target"], "胡智宇")
+
     def test_snapshot_ignores_changes_outside_voice_output(self):
         candidate = infer_snapshot_correction(
             "标题：胡人元吃面回来了",

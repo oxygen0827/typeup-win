@@ -1,6 +1,6 @@
 {
   "name": "typeup",
-  "version": "0.1.29",
+  "version": "0.1.34",
   "private": true,
   "description": "TypeUp desktop client for always-on voice transcription.",
   "main": "electron/main.js",
@@ -8,7 +8,7 @@
     "dev": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
     "electron": "node node_modules/cross-env/dist/bin/cross-env.js NODE_ENV=development node node_modules/electron/cli.js .",
     "start": "node node_modules/concurrently/dist/bin/concurrently.js -k \"npm run dev\" \"node node_modules/wait-on/bin/wait-on http://127.0.0.1:5173 && npm run electron\"",
-    "build": "node node_modules/vite/bin/vite.js build",
+    "build": "node node_modules/vite/bin/vite.js build --configLoader native",
     "build:win": "npm run engine:build && npm run build && node node_modules/electron-builder/cli.js --win nsis",
     "test:release-notes": "node scripts/test-release-notes.mjs",
     "test:updater": "node scripts/test-updater.cjs",
@@ -43,10 +43,8 @@
     "productName": "TypeUp",
     "publish": [
       {
-        "provider": "github",
-        "owner": "oxygen0827",
-        "repo": "typeup-win",
-        "releaseType": "release"
+        "provider": "generic",
+        "url": "http://150.158.146.192:6052/apps/typeup-win-release/"
       }
     ],
     "directories": {
