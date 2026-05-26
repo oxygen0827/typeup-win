@@ -18,6 +18,7 @@ import time
 
 from pynput import keyboard as kb
 
+from agent.corrections import CorrectionSession, CorrectionStore
 import agent.typer as typer
 from agent.text_buffer import TextBuffer
 
@@ -34,13 +35,29 @@ class KeyboardMonitor:
     多次 round-trip 拖慢系统输入（尤其切换中文输入法时）。
     """
 
-    def __init__(self, buf: TextBuffer):
+    def __init__(self, buf: TextBuffer, correction_store: CorrectionStore | None = None):
         self._buf           = buf
+        self._corrections = CorrectionSession(correction_store) if correction_store is not None else None
         self._last_voice_ts = 0.0   # 上次语音输出的时间戳
 
-    def notify_voice_output(self) -> None:
+    def notify_voice_output(self, text: str = "") -> None:
         """每次语音打字后调用，刷新追踪窗口。"""
-        self._last_voice_ts = time.monotonic()
+        now = time.monotonic()
+        self._last_voice_ts = now
+        if self._corrections is not None:
+            self.finalize_correction_session()
+            self._corrections.start(text, now)
+
+    def finalize_correction_session(self) -> None:
+        if self._corrections is None:
+            return
+        learned = self._corrections.finalize()
+        if learned is not None:
+            print(
+                "[corrections] learned "
+                f"{learned.get('source')!r} -> {learned.get('target')!r} "
+                f"count={learned.get('count')} confidence={learned.get('confidence')}"
+            )
 
     def _within_track_window(self) -> bool:
         return (time.monotonic() - self._last_voice_ts) < TRACK_TIMEOUT
@@ -59,12 +76,34 @@ class KeyboardMonitor:
         if typer.is_erasing():
             return
 
+        now = time.monotonic()
+        if self._corrections is not None:
+            self._corrections.expire_if_needed(now)
+
         if key == kb.Key.backspace:
+            if self._corrections is not None:
+                self._corrections.backspace(now)
             if self._within_track_window():
                 self._buf.trim_end(1)
             else:
                 self._buf.cursor_uncertain = True
         elif key == kb.Key.delete:
+            if self._corrections is not None:
+                self._corrections.delete(now)
             self._buf.cursor_uncertain = True
         elif key == kb.Key.enter:
+            self.finalize_correction_session()
             self._buf.new_segment()
+        else:
+            typed = _typed_character(key)
+            if typed and self._corrections is not None:
+                self._corrections.append_typed(typed, now)
+
+
+def _typed_character(key) -> str:
+    char = getattr(key, "char", None)
+    if not isinstance(char, str) or len(char) != 1:
+        return ""
+    if ord(char) < 32:
+        return ""
+    return char

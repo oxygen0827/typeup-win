@@ -60,6 +60,21 @@ const COPY = {
     usage: "用量趋势",
     usageRange: "最近 7 天",
     logs: "运行日志",
+    corrections: "个人词库",
+    correctionsNavDetail: "纠正记忆",
+    correctionsEmpty: "暂无纠正记忆",
+    correctionsAdd: "新增词条",
+    correctionsSource: "识别成",
+    correctionsTarget: "改成",
+    correctionsCount: "次数",
+    correctionsConfidence: "置信",
+    correctionsEnabled: "启用",
+    correctionsSearch: "搜索词条",
+    correctionsDisable: "禁用",
+    correctionsEnable: "启用",
+    correctionsDelete: "删除",
+    correctionsPath: "本地文件",
+    correctionsError: "词库操作失败",
     backend: "本地后端",
     account: "账号",
     accountCenter: "账号与订阅",
@@ -164,6 +179,21 @@ const COPY = {
     usage: "Usage Trend",
     usageRange: "Last 7 days",
     logs: "Runtime Logs",
+    corrections: "Personal Dictionary",
+    correctionsNavDetail: "Corrections",
+    correctionsEmpty: "No corrections yet",
+    correctionsAdd: "Add Entry",
+    correctionsSource: "Heard As",
+    correctionsTarget: "Use Instead",
+    correctionsCount: "Count",
+    correctionsConfidence: "Confidence",
+    correctionsEnabled: "Enabled",
+    correctionsSearch: "Search entries",
+    correctionsDisable: "Disable",
+    correctionsEnable: "Enable",
+    correctionsDelete: "Delete",
+    correctionsPath: "Local File",
+    correctionsError: "Dictionary action failed",
     backend: "Local Backend",
     account: "Account",
     accountCenter: "Account and Plan",
@@ -354,6 +384,8 @@ const EMPTY_PERMISSIONS = {
     microphone: "unknown",
   },
 };
+
+const EMPTY_CORRECTIONS = { path: "", records: [] };
 
 const STATUS_KEYS = [
   "state",
@@ -576,6 +608,9 @@ export default function App() {
   const [lastOrder, setLastOrder] = useState(null);
   const [devices, setDevices] = useState("");
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS);
+  const [corrections, setCorrections] = useState(EMPTY_CORRECTIONS);
+  const [correctionForm, setCorrectionForm] = useState({ source: "", target: "", search: "" });
+  const [correctionError, setCorrectionError] = useState("");
   const [saving, setSaving] = useState(false);
   const [updateState, setUpdateState] = useState(DEFAULT_UPDATE_STATE);
   const [releaseNotes, setReleaseNotes] = useState(null);
@@ -604,6 +639,7 @@ export default function App() {
   useEffect(() => {
     if (!apiBase) return undefined;
     refreshAll(apiBase, { setStatus, setUsage, setLogs, setSettings });
+    refreshCorrections(apiBase, setCorrections);
     refreshPermissions(apiBase, setPermissions);
     refreshAccount(apiBase, { setAuth, setPlans, setAuthForm, setAccountError });
     const timer = setInterval(() => {
@@ -684,6 +720,7 @@ export default function App() {
       icon: <UserRound size={18} />,
     },
     { id: "usage", label: text.usage, detail: text.usageRange, icon: <Activity size={18} /> },
+    { id: "corrections", label: text.corrections, detail: text.correctionsNavDetail, icon: <FileText size={18} /> },
     { id: "features", label: text.features, detail: text.featuresNavDetail, icon: <ShieldCheck size={18} /> },
     { id: "feedback", label: text.feedback, detail: text.feedbackNavDetail, icon: <FileText size={18} /> },
     { id: "community", label: text.community, detail: text.communityNavDetail, icon: <ExternalLink size={18} /> },
@@ -874,6 +911,49 @@ export default function App() {
     setReleaseNotes(null);
   }
 
+  async function addCorrection(event) {
+    event.preventDefault();
+    setCorrectionError("");
+    try {
+      await api(apiBase, "/api/corrections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source: correctionForm.source,
+          target: correctionForm.target,
+        }),
+      });
+      setCorrectionForm((current) => ({ ...current, source: "", target: "" }));
+      await refreshCorrections(apiBase, setCorrections);
+    } catch (error) {
+      setCorrectionError(error.message || text.correctionsError);
+    }
+  }
+
+  async function toggleCorrection(record) {
+    setCorrectionError("");
+    try {
+      await api(apiBase, `/api/corrections/${encodeURIComponent(record.id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !record.enabled }),
+      });
+      await refreshCorrections(apiBase, setCorrections);
+    } catch (error) {
+      setCorrectionError(error.message || text.correctionsError);
+    }
+  }
+
+  async function removeCorrection(record) {
+    setCorrectionError("");
+    try {
+      await api(apiBase, `/api/corrections/${encodeURIComponent(record.id)}`, { method: "DELETE" });
+      await refreshCorrections(apiBase, setCorrections);
+    } catch (error) {
+      setCorrectionError(error.message || text.correctionsError);
+    }
+  }
+
   return (
     <main className="app-shell">
       <header className="app-titlebar">
@@ -1062,6 +1142,20 @@ export default function App() {
 
             <div className={activeModule === "features" ? "module-view active" : "module-view"}>
               <FeaturesPanel text={text} />
+            </div>
+
+            <div className={activeModule === "corrections" ? "module-view active" : "module-view"}>
+              <CorrectionsPanel
+                text={text}
+                corrections={corrections}
+                form={correctionForm}
+                setForm={setCorrectionForm}
+                error={correctionError}
+                onAdd={addCorrection}
+                onToggle={toggleCorrection}
+                onDelete={removeCorrection}
+                lang={lang}
+              />
             </div>
 
             <div className={activeModule === "feedback" ? "module-view active" : "module-view"}>
@@ -1598,6 +1692,96 @@ function AccountPanel({
   );
 }
 
+function CorrectionsPanel({
+  text,
+  corrections,
+  form,
+  setForm,
+  error,
+  onAdd,
+  onToggle,
+  onDelete,
+  lang,
+}) {
+  const query = String(form.search || "").trim().toLowerCase();
+  const records = (corrections.records || []).filter((record) => {
+    if (!query) return true;
+    return `${record.source} ${record.target}`.toLowerCase().includes(query);
+  });
+
+  return (
+    <section className="corrections-panel">
+      <div className="panel-heading compact">
+        <div>
+          <p className="eyebrow">{text.correctionsNavDetail}</p>
+          <h2>{text.corrections}</h2>
+        </div>
+        <FileText size={22} />
+      </div>
+
+      <form className="correction-form" onSubmit={onAdd}>
+        <FormInput
+          label={text.correctionsSource}
+          value={form.source}
+          onChange={(value) => setForm((current) => ({ ...current, source: value }))}
+        />
+        <FormInput
+          label={text.correctionsTarget}
+          value={form.target}
+          onChange={(value) => setForm((current) => ({ ...current, target: value }))}
+        />
+        <button className="save-button compact" type="submit">
+          <Save size={18} />
+          {text.correctionsAdd}
+        </button>
+      </form>
+
+      <FormInput
+        label={text.correctionsSearch}
+        value={form.search}
+        onChange={(value) => setForm((current) => ({ ...current, search: value }))}
+      />
+
+      {error ? (
+        <div className="notice danger correction-error">
+          <AlertCircle size={18} />
+          <span>{error}</span>
+        </div>
+      ) : null}
+
+      <div className="corrections-table">
+        <div className="correction-row header">
+          <span>{text.correctionsSource}</span>
+          <span>{text.correctionsTarget}</span>
+          <span>{text.correctionsCount}</span>
+          <span>{text.correctionsConfidence}</span>
+          <span>{text.correctionsEnabled}</span>
+          <span />
+        </div>
+        {records.length ? records.map((record) => (
+          <div className={record.enabled ? "correction-row" : "correction-row disabled"} key={record.id}>
+            <strong>{record.source}</strong>
+            <strong>{record.target}</strong>
+            <span>{formatNumber(record.count, lang)}</span>
+            <span>{record.confidence}</span>
+            <button type="button" onClick={() => onToggle(record)}>
+              {record.enabled ? text.correctionsDisable : text.correctionsEnable}
+            </button>
+            <button type="button" onClick={() => onDelete(record)}>
+              <X size={15} />
+              {text.correctionsDelete}
+            </button>
+          </div>
+        )) : (
+          <p className="empty-log">{text.correctionsEmpty}</p>
+        )}
+      </div>
+
+      {corrections.path ? <ReadonlyField label={text.correctionsPath} value={corrections.path} /> : null}
+    </section>
+  );
+}
+
 function FeaturesPanel({ text }) {
   const items = [
     [text.featureVoiceTitle, text.featureVoiceDetail, <Mic size={20} />],
@@ -1859,6 +2043,15 @@ async function refreshStatus(apiBase, setStatus) {
 async function refreshUsage(apiBase, setUsage) {
   const data = await api(apiBase, "/api/usage");
   setUsage(data);
+}
+
+async function refreshCorrections(apiBase, setCorrections) {
+  try {
+    const data = await api(apiBase, "/api/corrections");
+    setCorrections(data || EMPTY_CORRECTIONS);
+  } catch (_error) {
+    setCorrections(EMPTY_CORRECTIONS);
+  }
 }
 
 async function api(apiBase, path, options) {

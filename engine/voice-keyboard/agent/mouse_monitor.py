@@ -17,9 +17,10 @@ from agent.text_buffer import TextBuffer
 class MouseMonitor:
     """监听鼠标点击，标记 buf.cursor_uncertain = True。"""
 
-    def __init__(self, buf: TextBuffer):
+    def __init__(self, buf: TextBuffer, correction_finalizer=None):
         self._buf      = buf
         self._listener = None
+        self._correction_finalizer = correction_finalizer
 
     def start(self):
         self._listener = mouse.Listener(
@@ -36,6 +37,8 @@ class MouseMonitor:
 
     def _on_click(self, x, y, button, pressed):
         if pressed:
+            if self._correction_finalizer is not None:
+                self._correction_finalizer()
             # 任意鼠标按键按下时，认为光标位置已改变，同时标记新段落
             self._buf.cursor_uncertain = True
             self._buf.new_segment()

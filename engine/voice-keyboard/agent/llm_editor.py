@@ -120,6 +120,7 @@ class LLMEditor:
     def __init__(self, cfg: dict):
         provider = cfg.get("provider", "openai")
         self.supports_streaming = False
+        self._personal_corrections_hint = str(cfg.get("personal_corrections_hint") or "").strip()
 
         if provider == "openai":
             from openai import OpenAI
@@ -197,7 +198,7 @@ class LLMEditor:
     def chat_stream(self, system_prompt: str, user_message: str):
         """流式调用，逐 token yield 文字片段；非流式 provider 只 yield 一次完整文本。"""
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": self._with_personal_hint(system_prompt)},
             {"role": "user",   "content": user_message},
         ]
         if hasattr(self, "_backend_client"):
@@ -221,7 +222,7 @@ class LLMEditor:
     def chat(self, system_prompt: str, user_message: str) -> str:
         """通用 LLM 调用，返回模型回复文字。"""
         messages = [
-            {"role": "system", "content": system_prompt},
+            {"role": "system", "content": self._with_personal_hint(system_prompt)},
             {"role": "user",   "content": user_message},
         ]
         if hasattr(self, "_backend_client"):
@@ -246,7 +247,7 @@ class LLMEditor:
         resp = self._client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": self._with_personal_hint(_SYSTEM_PROMPT)},
                 {"role": "user",   "content": f"原文：{original}\n\n修改指令：{instruction}"},
             ],
             temperature=0.1,
@@ -258,7 +259,7 @@ class LLMEditor:
         resp = self._zhipu_client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": self._with_personal_hint(_SYSTEM_PROMPT)},
                 {"role": "user",   "content": f"原文：{original}\n\n修改指令：{instruction}"},
             ],
             temperature=0.1,
@@ -269,8 +270,18 @@ class LLMEditor:
     def _backend_edit(self, original: str, instruction: str) -> str:
         return self._backend_client.chat(
             [
-                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "system", "content": self._with_personal_hint(_SYSTEM_PROMPT)},
                 {"role": "user", "content": f"原文：{original}\n\n修改指令：{instruction}"},
             ],
             max_tokens=2000,
+        )
+
+    def _with_personal_hint(self, system_prompt: str) -> str:
+        if not self._personal_corrections_hint:
+            return system_prompt
+        return (
+            system_prompt
+            + "\n\n"
+            + self._personal_corrections_hint
+            + "\nPrefer the target spelling for names, product names, and user-specific terms when relevant."
         )

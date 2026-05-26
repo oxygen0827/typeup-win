@@ -593,6 +593,7 @@ button:disabled {
 .log-panel,
 .account-panel,
 .permissions-panel,
+.corrections-panel,
 .settings-panel,
 .devices-panel {
   background: color-mix(in srgb, var(--surface) 95%, transparent);
@@ -612,6 +613,7 @@ button:disabled {
 .settings-panel,
 .account-panel,
 .permissions-panel,
+.corrections-panel,
 .devices-panel {
   padding: 14px;
 }
@@ -1344,6 +1346,71 @@ button:disabled {
 .auth-mode .selected {
   background: var(--primary);
   color: #fff;
+}
+
+.correction-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 150px;
+  gap: 10px;
+  align-items: end;
+}
+
+.correction-form .field {
+  margin-bottom: 0;
+}
+
+.corrections-table {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.correction-row {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) 68px 72px 88px 92px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+
+.correction-row:last-child {
+  border-bottom: 0;
+}
+
+.correction-row.header {
+  min-height: 38px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.correction-row strong,
+.correction-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.correction-row.disabled {
+  color: var(--muted);
+  background: #f6f8fb;
+}
+
+.correction-row button {
+  min-height: 30px;
+  padding: 0 8px;
+  font-size: 12px;
+}
+
+.correction-error {
+  margin-top: 0;
 }
 
 .account-hint {

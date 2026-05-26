@@ -3,6 +3,12 @@ const { spawn } = require("node:child_process");
 const express = require("express");
 const cors = require("cors");
 const { AgentManager } = require("./agent-manager");
+const {
+  listCorrections,
+  createCorrection,
+  updateCorrection,
+  deleteCorrection,
+} = require("./corrections-store");
 const { readUsage } = require("./usage-store");
 const {
   readSettings,
@@ -382,6 +388,47 @@ function createLocalServer({ electronApp }) {
 
   app.get("/api/usage", (_req, res) => {
     res.json(readUsage());
+  });
+
+  app.get("/api/corrections", (_req, res) => {
+    res.json(listCorrections());
+  });
+
+  app.post("/api/corrections", (req, res) => {
+    try {
+      res.json(createCorrection(req.body || {}));
+    } catch (error) {
+      res.status(400).json({
+        error: { code: "BAD_REQUEST", message: error.message, status: 400 },
+      });
+    }
+  });
+
+  app.patch("/api/corrections/:id", (req, res) => {
+    try {
+      const record = updateCorrection(req.params.id, req.body || {});
+      if (!record) {
+        res.status(404).json({
+          error: { code: "NOT_FOUND", message: "Correction not found", status: 404 },
+        });
+        return;
+      }
+      res.json(record);
+    } catch (error) {
+      res.status(400).json({
+        error: { code: "BAD_REQUEST", message: error.message, status: 400 },
+      });
+    }
+  });
+
+  app.delete("/api/corrections/:id", (req, res) => {
+    if (!deleteCorrection(req.params.id)) {
+      res.status(404).json({
+        error: { code: "NOT_FOUND", message: "Correction not found", status: 404 },
+      });
+      return;
+    }
+    res.json({ ok: true });
   });
 
   app.get("/api/settings", (_req, res) => {
