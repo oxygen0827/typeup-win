@@ -28,6 +28,7 @@ import {
   localizedReleaseNoteItems,
   localizedReleaseNoteSummary,
   parseReleaseVersion,
+  withBuiltinReleaseNotesFallback,
 } from "./releaseNotes.mjs";
 
 const STATUS_COPY = {
@@ -421,6 +422,124 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.35": {
+    releaseName: "TypeUp 0.1.35",
+    zh: {
+      summary: "本次新增 Ctrl + Alt 切换式转写，并修复新版首页更新说明在服务器更新源下显示不完整的问题。",
+      items: [
+        "按一下 Ctrl + Alt 开始持续转写，再按一下停止录音并输入结果，不需要打开软件页面手动关闭。",
+        "原有 Alt 按住说话、Alt + Space AI 编辑、双击 Alt 切换润色模式保持不变。",
+        "首页更新说明补齐 0.1.28 之后的版本内容；服务器更新源只返回 latest.yml 时也会显示具体更新点。",
+        "桌面快捷键提示会读取当前配置，显示 Alt、Ctrl + Alt、Alt + Space 和双击 Alt。",
+      ],
+    },
+    en: {
+      summary: "This update adds Ctrl + Alt toggle transcription and improves first-launch release notes for server-hosted updates.",
+      items: [
+        "Press Ctrl + Alt once to start continuous transcription, then press it again to stop and type the result.",
+        "Existing Alt push-to-talk, Alt + Space AI edit, and double-Alt polish toggle shortcuts remain unchanged.",
+        "The home-screen changelog now includes versions after 0.1.28 and falls back to built-in notes when the server feed only provides latest.yml.",
+        "Shortcut hints now show Alt, Ctrl + Alt, Alt + Space, and double Alt from the active configuration.",
+      ],
+    },
+  },
+  "0.1.34": {
+    releaseName: "TypeUp 0.1.34",
+    zh: {
+      summary: "本次优化个人纠正记忆，并加入 Ctrl + Alt 切换式转写热键。",
+      items: [
+        "新增 Ctrl + Alt 切换式转写：按一下开始持续录音，再按一下停止并输入结果。",
+        "个人词库支持从语音输出前后的文本快照学习用户改错，更适合微信等回车后清空输入框的场景。",
+        "个人词库管理页会显示候选/已生效状态和最后学习时间，并在页面停留时自动刷新。",
+        "本地纠正规则会在 STT 后处理和 AI 微润色提示中一起使用，减少专有名词反复识别错误。",
+      ],
+    },
+    en: {
+      summary: "This update improves personal correction memory and adds a Ctrl + Alt transcription toggle.",
+      items: [
+        "Ctrl + Alt now toggles continuous dictation: press once to record, press again to stop and type.",
+        "Personal corrections can learn from before/after text snapshots around voice output.",
+        "The corrections page shows candidate/active status and last-seen time, and refreshes while open.",
+        "Local correction rules are applied after STT and provided to micro-polish prompts to preserve preferred terms.",
+      ],
+    },
+  },
+  "0.1.31": {
+    releaseName: "TypeUp 0.1.31",
+    zh: {
+      summary: "本次用于验证服务器托管的 Windows 差分更新下载链路。",
+      items: [
+        "继续使用 TypeUp 服务器镜像作为打包后的更新源。",
+        "保留 electron-updater 标准元数据，方便后续 Windows 更新使用差分下载。",
+        "用户工作流没有变化，主要用于验证更新分发链路。",
+      ],
+    },
+    en: {
+      summary: "This update verifies server-hosted Windows differential update delivery.",
+      items: [
+        "The packaged updater continues to use the TypeUp server mirror.",
+        "Standard electron-updater metadata is kept so later Windows updates can use differential downloads.",
+        "There are no user-facing workflow changes beyond update delivery verification.",
+      ],
+    },
+  },
+  "0.1.30": {
+    releaseName: "TypeUp 0.1.30",
+    zh: {
+      summary: "本次把打包后的更新源切换到 TypeUp 自有服务器镜像。",
+      items: [
+        "安装包内置更新地址改为 TypeUp 服务器镜像，减少国内访问 GitHub Release 的不稳定。",
+        "保留 electron-updater 标准 latest.yml 和 blockmap 元数据。",
+        "该版本作为手动安装基线，用于测试后续服务器托管更新。",
+      ],
+    },
+    en: {
+      summary: "This update switches the packaged updater feed to the TypeUp server mirror.",
+      items: [
+        "The packaged update feed now points to the TypeUp server mirror.",
+        "Standard electron-updater latest.yml and blockmap metadata remain available.",
+        "This build is the manual install baseline for testing server-hosted updates.",
+      ],
+    },
+  },
+  "0.1.29": {
+    releaseName: "TypeUp 0.1.29",
+    zh: {
+      summary: "本次优化 Windows 自动更新下载体验，网络不稳定时会更稳地回退下载。",
+      items: [
+        "优先使用 Node 流式下载显示真实进度，超时或连接重置时再回退到 PowerShell。",
+        "保留安装包大小和 SHA 校验，避免网络波动时误安装不完整文件。",
+        "保留 0.1.28 的单实例窗口修复和窗口显示兜底。",
+      ],
+    },
+    en: {
+      summary: "This update improves Windows auto-update downloads when the network is unstable.",
+      items: [
+        "Node streaming download shows real progress first, then falls back to PowerShell after timeouts or resets.",
+        "Installer size and SHA checks remain in place to avoid installing incomplete downloads.",
+        "The 0.1.28 single-instance and window display fixes remain included.",
+      ],
+    },
+  },
+  "0.1.28": {
+    releaseName: "TypeUp 0.1.28",
+    zh: {
+      summary: "本次修复重复打开 TypeUp 时可能出现多个窗口的问题。",
+      items: [
+        "重复启动源码版或安装版时，会聚焦已有窗口，不再打开两个相同窗口。",
+        "增加主窗口显示兜底，避免 Electron 进程启动后窗口一直不显示。",
+        "保留 0.1.27 的 AI 指令打开应用、显式选区快照和桌面图标修复。",
+      ],
+    },
+    en: {
+      summary: "This update fixes duplicate TypeUp windows when the app is opened repeatedly.",
+      items: [
+        "Opening TypeUp again now focuses the existing window instead of creating a duplicate.",
+        "A main-window visibility fallback prevents the Electron process from running without showing a window.",
+        "The 0.1.27 AI app-launch, explicit selection snapshot, and shortcut icon fixes remain included.",
+      ],
+    },
+  },
   "0.1.27": {
     releaseName: "TypeUp 0.1.27",
     zh: {
@@ -691,7 +810,8 @@ export default function App() {
     let cancelled = false;
     async function loadReleaseNotes() {
       const pending = await window.typeup?.updates?.getReleaseNotes?.();
-      const notes = normalizeReleaseNotesPayload(pending, version) || builtinReleaseNotes(version);
+      const builtin = builtinReleaseNotes(version);
+      const notes = withBuiltinReleaseNotesFallback(normalizeReleaseNotesPayload(pending, version), builtin);
       if (!cancelled && notes && !hasSeenReleaseNotes(notes.version)) {
         setReleaseNotes(notes);
       }

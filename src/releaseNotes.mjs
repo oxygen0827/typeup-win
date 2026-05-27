@@ -14,6 +14,27 @@ export function localizedReleaseNoteItems(notes, lang) {
   return summary && items[0] === summary && items.length > 1 ? items.slice(1) : items;
 }
 
+export function hasReleaseNoteContent(notes) {
+  return Boolean(
+    String(notes?.releaseNotes || "").trim()
+    || notes?.localized?.zh?.summary
+    || notes?.localized?.zh?.items?.length
+    || notes?.localized?.en?.summary
+    || notes?.localized?.en?.items?.length
+  );
+}
+
+export function withBuiltinReleaseNotesFallback(notes, builtin) {
+  if (!notes) return builtin || null;
+  if (hasReleaseNoteContent(notes) || !hasReleaseNoteContent(builtin)) return notes;
+  return {
+    ...notes,
+    releaseName: notes.releaseName || builtin.releaseName,
+    releaseUrl: notes.releaseUrl || builtin.releaseUrl || "",
+    localized: builtin.localized,
+  };
+}
+
 export function firstPlainReleaseNote(value) {
   const raw = String(value || "");
   const paragraph = extractHtmlParagraphs(raw)[0];
