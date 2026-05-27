@@ -259,7 +259,7 @@ const COPY = {
     shortcutSpeak: "Start Speaking",
     shortcutSpeakDetail: "Release to type at the cursor",
     shortcutToggle: "Transcription Mode",
-    shortcutToggleDetail: "Press once to start, again to stop",
+    shortcutToggleDetail: "Press once to enable, again to disable",
     shortcutAi: "AI Edit",
     shortcutAiDetail: "Hold the combo to edit text",
     shortcutPolish: "Switch Polish Mode",
@@ -422,6 +422,27 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.36": {
+    releaseName: "TypeUp 0.1.36",
+    zh: {
+      summary: "本次热修 Ctrl + Alt 转写开关，关闭后不会再拦截普通键盘和输入法。",
+      items: [
+        "Ctrl + Alt 现在只负责启用或关闭转写功能，不再启动持续录音。",
+        "配置了 Ctrl + Alt 开关时，TypeUp 启动后默认不接管 Alt；首次按 Ctrl + Alt 才启用转写。",
+        "转写功能关闭后，Alt、空格和其他键都会正常交给系统和输入法；只有再次按 Ctrl + Alt 才会重新启用 TypeUp 转写。",
+        "启用或关闭时会短暂显示状态框：转写功能已启动 / 转写功能已关闭。",
+      ],
+    },
+    en: {
+      summary: "This hotfix makes Ctrl + Alt a transcription enable/disable switch and stops intercepting normal keyboard input when disabled.",
+      items: [
+        "Ctrl + Alt now only enables or disables transcription instead of starting continuous recording.",
+        "When a Ctrl + Alt switch is configured, TypeUp starts with Alt untouched; press Ctrl + Alt once to enable transcription.",
+        "When transcription is disabled, Alt, Space, and other keys are passed back to Windows and IMEs normally; pressing Ctrl + Alt again re-enables TypeUp transcription.",
+        "A short status HUD now confirms Transcription enabled or Transcription disabled.",
+      ],
+    },
+  },
   "0.1.35": {
     releaseName: "TypeUp 0.1.35",
     zh: {

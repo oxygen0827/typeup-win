@@ -68,7 +68,7 @@ audio:
   # 不推荐 ctrl：会和 Ctrl+Space（macOS 切换输入法）、Ctrl+A/E/K（编辑光标）冲突
   ptt_key: alt
 
-  # Toggle transcription: press once to start, press again to stop and type.
+  # Enable/disable transcription hotkeys. When set, TypeUp starts with transcription disabled.
   # Windows: [ctrl, alt]           Ctrl + Alt
   # macOS/Linux: leave unset unless you want a dedicated toggle shortcut.
   toggle_key: [ctrl, alt]

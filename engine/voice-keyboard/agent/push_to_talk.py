@@ -320,16 +320,16 @@ class PushToTalk:
         self._edit_hotkeys      = _parse_hotkeys(edit_key) if on_edit_utterance else []
         self._ai_hotkeys        = _parse_hotkeys(ai_key)   if on_ai_utterance   else []
         self._toggle_hotkeys    = _parse_hotkeys(toggle_key) if toggle_key else []
-        self._reserved_hotkey_tokens = (
-            _hotkey_tokens(ptt_key)
-            + (_hotkey_tokens(edit_key) if on_edit_utterance else [])
-            + (_hotkey_tokens(ai_key) if on_ai_utterance else [])
-            + (_hotkey_tokens(toggle_key) if toggle_key else [])
-        )
+        self._ptt_hotkey_tokens = _hotkey_tokens(ptt_key)
+        self._edit_hotkey_tokens = _hotkey_tokens(edit_key) if on_edit_utterance else []
+        self._ai_hotkey_tokens = _hotkey_tokens(ai_key) if on_ai_utterance else []
+        self._toggle_hotkey_tokens = _hotkey_tokens(toggle_key) if toggle_key else []
         self._filter_pressed_tokens: set[str] = set()
+        self._toggle_hotkey_down = False
         self._device_hint       = device
         self._status            = status_window
         self._device_idx        = None
+        self._transcription_enabled = not bool(self._toggle_hotkeys)
         self._active_key        = None   # 当前正在录音用哪个键
         self._active_trigger    = None   # 触发本次录音的具体热键 tuple，用于 release 配对
         self._buf: list[bytes]  = []
@@ -421,6 +421,17 @@ class PushToTalk:
         if _typer.is_simulating():
             return  # 程序自身发出的按键，忽略
         self._pressed_keys.add(key)
+
+        toggle_hotkey = self._matching_hotkey(self._toggle_hotkeys)
+        if toggle_hotkey is not None:
+            if self._toggle_hotkey_down:
+                return
+            self._toggle_hotkey_down = True
+            self._toggle_transcription_enabled(toggle_hotkey)
+            return
+
+        if not self._transcription_enabled:
+            return
         # 顺手把退格/Delete/Enter 同步给 KeyboardMonitor，避免再开一个 CGEventTap
         if self._kbd_monitor is not None:
             try:
@@ -428,23 +439,8 @@ class PushToTalk:
             except Exception:
                 pass
         if self._active_key is not None:
-            toggle_hotkey = self._matching_hotkey(self._toggle_hotkeys)
-            if toggle_hotkey is not None and self._active_key == "dictate":
-                self._cancel_pending_start()
-                if self._active_trigger is None:
-                    self._stop_toggle_dictation(toggle_hotkey)
-                elif self._active_trigger_is_part_of(toggle_hotkey):
-                    self._active_trigger = None
-                    self._discard_hotkey_pressed_keys(toggle_hotkey)
-                return
             self._maybe_upgrade_dictate_to_combo()
             return  # 已有键按下，忽略另一个
-
-        toggle_hotkey = self._matching_hotkey(self._toggle_hotkeys)
-        if toggle_hotkey is not None:
-            self._cancel_pending_start()
-            self._start_toggle_dictation(toggle_hotkey)
-            return
 
         combo_match = self._matching_non_ptt_hotkey()
         if combo_match is not None:
@@ -479,16 +475,32 @@ class PushToTalk:
         self._recording_started_at = time.monotonic()
         self._start_recording()
 
-    def _start_toggle_dictation(self, hotkey: tuple):
-        self._active_key = "dictate"
-        self._active_trigger = None
-        self._recording_started_at = time.monotonic()
-        self._start_recording()
-
-    def _stop_toggle_dictation(self, hotkey: tuple):
-        self._active_trigger = None
+    def _toggle_transcription_enabled(self, hotkey: tuple):
+        self._cancel_pending_start()
+        self._transcription_enabled = not self._transcription_enabled
+        if not self._transcription_enabled:
+            self._cancel_active_recording()
         self._discard_hotkey_pressed_keys(hotkey)
-        self._stop_recording(mode="dictate")
+        message = "转写功能已启动" if self._transcription_enabled else "转写功能已关闭"
+        print(f"[ptt] {message}")
+        if self._status is not None and hasattr(self._status, "show_message"):
+            self._status.show_message(message, seconds=1.2)
+
+    def _cancel_active_recording(self):
+        if self._active_key is None:
+            return
+        self._active_key = None
+        self._active_trigger = None
+        self._recording_started_at = 0.0
+        self._buf = []
+        self._vad_raw = bytearray()
+        self._vad_speech_frames = []
+        self._vad_in_speech = False
+        self._vad_silent_count = 0
+        self._vad_sent_count = 0
+        self._set_audio_level(0.0)
+        self._close_stream()
+        self._set_status("idle")
 
     def _handle_ptt_tap(self):
         now = time.monotonic()
@@ -510,6 +522,13 @@ class PushToTalk:
         if _typer.is_simulating():
             return
         self._discard_pressed_key(key)
+        if self._toggle_hotkey_down and any(
+            self._key_in_hotkey(key, hotkey) for hotkey in self._toggle_hotkeys
+        ):
+            self._toggle_hotkey_down = any(
+                all(self._pressed_has_key(k) for k in hotkey)
+                for hotkey in self._toggle_hotkeys
+            )
 
         if self._pending_start is not None:
             _mode, hotkey, _timer = self._pending_start
@@ -558,14 +577,6 @@ class PushToTalk:
                 return True
         return False
 
-    def _active_trigger_is_part_of(self, hotkey: tuple) -> bool:
-        if self._active_trigger is None:
-            return False
-        return all(
-            any(_key_matches(candidate_key, trigger_key) for candidate_key in hotkey)
-            for trigger_key in self._active_trigger
-        )
-
     def _pressed_has_key(self, configured_key) -> bool:
         return any(_key_matches(configured_key, pressed_key) for pressed_key in self._pressed_keys)
 
@@ -605,7 +616,11 @@ class PushToTalk:
         timer.start()
 
     def _finish_pending_start(self):
-        if self._pending_start is None or self._active_key is not None:
+        if (
+            self._pending_start is None
+            or self._active_key is not None
+            or not self._transcription_enabled
+        ):
             return
         mode, hotkey, _timer = self._pending_start
         self._pending_start = None
@@ -718,6 +733,9 @@ class PushToTalk:
 
         key = _parse_key(token)
         if is_press:
+            for pressed_token in candidate:
+                if pressed_token != token:
+                    self._pressed_keys.add(_parse_key(pressed_token))
             self._on_press(key)
         else:
             self._on_release(key)
@@ -725,7 +743,7 @@ class PushToTalk:
         return False
 
     def _should_suppress_token(self, token: str, pressed_tokens: set[str]) -> bool:
-        for hotkey in self._reserved_hotkey_tokens:
+        for hotkey in self._reserved_hotkey_tokens_for_current_state():
             if not _token_in_configured_hotkey(token, hotkey):
                 continue
             if len(set(hotkey)) == 1:
@@ -741,6 +759,14 @@ class PushToTalk:
             if _configured_hotkey_has_other_pressed_token(hotkey, token, pressed_tokens):
                 return True
         return False
+
+    def _reserved_hotkey_tokens_for_current_state(self) -> list[tuple[str, ...]]:
+        tokens = list(self._toggle_hotkey_tokens)
+        if self._transcription_enabled:
+            tokens += self._ptt_hotkey_tokens
+            tokens += self._edit_hotkey_tokens
+            tokens += self._ai_hotkey_tokens
+        return tokens
 
     # ── 录音控制 ─────────────────────────────────────────────────
 
