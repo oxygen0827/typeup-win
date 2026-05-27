@@ -422,6 +422,27 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.1.37": {
+    releaseName: "TypeUp 0.1.37",
+    zh: {
+      summary: "本次继续修复 Ctrl + Alt 启用后的键盘卡住问题。",
+      items: [
+        "修复 Ctrl + Alt 启用转写后，内部仍可能残留 Ctrl/Alt 状态，导致键盘或输入法表现异常的问题。",
+        "切换开关后会立即清空 TypeUp 的热键过滤状态；按住这组开关不松时不会被当成 Alt 录音。",
+        "非吞掉的热键释放事件也会同步给内部状态，避免第二次切换或后续按键被误判。",
+        "新增 Windows 回归测试，覆盖启用后按住 Ctrl + Alt 再按空格仍会交给系统、释放后 Alt 才开始转写。",
+      ],
+    },
+    en: {
+      summary: "This hotfix continues the Ctrl + Alt keyboard-stuck fix after enabling transcription.",
+      items: [
+        "Fixed stale Ctrl/Alt state after Ctrl + Alt enables transcription, which could make the keyboard or IME behave as if a modifier were stuck.",
+        "TypeUp now clears its hotkey filter state immediately after the switch, and holding the switch combo is never treated as Alt recording.",
+        "Unsuppressed hotkey release events are also synchronized into the internal state so later toggles and keys are not misread.",
+        "Added Windows regression coverage for Space passing through while Ctrl + Alt is still held, and Alt starting transcription only after the switch combo releases.",
+      ],
+    },
+  },
   "0.1.36": {
     releaseName: "TypeUp 0.1.36",
     zh: {
