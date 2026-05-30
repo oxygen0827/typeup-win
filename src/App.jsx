@@ -2,12 +2,15 @@ import { useEffect, useMemo, useState } from "react";
 import {
   Activity,
   AlertCircle,
+  BookOpen,
   CheckCircle2,
   Cloud,
   CreditCard,
   Download,
   ExternalLink,
   FileText,
+  History,
+  Home,
   Languages,
   LogIn,
   LogOut,
@@ -17,8 +20,10 @@ import {
   RefreshCw,
   Save,
   Settings,
+  Shield,
   ShieldCheck,
   Square,
+  Terminal,
   UserRound,
   WandSparkles,
   X,
@@ -34,6 +39,7 @@ import {
 const STATUS_COPY = {
   zh: {
     stopped: { label: "已停止", title: "本地引擎已停止", detail: "点击启动后，TypeUp 会回到后台等待语音输入。", tone: "muted" },
+    transcription_off: { label: "已停止", title: "转写功能已关闭", detail: "后台引擎仍在运行，普通键盘输入会正常交给系统。", tone: "muted" },
     stopping: { label: "停止中", title: "正在停止引擎", detail: "正在释放麦克风和键盘监听。", tone: "muted" },
     starting: { label: "启动中", title: "正在启动本地引擎", detail: "正在加载语音、输入和 AI 编辑模块。", tone: "warn" },
     listening: { label: "就绪", title: "按住快捷键开始说话", detail: "松开后自动转写并输入到当前光标位置。", tone: "ok" },
@@ -43,6 +49,7 @@ const STATUS_COPY = {
   },
   en: {
     stopped: { label: "Stopped", title: "Local engine is stopped", detail: "Start it to return TypeUp to background voice input.", tone: "muted" },
+    transcription_off: { label: "Stopped", title: "Transcription is off", detail: "The background engine is still running, and keyboard input passes through normally.", tone: "muted" },
     stopping: { label: "Stopping", title: "Stopping engine", detail: "Releasing microphone and keyboard hooks.", tone: "muted" },
     starting: { label: "Starting", title: "Starting local engine", detail: "Loading speech, typing, and AI editing modules.", tone: "warn" },
     listening: { label: "Ready", title: "Hold the speak shortcut", detail: "Release to transcribe and type at the current cursor.", tone: "ok" },
@@ -61,21 +68,6 @@ const COPY = {
     usage: "用量趋势",
     usageRange: "最近 7 天",
     logs: "运行日志",
-    corrections: "个人词库",
-    correctionsNavDetail: "纠正记忆",
-    correctionsEmpty: "暂无纠正记忆",
-    correctionsAdd: "新增词条",
-    correctionsSource: "识别成",
-    correctionsTarget: "改成",
-    correctionsCount: "次数",
-    correctionsConfidence: "置信",
-    correctionsEnabled: "启用",
-    correctionsSearch: "搜索词条",
-    correctionsDisable: "禁用",
-    correctionsEnable: "启用",
-    correctionsDelete: "删除",
-    correctionsPath: "本地文件",
-    correctionsError: "词库操作失败",
     backend: "本地后端",
     account: "账号",
     accountCenter: "账号与订阅",
@@ -136,18 +128,20 @@ const COPY = {
     statusDockReady: "TypeUp 已接管预览页热键",
     statusDockHint: "快捷键会根据当前平台和配置显示。",
     shortcutSpeak: "开始说话",
-    shortcutSpeakDetail: "松开后转写到当前光标",
-    shortcutToggle: "转写模式",
-    shortcutToggleDetail: "按一下开启，再按一下关闭",
+    shortcutSpeakDetail: "长按 ALT 期间进行转写",
+    shortcutStartTranscription: "启动转写",
+    shortcutStartTranscriptionDetail: "按一下开启后台转写",
+    shortcutStopTranscription: "停止转写",
+    shortcutStopTranscriptionDetail: "按一下关闭后台转写",
     shortcutAi: "AI 编辑",
-    shortcutAiDetail: "按住组合键处理当前文字",
+    shortcutAiDetail: "下发指令，改写已有内容",
     shortcutPolish: "切换润色模式",
-    shortcutPolishDetail: "原生与微润色之间切换",
+    shortcutPolishDetail: "支持精准转录与 AI 润色双模式切换",
     modeDisplay: "润色模式",
     permissions: "权限",
     permissionCenter: "macOS 权限",
-    permissionHint: "参考轻量版 Voice Keyboard：授权后才能监听热键、录音并输入文字。",
-    permissionTarget: "需要授权的是 TypeUp 内嵌引擎，不是你本机独立安装的 Voice Keyboard。",
+    permissionHint: "参考轻量版 TypeUp：授权后才能监听热键、录音并输入文字。",
+    permissionTarget: "需要授权的是 TypeUp 内嵌引擎，不是你本机独立安装的旧版语音输入工具。",
     revealPermissionTarget: "显示授权对象",
     accessibility: "辅助功能",
     inputMonitoring: "输入监控",
@@ -182,21 +176,6 @@ const COPY = {
     usage: "Usage Trend",
     usageRange: "Last 7 days",
     logs: "Runtime Logs",
-    corrections: "Personal Dictionary",
-    correctionsNavDetail: "Corrections",
-    correctionsEmpty: "No corrections yet",
-    correctionsAdd: "Add Entry",
-    correctionsSource: "Heard As",
-    correctionsTarget: "Use Instead",
-    correctionsCount: "Count",
-    correctionsConfidence: "Confidence",
-    correctionsEnabled: "Enabled",
-    correctionsSearch: "Search entries",
-    correctionsDisable: "Disable",
-    correctionsEnable: "Enable",
-    correctionsDelete: "Delete",
-    correctionsPath: "Local File",
-    correctionsError: "Dictionary action failed",
     backend: "Local Backend",
     account: "Account",
     accountCenter: "Account and Plan",
@@ -257,18 +236,20 @@ const COPY = {
     statusDockReady: "TypeUp is using the preview shortcuts",
     statusDockHint: "Shortcuts follow the current platform and settings.",
     shortcutSpeak: "Start Speaking",
-    shortcutSpeakDetail: "Release to type at the cursor",
-    shortcutToggle: "Transcription Mode",
-    shortcutToggleDetail: "Press once to enable, again to disable",
+    shortcutSpeakDetail: "Hold ALT to transcribe",
+    shortcutStartTranscription: "Start Transcription",
+    shortcutStartTranscriptionDetail: "Press once to enable background transcription",
+    shortcutStopTranscription: "Stop Transcription",
+    shortcutStopTranscriptionDetail: "Press once to disable background transcription",
     shortcutAi: "AI Edit",
-    shortcutAiDetail: "Hold the combo to edit text",
+    shortcutAiDetail: "Send a command to rewrite existing content",
     shortcutPolish: "Switch Polish Mode",
-    shortcutPolishDetail: "Toggle original and light polish",
+    shortcutPolishDetail: "Switch between precise transcription and AI polish",
     modeDisplay: "Polish Mode",
     permissions: "Permissions",
     permissionCenter: "macOS Permissions",
-    permissionHint: "Mirrors the lightweight Voice Keyboard app: required for hotkeys, recording, and typing.",
-    permissionTarget: "Grant permissions to the embedded TypeUp engine, not a separately installed Voice Keyboard app.",
+    permissionHint: "Mirrors lightweight TypeUp: required for hotkeys, recording, and typing.",
+    permissionTarget: "Grant permissions to the embedded TypeUp engine, not a separately installed legacy voice app.",
     revealPermissionTarget: "Show Target",
     accessibility: "Accessibility",
     inputMonitoring: "Input Monitoring",
@@ -390,8 +371,6 @@ const EMPTY_PERMISSIONS = {
   },
 };
 
-const EMPTY_CORRECTIONS = { path: "", records: [] };
-
 const STATUS_KEYS = [
   "state",
   "pid",
@@ -406,6 +385,7 @@ const STATUS_KEYS = [
   "mode",
   "provider",
   "typingMethod",
+  "transcriptionEnabled",
 ];
 
 const DEFAULT_UPDATE_STATE = {
@@ -422,6 +402,155 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.4": {
+    releaseName: "TypeUp 0.3.4",
+    zh: {
+      summary: "本次发布确认源码预览效果，并将麦克风乱码修复推送给所有用户。",
+      items: [
+        "延续 0.3.3 的麦克风设备 JSON 枚举，确保中文设备名和系统默认设备显示正常。",
+        "设置页保持只展示录入设备选择，调试输出留在开发者栏目。",
+        "重新打包并发布 Windows 安装包，方便已安装用户通过更新源获取最新优化。",
+      ],
+    },
+    en: {
+      summary: "This release confirms the source preview and ships the microphone mojibake fix to all users.",
+      items: [
+        "Keeps the 0.3.3 structured microphone enumeration so localized device names and system defaults display correctly.",
+        "Settings continues to show only input-device selection, with debug output kept in Developer.",
+        "Repackages and publishes the Windows installer so installed clients can update through the feed.",
+      ],
+    },
+  },
+  "0.3.3": {
+    releaseName: "TypeUp 0.3.3",
+    zh: {
+      summary: "本次补丁修复麦克风设备列表和设置页日志乱码。",
+      items: [
+        "麦克风设备枚举改为结构化 JSON，中文设备名不再因为控制台编码显示成乱码。",
+        "设置页移除普通用户可见的黑色设备输出窗口，原始日志仍保留在开发者栏目。",
+        "Windows 设备列表会过滤系统包装设备和重复项，优先显示更完整的真实输入设备名称。",
+      ],
+    },
+    en: {
+      summary: "This patch fixes microphone device listing and Settings log mojibake.",
+      items: [
+        "Microphone enumeration now uses structured JSON so localized device names are no longer corrupted by console encoding.",
+        "The Settings page no longer shows the raw black device-output panel to regular users; raw logs remain in Developer.",
+        "Windows device lists now filter wrapper devices and duplicates, preferring clearer real input device names.",
+      ],
+    },
+  },
+  "0.3.2": {
+    releaseName: "TypeUp 0.3.2",
+    zh: {
+      summary: "本次继续打磨 TypeUp 品牌、订阅计划、麦克风设备识别和设置页体验。",
+      items: [
+        "主界面品牌文案统一为 TypeUp，首页欢迎语改为“您好，欢迎来到 TypeUp”。",
+        "订阅计划里的“默认”和“推荐”徽标现在会稳定居中显示在灰色椭圆框内。",
+        "今日转写字数统计卡改为白色样式，并且总节约时间不再向用户展示内部计算方式。",
+        "设置页只保留录入设备选择，VAD 和监听模式移动到开发者栏目。",
+        "麦克风自动选择会优先使用系统默认输入设备，设备列表也会返回结构化信息供界面准确选择。",
+        "Windows 托盘后端显示 TypeUp，并优先使用应用图标资源。",
+      ],
+    },
+    en: {
+      summary: "This update polishes TypeUp branding, plans, microphone device handling, and Settings.",
+      items: [
+        "User-facing product copy now consistently says TypeUp, with a refreshed Home welcome message.",
+        "The Default and Recommended plan badges now stay centered inside their gray pill backgrounds.",
+        "The transcribed-characters stat now uses the same white card style, and saved time no longer exposes its internal calculation.",
+        "Settings now keeps only input-device selection, while VAD and listening mode live in Developer.",
+        "Automatic microphone selection now prefers the system default input device and exposes structured device data to the UI.",
+        "The Windows tray backend now shows TypeUp and prefers the app icon asset.",
+      ],
+    },
+  },
+  "0.3.1": {
+    releaseName: "TypeUp 0.3.1",
+    zh: {
+      summary: "本次发布补丁版，修复更新源误指向、更新说明乱码兜底和账号页连接信息布局。",
+      items: [
+        "按新的版本规则发布为 0.3.1，后续版本每累计 20 个补丁位进入下一档版本段。",
+        "修复更新说明遇到异常编码内容时显示问号乱码的问题，会自动回退到内置中文说明。",
+        "账号页右侧连接信息改为规整的信息行，后端地址会自动换行，不再挤乱标题和标签。",
+        "服务器更新源已恢复到正确发布链路，避免客户端看到不该出现的版本。",
+      ],
+    },
+    en: {
+      summary: "This patch fixes update-feed confusion, release-note fallback handling, and the Account connection layout.",
+      items: [
+        "Released as 0.3.1 under the new versioning rule, where every 20 patch releases advances to the next version band.",
+        "Release notes now fall back to built-in localized copy when malformed encoded content would otherwise show question marks.",
+        "The Account connection card now uses a cleaner information row, and backend URLs wrap without breaking the title layout.",
+        "The server update feed has been restored to the intended release path so clients do not see unexpected versions.",
+      ],
+    },
+  },
+  "0.1.40": {
+    releaseName: "TypeUp 0.1.40",
+    zh: {
+      summary: "本次继续打磨首页 UI/UX，让语音控制、快捷键说明和用量统计更清晰。",
+      items: [
+        "顶部栏移除重复的检查更新、运行状态和语言切换入口，减少首屏干扰。",
+        "语言切换迁移到配置页面，和快捷键、麦克风等设置放在一起管理。",
+        "首页快捷键说明改到每个操作的右侧展示，并更新为更贴近实际工作流的文案。",
+        "首页新增状态引导提示，启动、停止和重启按钮层级更清楚，用户能更快判断下一步操作。",
+        "总节约时间继续保留在统计卡片中，但不再展示内部计算口径。",
+      ],
+    },
+    en: {
+      summary: "This update continues polishing the Home UI/UX so voice controls, shortcuts, and usage stats are clearer.",
+      items: [
+        "The top bar removes duplicate update, status, and language controls to reduce first-screen noise.",
+        "Language switching now lives in Settings alongside shortcuts, microphone, and typing preferences.",
+        "Home shortcut descriptions now sit on the right side of each action with clearer workflow copy.",
+        "Home adds state guidance and clearer Start, Stop, and Restart button hierarchy so the next action is easier to understand.",
+        "Time saved is now estimated as today's transcribed characters divided by 100 and multiplied by 60 seconds, with the formula shown in the stat card.",
+      ],
+    },
+  },
+  "0.1.39": {
+    releaseName: "TypeUp 0.1.39",
+    zh: {
+      summary: "本次把团队优化版 UI/UX 融合进现有桌面端，并修复主窗口圆角和窗口控制按钮体验。",
+      items: [
+        "主界面迁移为优化版侧边导航工作台，首页、历史、词典、设置、订阅计划、账号、隐私和开发者栏目更清晰。",
+        "首页保留语音控制台的启动、停止和重启入口，用户一打开软件就能看到如何控制本地引擎。",
+        "Electron 主窗口改为透明背景，最外侧四个角跟随圆角窗口显示，不再露出直角底色。",
+        "右上角最小化、最大化和关闭按钮改为标准线形图标，不再显示奇怪的文本符号。",
+      ],
+    },
+    en: {
+      summary: "This update merges the optimized UI/UX into the desktop app and fixes window rounding and control buttons.",
+      items: [
+        "The main UI now uses the optimized sidebar workspace with clearer Home, History, Dictionary, Settings, Plans, Account, Privacy, and Developer sections.",
+        "The Home page keeps Start, Stop, and Restart controls in the voice console so users can immediately control the local engine.",
+        "The Electron window now uses a transparent background so the outer corners render as rounded corners instead of a rectangular backdrop.",
+        "The top-right minimize, maximize, and close controls now use standard line icons instead of odd text symbols.",
+      ],
+    },
+  },
+  "0.1.38": {
+    releaseName: "TypeUp 0.1.38",
+    zh: {
+      summary: "本次更新语音控制台快捷键和 Windows 右侧 Alt 工作流，并暂时移除个人词库。",
+      items: [
+        "Ctrl + O 现在用于启动语音控制台，Ctrl + P 用于停止；即使本地 engine 已停止，也可以通过 Ctrl + O 从 Electron 主进程重新拉起。",
+        "Windows 默认改为右 Alt 按住转写，双击右 Alt 切换原生/微润色模式，右 Alt + 右 Shift 进入 AI 编辑，左 Alt 不再触发 TypeUp。",
+        "个人词库、本地纠错学习和相关接口已从当前版本移除，计划第二版重新设计后再加入。",
+        "开发模式默认运行 Python engine 源码，并修复 pynput 键盘监听回调签名不兼容导致的启动异常。",
+      ],
+    },
+    en: {
+      summary: "This update refreshes voice-console shortcuts, switches Windows to right-Alt workflows, and removes the personal dictionary for now.",
+      items: [
+        "Ctrl + O now starts the voice console and Ctrl + P stops it; Electron can relaunch the local engine even when it has stopped.",
+        "Windows defaults now use right Alt for dictation, double right Alt for original/light-polish mode, and right Alt + right Shift for AI edit. Left Alt no longer triggers TypeUp.",
+        "The personal dictionary, local correction learning, and related APIs have been removed from this version and are planned for a redesigned v2.",
+        "Development mode runs the Python engine source by default, and the pynput keyboard callback compatibility issue is fixed.",
+      ],
+    },
+  },
   "0.1.37": {
     releaseName: "TypeUp 0.1.37",
     zh: {
@@ -488,21 +617,17 @@ const BUILTIN_RELEASE_NOTES = {
   "0.1.34": {
     releaseName: "TypeUp 0.1.34",
     zh: {
-      summary: "本次优化个人纠正记忆，并加入 Ctrl + Alt 切换式转写热键。",
+      summary: "本次加入 Ctrl + Alt 切换式转写热键，个人词库延后到第二版。",
       items: [
         "新增 Ctrl + Alt 切换式转写：按一下开始持续录音，再按一下停止并输入结果。",
-        "个人词库支持从语音输出前后的文本快照学习用户改错，更适合微信等回车后清空输入框的场景。",
-        "个人词库管理页会显示候选/已生效状态和最后学习时间，并在页面停留时自动刷新。",
-        "本地纠正规则会在 STT 后处理和 AI 微润色提示中一起使用，减少专有名词反复识别错误。",
+        "个人词库界面和本地纠错学习延后到第二版重新设计。",
       ],
     },
     en: {
-      summary: "This update improves personal correction memory and adds a Ctrl + Alt transcription toggle.",
+      summary: "This update adds a Ctrl + Alt transcription toggle and defers personal dictionary work to a later release.",
       items: [
         "Ctrl + Alt now toggles continuous dictation: press once to record, press again to stop and type.",
-        "Personal corrections can learn from before/after text snapshots around voice output.",
-        "The corrections page shows candidate/active status and last-seen time, and refreshes while open.",
-        "Local correction rules are applied after STT and provided to micro-polish prompts to preserve preferred terms.",
+        "The personal dictionary interface and local correction learning are deferred to a later version.",
       ],
     },
   },
@@ -772,14 +897,13 @@ export default function App() {
   const [accountError, setAccountError] = useState("");
   const [lastOrder, setLastOrder] = useState(null);
   const [devices, setDevices] = useState("");
+  const [deviceInfo, setDeviceInfo] = useState({ items: [], output: "" });
   const [permissions, setPermissions] = useState(EMPTY_PERMISSIONS);
-  const [corrections, setCorrections] = useState(EMPTY_CORRECTIONS);
-  const [correctionForm, setCorrectionForm] = useState({ source: "", target: "", search: "" });
-  const [correctionError, setCorrectionError] = useState("");
   const [saving, setSaving] = useState(false);
   const [updateState, setUpdateState] = useState(DEFAULT_UPDATE_STATE);
   const [releaseNotes, setReleaseNotes] = useState(null);
-  const [activeModule, setActiveModule] = useState("voice");
+  const [activeModule, setActiveModule] = useState("home");
+  const [historyFilter, setHistoryFilter] = useState("");
 
   function setStatus(next) {
     setStatusState((current) => (sameStatus(current, next) ? current : next));
@@ -804,8 +928,8 @@ export default function App() {
   useEffect(() => {
     if (!apiBase) return undefined;
     refreshAll(apiBase, { setStatus, setUsage, setLogs, setSettings });
-    refreshCorrections(apiBase, setCorrections);
     refreshPermissions(apiBase, setPermissions);
+    refreshDeviceInfo(apiBase, { setDevices, setDeviceInfo }, text.deviceFallback);
     refreshAccount(apiBase, { setAuth, setPlans, setAuthForm, setAccountError });
     const timer = setInterval(() => {
       refreshUsage(apiBase, setUsage);
@@ -823,13 +947,6 @@ export default function App() {
       events.close();
     };
   }, [apiBase]);
-
-  useEffect(() => {
-    if (!apiBase || activeModule !== "corrections") return undefined;
-    refreshCorrections(apiBase, setCorrections);
-    const timer = setInterval(() => refreshCorrections(apiBase, setCorrections), 3000);
-    return () => clearInterval(timer);
-  }, [apiBase, activeModule]);
 
   useEffect(() => {
     if (!window.typeup?.updates) return undefined;
@@ -868,38 +985,39 @@ export default function App() {
   const defaultHotkeys = defaultAudioHotkeys(platform);
   const pttKey = settings.audio?.ptt_key || defaultHotkeys.pttKey;
   const aiKey = settings.audio?.ai_key || defaultHotkeys.aiKey;
-  const toggleKey = settings.audio?.toggle_key || defaultHotkeys.toggleKey;
+  const enableKey = settings.audio?.enable_key || defaultHotkeys.enableKey;
+  const disableKey = settings.audio?.disable_key || defaultHotkeys.disableKey;
   const polishKey = `${lang === "zh" ? "双击" : "Double"} ${formatHotkey(pttKey, lang, platform)}`;
-  const statusDockHint = formatStatusDockHint(lang, pttKey, aiKey, toggleKey, polishKey, platform);
+  const statusDockHint = formatStatusDockHint(lang, pttKey, aiKey, enableKey, disableKey, polishKey, platform);
+  const engineProcessStopped = ["stopped", "stopping", "error"].includes(status.state);
+  const engineAcceptingVoice = ["listening", "transcribing"].includes(status.state);
+  const transcriptionStopped = engineAcceptingVoice && status.transcriptionEnabled === false;
+  const transcriptionActive = engineAcceptingVoice && !transcriptionStopped;
+  const effectiveStatusState = transcriptionStopped ? "transcription_off" : status.state;
   const statusMeta = withDynamicStatusCopy(
-    STATUS_COPY[lang][status.state] || STATUS_COPY[lang].stopped,
-    status.state,
+    STATUS_COPY[lang][effectiveStatusState] || STATUS_COPY[lang].stopped,
+    effectiveStatusState,
     lang,
     pttKey,
     platform,
   );
+  const homeGuidance = getHomeGuidance(effectiveStatusState, lang);
   const today = usage?.today || {};
   const totals = usage?.totals || {};
   const days = usage?.days || [];
-  const activeChars = (today.transcribedChars || 0) + (today.aiEditedChars || 0);
-  const savedTime = formatSavedTime(activeChars, lang);
-  const engineStopped = ["stopped", "stopping", "error"].includes(status.state);
-  const engineRunning = !engineStopped;
-  const moduleItems = [
-    { id: "voice", label: text.voiceConsole, detail: statusMeta.label, icon: <Mic size={18} /> },
-    {
-      id: "account",
-      label: text.accountCenter,
-      detail: auth.authenticated ? auth.user?.email || text.activeSubscription : text.login,
-      icon: <UserRound size={18} />,
-    },
-    { id: "usage", label: text.usage, detail: text.usageRange, icon: <Activity size={18} /> },
-    { id: "corrections", label: text.corrections, detail: text.correctionsNavDetail, icon: <FileText size={18} /> },
-    { id: "features", label: text.features, detail: text.featuresNavDetail, icon: <ShieldCheck size={18} /> },
-    { id: "feedback", label: text.feedback, detail: text.feedbackNavDetail, icon: <FileText size={18} /> },
-    { id: "community", label: text.community, detail: text.communityNavDetail, icon: <ExternalLink size={18} /> },
-    { id: "settings", label: text.settings, detail: text.speechModel, icon: <Settings size={18} /> },
-    { id: "logs", label: text.logs, detail: text.backend, icon: <Pause size={18} /> },
+  const savedTime = formatSavedTime(today.transcribedChars || 0, lang);
+  const engineStopped = engineProcessStopped || transcriptionStopped;
+  const engineRunning = transcriptionActive;
+  const navItems = [
+    { id: "home", label: lang === "zh" ? "首页" : "Home", icon: <Home size={18} /> },
+    { id: "history", label: lang === "zh" ? "历史" : "History", icon: <History size={18} /> },
+    { id: "dictionary", label: lang === "zh" ? "词典" : "Dictionary", icon: <BookOpen size={18} /> },
+    { id: "settings", label: text.settings, icon: <Settings size={18} /> },
+    { id: "plan", label: lang === "zh" ? "订阅计划" : "Plans", icon: <CreditCard size={18} /> },
+    { divider: true },
+    { id: "account", label: text.account, icon: <UserRound size={18} /> },
+    { id: "privacy", label: lang === "zh" ? "隐私" : "Privacy", icon: <Shield size={18} /> },
+    { id: "developer", label: lang === "zh" ? "开发者" : "Developer", icon: <Terminal size={18} /> },
   ];
 
   const peak = useMemo(() => {
@@ -1030,7 +1148,9 @@ export default function App() {
 
   async function listDevices() {
     const result = await api(apiBase, "/api/devices");
-    setDevices(result.output || text.deviceFallback);
+    const info = normalizeDeviceResult(result);
+    setDeviceInfo(info);
+    setDevices(info.output || text.deviceFallback);
   }
 
   async function openPermission(name) {
@@ -1085,76 +1205,26 @@ export default function App() {
     setReleaseNotes(null);
   }
 
-  async function addCorrection(event) {
-    event.preventDefault();
-    setCorrectionError("");
-    try {
-      await api(apiBase, "/api/corrections", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          source: correctionForm.source,
-          target: correctionForm.target,
-        }),
-      });
-      setCorrectionForm((current) => ({ ...current, source: "", target: "" }));
-      await refreshCorrections(apiBase, setCorrections);
-    } catch (error) {
-      setCorrectionError(error.message || text.correctionsError);
-    }
-  }
-
-  async function toggleCorrection(record) {
-    setCorrectionError("");
-    try {
-      await api(apiBase, `/api/corrections/${encodeURIComponent(record.id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !record.enabled }),
-      });
-      await refreshCorrections(apiBase, setCorrections);
-    } catch (error) {
-      setCorrectionError(error.message || text.correctionsError);
-    }
-  }
-
-  async function removeCorrection(record) {
-    setCorrectionError("");
-    try {
-      await api(apiBase, `/api/corrections/${encodeURIComponent(record.id)}`, { method: "DELETE" });
-      await refreshCorrections(apiBase, setCorrections);
-    } catch (error) {
-      setCorrectionError(error.message || text.correctionsError);
-    }
+  async function windowAction(action) {
+    await window.typeup?.window?.[action]?.();
   }
 
   return (
-    <main className="app-shell">
-      <header className="app-titlebar">
-        <div className="brand">
-          <img src={mark} alt="" />
+    <main className="app-shell app-canvas">
+      <section className="desktop-window">
+      <header className="app-titlebar window-bar">
+        <div className="brand window-brand">
+          <img className="brand-logo" src={mark} alt="" />
           <div>
-            <h1>TypeUp</h1>
+            <h1 className="brand-word">TypeUp</h1>
           </div>
         </div>
-        <div className="titlebar-actions">
-          <button
-            type="button"
-            className="update-check-button"
-            onClick={checkForUpdates}
-            disabled={["checking", "downloading", "installing", "disabled"].includes(updateState.status)}
-          >
-            <RefreshCw size={16} />
-            {text.checkUpdate}
-          </button>
-          <div className="language-switch" aria-label={text.language}>
-            <Languages size={16} />
-            <button className={lang === "zh" ? "selected" : ""} onClick={() => setLang("zh")}>中文</button>
-            <button className={lang === "en" ? "selected" : ""} onClick={() => setLang("en")}>EN</button>
-          </div>
-          <div className={`status-pill ${statusMeta.tone}`}>
-            <span />
-            {statusMeta.label}
+        <div className="window-title" aria-hidden="true" />
+        <div className="titlebar-actions window-right">
+          <div className="window-controls">
+            <button className="window-control minimize" type="button" onClick={() => windowAction("minimize")} aria-label="Minimize" title="Minimize" />
+            <button className="window-control maximize" type="button" onClick={() => windowAction("toggleMaximize")} aria-label="Maximize" title="Maximize" />
+            <button className="window-control close" type="button" onClick={() => windowAction("close")} aria-label="Close" title="Close" />
           </div>
         </div>
       </header>
@@ -1174,305 +1244,310 @@ export default function App() {
           onClose={dismissReleaseNotes}
         />
 
-        <section className="app-workspace">
-          <nav className="module-nav" aria-label="TypeUp modules">
-            {moduleItems.map((item) => (
+        <section className="optimized-workspace hub-layout">
+          <nav className="side-nav" aria-label="TypeUp sections">
+            {navItems.map((item, index) => item.divider ? (
+              <div className="nav-spacer" key={`divider-${index}`} />
+            ) : (
               <button
                 type="button"
                 key={item.id}
-                className={activeModule === item.id ? "selected" : ""}
+                className={`nav-item ${activeModule === item.id ? "active" : ""}`}
                 onClick={() => setActiveModule(item.id)}
               >
                 {item.icon}
                 <span>{item.label}</span>
-                <small>{item.detail}</small>
               </button>
             ))}
           </nav>
 
-          <div className="module-content">
-            <div className={activeModule === "voice" ? "module-view active" : "module-view"}>
-              <section className="voice-panel">
-                <div className="panel-heading">
+          <section className="content">
+            {activeModule === "home" ? (
+              <section className="hub-panel active">
+                <div className="hub-header">
                   <div>
-                    <p className="eyebrow">{text.localEngine}</p>
-                    <h2>{text.voiceConsole}</h2>
+                    <h1>{lang === "zh" ? "您好，欢迎来到 TypeUp" : "Hello, welcome to TypeUp"}</h1>
+                    <p>
+                      {lang === "zh"
+                        ? "TypeUp 在后台等待快捷键，不打断你当前正在使用的软件。按下快捷键，说话，然后把干净文本写回光标位置。"
+                        : "TypeUp waits in the background for your shortcuts, then turns speech into clean text wherever your cursor is."}
+                    </p>
                   </div>
-                </div>
-
-                <div className="voice-grid">
-                  <div className={`voice-orb ${statusMeta.tone}`}>
-                    <div className="orb-ring" />
-                    <div className="orb-core">
-                      <Mic size={34} />
-                    </div>
-                    <div className="wave-lines" aria-hidden="true">
-                      <span />
-                      <span />
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                  </div>
-
-                  <div className="voice-state">
-                    <div className={`state-badge ${statusMeta.tone}`}>
-                      <span />
+                  <div className="header-actions">
+                    <button className="ghost-action update-action" type="button" onClick={checkForUpdates}>
+                      <RefreshCw size={16} />
+                      {text.checkUpdate}
+                    </button>
+                    <div className={`status-chip ${statusMeta.tone === "warn" ? "warn" : statusMeta.tone === "danger" ? "danger" : ""}`}>
+                      <i />
                       {statusMeta.label}
                     </div>
-                    <h3>{statusMeta.title}</h3>
-                    <p>{statusMeta.detail}</p>
-                    <div className="mode-card">
-                      <span>{text.modeDisplay}</span>
-                      <div>
-                        <strong>{text.original}</strong>
-                        <i />
-                        <strong>{text.lightPolish}</strong>
+                  </div>
+                </div>
+                <div className="home-grid">
+                  <section className="card voice-card">
+                    <div className="voice-visual">
+                      <div className={`orb ${engineRunning ? "listening" : ""}`}>
+                        <div className="wave" aria-hidden="true">
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                          <i />
+                        </div>
                       </div>
                     </div>
-                  </div>
-
-                  <div className="engine-card">
-                    <InfoRow label={text.process} value={status.pid ? `PID ${status.pid}` : text.notRunning} />
-                    <InfoRow label={text.listenMode} value={status.mode === "ptt" ? text.pushToTalk : text.alwaysOn} />
-                    <InfoRow label={text.stt} value={status.provider || text.notConfigured} />
-                    <InfoRow label={text.typing} value={status.typingMethod === "clip" ? text.clipboard : text.unicode} />
-                  </div>
+                    <div className="voice-copy">
+                      <div>
+                        <h2>{statusMeta.title}</h2>
+                        <p>{statusMeta.detail}</p>
+                        <div className={`home-guidance ${statusMeta.tone}`}>
+                          <span>{statusMeta.label}</span>
+                          <strong>{homeGuidance}</strong>
+                        </div>
+                      </div>
+                      <div className="shortcut-list">
+                        <ShortcutItem keys={formatHotkey(pttKey, lang, platform)} title={text.shortcutSpeak} detail={text.shortcutSpeakDetail} />
+                        <ShortcutItem keys={polishKey} title={text.shortcutPolish} detail={text.shortcutPolishDetail} />
+                        <ShortcutItem keys={formatHotkey(aiKey, lang, platform)} title={text.shortcutAi} detail={text.shortcutAiDetail} />
+                      </div>
+                      <div className="home-engine-actions">
+                        <button className={`engine-action start-action ${engineRunning ? "state-active" : ""}`} type="button" onClick={() => agentAction("start")} disabled={!apiBase}>
+                          <Play size={18} />
+                          {text.start}
+                        </button>
+                        <button className={`engine-action stop-action ${engineStopped ? "state-active" : ""}`} type="button" onClick={() => agentAction("stop")} disabled={!apiBase}>
+                          <Square size={18} />
+                          {text.stop}
+                        </button>
+                        <button className="engine-action ghost" type="button" onClick={() => agentAction("restart")} disabled={!apiBase}>
+                          <RefreshCw size={18} />
+                          {text.restart}
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+                  <section className="home-stats-grid" aria-label={text.usage}>
+                    <MiniStat label={text.transcribedChars} value={formatNumber(today.transcribedChars, lang)} />
+                    <MiniStat label={text.aiEditedChars} value={formatNumber(today.aiEditedChars, lang)} />
+                    <MiniStat label={text.savedTime} value={savedTime} />
+                    <MiniStat label={text.successfulEvents} value={formatNumber(totals.successfulEvents, lang)} />
+                  </section>
                 </div>
+              </section>
+            ) : null}
 
-                {status.lastError ? (
-                  <div className="notice danger">
-                    <AlertCircle size={18} />
-                    <span>{status.lastError}</span>
+            {activeModule === "history" ? (
+              <HistoryPanel
+                lang={lang}
+                text={text}
+                usage={usage}
+                historyFilter={historyFilter}
+                setHistoryFilter={setHistoryFilter}
+                today={today}
+              />
+            ) : null}
+
+            {activeModule === "dictionary" ? (
+              <section className="hub-panel active">
+                <div className="hub-header">
+                  <div>
+                    <h1>{lang === "zh" ? "词典" : "Dictionary"}</h1>
+                    <p>{lang === "zh" ? "把专有名词、输出偏好和插入方式放在一起，减少用户去配置深处寻找的成本。" : "Keep terms, output preferences, and insertion behavior in one place."}</p>
                   </div>
+                  <div className="status-chip muted"><i />{lang === "zh" ? "本地优先" : "Local first"}</div>
+                </div>
+                <div className="settings-layout">
+                  <section className="settings-group">
+                    <SettingRow title={lang === "zh" ? "专有名词" : "Custom terms"} detail={lang === "zh" ? "产品名、人名和公司名优先保留原写法。" : "Prefer the original spelling for product, person, and company names."}>
+                      <button type="button" disabled>{lang === "zh" ? "稍后开放" : "Soon"}</button>
+                    </SettingRow>
+                    <SettingRow title={lang === "zh" ? "输出语言" : "Output language"} detail={`${lang === "zh" ? "当前配置" : "Current"}: ${settings.stt?.language || "auto"}`}>
+                      <span className="select-pill">{settings.stt?.language || "auto"}</span>
+                    </SettingRow>
+                    <SettingRow title={text.typing} detail={settings.typing?.method === "clip" ? text.clipboard : text.unicode}>
+                      <Segmented
+                        label=""
+                        value={settings.typing?.method || "unicode"}
+                        options={[
+                          ["unicode", "Unicode"],
+                          ["clip", text.clipboard],
+                        ]}
+                        onChange={(value) => setNested(setSettings, ["typing", "method"], value)}
+                      />
+                    </SettingRow>
+                  </section>
+                  <aside className="side-stack">
+                    <section className="card history-card">
+                      <div className="card-title"><h2>{lang === "zh" ? "当前配置" : "Current config"}</h2><span>{lang === "zh" ? "只读" : "Read only"}</span></div>
+                      <div className="meter">
+                        <InfoRow label="STT" value={settings.stt?.model || "glm-asr-2512"} />
+                        <InfoRow label="LLM" value={settings.llm?.model || "glm-4-flash"} />
+                      </div>
+                    </section>
+                  </aside>
+                </div>
+              </section>
+            ) : null}
+
+            {activeModule === "settings" ? (
+              <section className="hub-panel active">
+                <div className="hub-header">
+                  <div>
+                    <h1>{text.settings}</h1>
+                    <p>{lang === "zh" ? "快捷键、麦克风、语言和输入方式使用优化版工作台样式，同时继续接入当前项目的真实配置。" : "Shortcuts, microphone, language, and typing behavior use the optimized workspace while keeping the live settings backend."}</p>
+                  </div>
+                  <div className="status-chip"><i />{statusMeta.label}</div>
+                </div>
+                <div className="settings-layout">
+                  <section className="settings-group">
+                    <SettingRow title={text.language} detail={lang === "zh" ? "切换界面显示语言" : "Switch the interface language"}>
+                      <div className="settings-language-switch" aria-label={text.language}>
+                        <Languages size={16} />
+                        <button type="button" className={lang === "zh" ? "selected" : ""} onClick={() => setLang("zh")}>中文</button>
+                        <button type="button" className={lang === "en" ? "selected" : ""} onClick={() => setLang("en")}>EN</button>
+                      </div>
+                    </SettingRow>
+                    <SettingRow title={text.shortcutSpeak} detail={text.shortcutSpeakDetail}>
+                      <KeyRow keys={formatHotkey(pttKey, lang, platform)} />
+                    </SettingRow>
+                    <SettingRow title={text.shortcutStartTranscription} detail={text.shortcutStartTranscriptionDetail}>
+                      <KeyRow keys={formatHotkey(enableKey, lang, platform)} />
+                    </SettingRow>
+                    <SettingRow title={text.shortcutStopTranscription} detail={text.shortcutStopTranscriptionDetail}>
+                      <KeyRow keys={formatHotkey(disableKey, lang, platform)} />
+                    </SettingRow>
+                    <SettingRow title={text.shortcutAi} detail={text.shortcutAiDetail}>
+                      <KeyRow keys={formatHotkey(aiKey, lang, platform)} />
+                    </SettingRow>
+                    <SettingRow title={text.shortcutPolish} detail={text.shortcutPolishDetail}>
+                      <KeyRow keys={polishKey} />
+                    </SettingRow>
+                  </section>
+                  <aside className="side-stack">
+                    <section className="card meter-card">
+                      <div className="card-title"><h2>{text.microphone}</h2><span>{text.settings}</span></div>
+                      <div className="mic-device">
+                        <div>
+                          <strong>{lang === "zh" ? "当前麦克风" : "Current microphone"}</strong>
+                          <span>{formatCurrentMicrophone(settings.audio?.device, deviceInfo, text, lang)}</span>
+                        </div>
+                        <button type="button" onClick={listDevices}>{lang === "zh" ? "设备" : "Devices"}</button>
+                      </div>
+                      <label className="device-select-row">
+                        <span>{lang === "zh" ? "录入设备" : "Input device"}</span>
+                        <select
+                          value={settings.audio?.device || "auto"}
+                          onChange={(event) => setNested(setSettings, ["audio", "device"], event.target.value)}
+                          disabled={!deviceInfo.items.length}
+                        >
+                          {deviceOptions(deviceInfo, text, lang).map((item) => (
+                            <option key={item.value} value={item.value}>{item.label}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <div className="meter">
+                        <button className="save-button" type="button" onClick={saveSettings} disabled={saving || !apiBase}>
+                          <Save size={18} />
+                          {saving ? text.saving : text.saveAndRestart}
+                        </button>
+                      </div>
+                    </section>
+                  </aside>
+                </div>
+              </section>
+            ) : null}
+
+            {activeModule === "plan" ? (
+              <PlanHub lang={lang} text={text} auth={auth} plans={plans} accountBusy={accountBusy} onCreateOrder={createOrder} onAccount={() => setActiveModule("account")} />
+            ) : null}
+
+            {activeModule === "account" ? (
+              <section className="hub-panel active">
+                <div className="hub-header">
+                  <div>
+                    <h1>{text.account}</h1>
+                    <p>{lang === "zh" ? "登录状态会保存在本机，后续打开 TypeUp 会自动恢复，也可以随时退出并切换账号。" : "Your session is stored locally and restored on launch. You can sign out or switch accounts at any time."}</p>
+                  </div>
+                  <div className={`status-chip ${auth.authenticated ? "" : "warn"}`}><i />{auth.authenticated ? text.activeSubscription : text.login}</div>
+                </div>
+                <div className="account-grid">
+                  <AccountPanel
+                    text={text}
+                    auth={auth}
+                    authForm={authForm}
+                    setAuthForm={setAuthForm}
+                    plans={plans}
+                    lastOrder={lastOrder}
+                    accountBusy={accountBusy}
+                    accountError={accountError}
+                    onSubmitAuth={submitAuth}
+                    onLogout={logout}
+                    onRefresh={reloadAccount}
+                    onCreateOrder={createOrder}
+                    onRefreshOrder={refreshOrder}
+                    onOpenPayment={openPayment}
+                    lang={lang}
+                  />
+                  <aside className="side-stack">
+                    <section className="card account-card connection-card">
+                      <div className="card-title">
+                        <h2>{lang === "zh" ? "连接信息" : "Connection"}</h2>
+                        <span>{lang === "zh" ? "本机" : "Local"}</span>
+                      </div>
+                      <div className="account-id connection-row">
+                        <span>{text.backendUrl}</span>
+                        <strong>{auth.apiBaseUrl || authForm.apiBaseUrl || DEFAULT_BACKEND_URL}</strong>
+                      </div>
+                    </section>
+                  </aside>
+                </div>
+                {platform === "darwin" ? (
+                  <PermissionsPanel
+                    text={text}
+                    permissions={permissions.permissions}
+                    engineAppPath={permissions.engineAppPath}
+                    onOpen={openPermission}
+                    onRequest={requestPermission}
+                    onRequestMic={requestMicPermission}
+                    onRecheck={recheckPermissions}
+                    onRevealTarget={revealPermissionTarget}
+                    disabled={!apiBase}
+                  />
                 ) : null}
-                {!status.configured ? (
-                  <div className="notice warn">
-                    <AlertCircle size={18} />
-                    <span>{text.missingConfig}</span>
-                  </div>
-                ) : (
-                  <div className="notice ok">
-                    <CheckCircle2 size={18} />
-                    <span>{text.configured}</span>
-                  </div>
-                )}
-
-                <div className="actions">
-                  <button className={engineRunning ? "state-active" : ""} onClick={() => agentAction("start")} disabled={!apiBase}>
-                    <Play size={18} />
-                    {text.start}
-                  </button>
-                  <button className={engineStopped ? "state-active" : ""} onClick={() => agentAction("stop")} disabled={!apiBase}>
-                    <Square size={18} />
-                    {text.stop}
-                  </button>
-                  <button onClick={() => agentAction("restart")} disabled={!apiBase}>
-                    <RefreshCw size={18} />
-                    {text.restart}
-                  </button>
-                  <button onClick={listDevices} disabled={!apiBase}>
-                    <Mic size={18} />
-                    {text.microphone}
-                  </button>
-                </div>
               </section>
+            ) : null}
 
-              <section className="shortcut-panel">
-                <div className="panel-heading compact">
-                  <div>
-                    <p className="eyebrow">{text.shortcuts}</p>
-                    <h2>{formatHotkey(pttKey, lang, platform)} / {formatHotkey(toggleKey, lang, platform)} / {formatHotkey(aiKey, lang, platform)} / {polishKey}</h2>
-                  </div>
-                  <WandSparkles size={22} />
-                </div>
-                <div className="shortcut-grid">
-                  <Shortcut label={text.shortcutSpeak} detail={text.shortcutSpeakDetail} keys={formatHotkey(pttKey, lang, platform)} />
-                  <Shortcut label={text.shortcutToggle} detail={text.shortcutToggleDetail} keys={formatHotkey(toggleKey, lang, platform)} />
-                  <Shortcut label={text.shortcutAi} detail={text.shortcutAiDetail} keys={formatHotkey(aiKey, lang, platform)} />
-                  <Shortcut label={text.shortcutPolish} detail={text.shortcutPolishDetail} keys={polishKey} />
-                </div>
-              </section>
-            </div>
+            {activeModule === "privacy" ? (
+              <PrivacyHub lang={lang} status={status} usage={usage} onHistory={() => setActiveModule("history")} onAccount={() => setActiveModule("account")} onDeveloper={() => setActiveModule("developer")} />
+            ) : null}
 
-            <div className={activeModule === "usage" ? "module-view usage-view active" : "module-view usage-view"}>
-              <section className="metrics-grid">
-                <Metric icon={<FileText />} label={text.transcribedChars} value={formatNumber(today.transcribedChars, lang)} accent="blue" />
-                <Metric icon={<WandSparkles />} label={text.aiEditedChars} value={formatNumber(today.aiEditedChars, lang)} accent="violet" />
-                <Metric icon={<Activity />} label={text.savedTime} value={savedTime} accent="cyan" />
-                <Metric icon={<CheckCircle2 />} label={text.successfulEvents} value={formatNumber(totals.successfulEvents, lang)} accent="green" />
-              </section>
-
-              <section className="usage-panel">
-                <div className="panel-heading compact">
-                  <div>
-                    <p className="eyebrow">{text.usageRange}</p>
-                    <h2>{text.usage}</h2>
-                  </div>
-                  <Activity size={22} />
-                </div>
-                <TrendChart days={days} peak={peak} lang={lang} />
-              </section>
-            </div>
-
-            <div className={activeModule === "features" ? "module-view active" : "module-view"}>
-              <FeaturesPanel text={text} />
-            </div>
-
-            <div className={activeModule === "corrections" ? "module-view active" : "module-view"}>
-              <CorrectionsPanel
-                text={text}
-                corrections={corrections}
-                form={correctionForm}
-                setForm={setCorrectionForm}
-                error={correctionError}
-                onAdd={addCorrection}
-                onToggle={toggleCorrection}
-                onDelete={removeCorrection}
+            {activeModule === "developer" ? (
+              <DeveloperHub
                 lang={lang}
-              />
-            </div>
-
-            <div className={activeModule === "feedback" ? "module-view active" : "module-view"}>
-              <FeedbackPanel text={text} lang={lang} onOpen={openPayment} />
-            </div>
-
-            <div className={activeModule === "community" ? "module-view active" : "module-view"}>
-              <CommunityPanel text={text} onOpen={openPayment} />
-            </div>
-
-            <div className={activeModule === "logs" ? "module-view active" : "module-view"}>
-              <section className="log-panel">
-                <div className="panel-heading compact">
-                  <div>
-                    <p className="eyebrow">{text.logs}</p>
-                    <h2>{text.backend}</h2>
-                  </div>
-                  <Pause size={22} />
-                </div>
-                <div className="logs">
-                  {logs.length ? logs.map((item) => (
-                    <p key={`${item.ts}-${item.line}`}>
-                      <time>{formatTime(item.ts, lang)}</time>
-                      <span>{item.line}</span>
-                    </p>
-                  )) : <p className="empty-log">{text.noLogs}</p>}
-                </div>
-              </section>
-            </div>
-
-            <div className={activeModule === "account" ? "module-view active" : "module-view"}>
-              <AccountPanel
                 text={text}
-                auth={auth}
-                authForm={authForm}
-                setAuthForm={setAuthForm}
+                status={status}
+                settings={settings}
                 plans={plans}
-                lastOrder={lastOrder}
-                accountBusy={accountBusy}
-                accountError={accountError}
-                onSubmitAuth={submitAuth}
-                onLogout={logout}
-                onRefresh={reloadAccount}
-                onCreateOrder={createOrder}
-                onRefreshOrder={refreshOrder}
-                onOpenPayment={openPayment}
-                lang={lang}
+                permissions={permissions}
+                devices={devices}
+                logs={logs}
+                apiBase={apiBase}
+                onStart={() => agentAction("start")}
+                onRestart={() => agentAction("restart")}
+                onStop={() => agentAction("stop")}
+                onDevices={listDevices}
+                onMic={requestMicPermission}
+                onUpdates={checkForUpdates}
+                onAudioChange={(key, value) => setNested(setSettings, ["audio", key], value)}
+                onSaveSettings={saveSettings}
+                saving={saving}
               />
-
-              {platform === "darwin" ? (
-                <PermissionsPanel
-                  text={text}
-                  permissions={permissions.permissions}
-                  engineAppPath={permissions.engineAppPath}
-                  onOpen={openPermission}
-                  onRequest={requestPermission}
-                  onRequestMic={requestMicPermission}
-                  onRecheck={recheckPermissions}
-                  onRevealTarget={revealPermissionTarget}
-                  disabled={!apiBase}
-                />
-              ) : null}
-            </div>
-
-            <div className={activeModule === "settings" ? "module-view active" : "module-view"}>
-              <section className="settings-panel">
-                <div className="panel-heading compact">
-                  <div>
-                    <p className="eyebrow">{text.settings}</p>
-                    <h2>{text.speechModel}</h2>
-                  </div>
-                  <Settings size={22} />
-                </div>
-            <ReadonlyField label="STT Provider" value={text.managedProvider} />
-            <ReadonlyField label="STT API Key" value={text.subscriptionIncluded} />
-            <FormInput
-              label="STT Model"
-              value={settings.stt?.model || ""}
-              onChange={(value) => setNested(setSettings, ["stt", "model"], value)}
-            />
-            <FormInput
-              label={text.microphone}
-              value={settings.audio?.device || "auto"}
-              onChange={(value) => setNested(setSettings, ["audio", "device"], value)}
-            />
-            <Segmented
-              label={text.listenMode}
-              value={settings.audio?.mode || "ptt"}
-              options={[
-                ["ptt", text.ptt],
-                ["vad", text.vad],
-              ]}
-              onChange={(value) => setNested(setSettings, ["audio", "mode"], value)}
-            />
-            <Range
-              label="VAD"
-              value={settings.audio?.vad_aggressiveness ?? 2}
-              onChange={(value) => setNested(setSettings, ["audio", "vad_aggressiveness"], Number(value))}
-            />
-            <Segmented
-              label={text.typing}
-              value={settings.typing?.method || "unicode"}
-              options={[
-                ["unicode", "Unicode"],
-                ["clip", text.clipboard],
-              ]}
-              onChange={(value) => setNested(setSettings, ["typing", "method"], value)}
-            />
-            <ReadonlyField label="LLM Provider" value={text.managedProvider} />
-            <ReadonlyField label="LLM API Key" value={text.subscriptionIncluded} />
-            <button className="save-button" onClick={saveSettings} disabled={saving || !apiBase}>
-              <Save size={18} />
-              {saving ? text.saving : text.saveAndRestart}
-            </button>
-              </section>
-
-              {devices ? (
-                <section className="devices-panel">
-                  <pre>{devices}</pre>
-                </section>
-              ) : null}
-            </div>
-          </div>
-
-          <div className={`status-dock ${statusMeta.tone}`}>
-            <div className="dock-core">
-              <span className="dock-dot" />
-            </div>
-            <div className="dock-copy">
-              <strong>{text.statusDockReady}</strong>
-              <small>{statusDockHint || text.statusDockHint}</small>
-            </div>
-            <div className="dock-meter" aria-hidden="true">
-              <i />
-              <i />
-              <i />
-              <i />
-              <i />
-            </div>
-          </div>
+            ) : null}
+          </section>
         </section>
       </div>
+      </section>
     </main>
   );
 }
@@ -1568,8 +1643,13 @@ function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
 function ReleaseNotesBanner({ lang, notes, onOpen, onClose }) {
   if (!notes) return null;
   const text = COPY[lang];
-  const items = localizedReleaseNoteItems(notes, lang);
-  const summary = localizedReleaseNoteSummary(notes, lang) || text.releaseNotesFallback || "This update includes improvements.";
+  const builtin = builtinReleaseNotes(notes.version);
+  const safeNotes = withBuiltinReleaseNotesFallback(notes, builtin);
+  const rawItems = localizedReleaseNoteItems(safeNotes, lang);
+  const items = rawItems.filter((item) => !looksLikeMojibake(item));
+  const rawSummary = localizedReleaseNoteSummary(safeNotes, lang);
+  const summary = looksLikeMojibake(rawSummary) ? "" : rawSummary;
+  const displaySummary = summary || text.releaseNotesFallback || "This update includes improvements.";
   const title = formatUpdateDetail(text.releaseNotesTitle || "Updated to {version}", notes.version);
 
   return (
@@ -1579,7 +1659,7 @@ function ReleaseNotesBanner({ lang, notes, onOpen, onClose }) {
         <div>
           <span>{text.releaseNotesSubtitle || "What changed"}</span>
           <strong>{title}</strong>
-          <p>{summary}</p>
+          <p>{displaySummary}</p>
           {items.length ? (
             <ul>
               {items.slice(0, 5).map((item) => (
@@ -1665,6 +1745,264 @@ function Shortcut({ label, detail, keys }) {
       </div>
     </article>
   );
+}
+
+function KeyRow({ keys }) {
+  const parts = String(keys || "").split("+").map((key) => key.trim()).filter(Boolean);
+  return (
+    <div className="key-row">
+      {parts.map((key, index) => (
+        <span key={`${key}-${index}`} className="keycap-pair">
+          {index > 0 ? <span className="key-plus">+</span> : null}
+          <span className="keycap">{key}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function ShortcutItem({ keys, title, detail }) {
+  return (
+    <div className="shortcut-item">
+      <div className="shortcut-main">
+        <KeyRow keys={keys} />
+        <strong>{title}</strong>
+      </div>
+      {detail ? <div className="shortcut-detail">{detail}</div> : null}
+    </div>
+  );
+}
+
+function MiniStat({ label, value, tone }) {
+  return (
+    <article className={`mini-stat ${tone || ""}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function SettingRow({ title, detail, children }) {
+  return (
+    <div className="setting-row">
+      <div>
+        <strong>{title}</strong>
+        <span>{detail}</span>
+      </div>
+      <div className="setting-action">{children}</div>
+    </div>
+  );
+}
+
+function HistoryPanel({ lang, text, usage, historyFilter, setHistoryFilter, today }) {
+  const recent = (usage?.recent || []).filter((item) => {
+    const filter = historyFilter.trim().toLowerCase();
+    if (!filter) return true;
+    return `${item.text || ""} ${item.mode || ""} ${item.detail || ""}`.toLowerCase().includes(filter);
+  });
+
+  return (
+    <section className="hub-panel active">
+      <div className="hub-header">
+        <div>
+          <h1>{lang === "zh" ? "历史" : "History"}</h1>
+          <p>{lang === "zh" ? "最近的转写和 AI 编辑记录保存在本机，方便复制、查看和排查。" : "Recent transcription and AI editing records are kept locally for review, copying, and debugging."}</p>
+        </div>
+        <div className="status-chip muted"><i />{lang === "zh" ? "本机记录" : "Local records"}</div>
+      </div>
+      <div className="stats-grid">
+        <article className="stat-card"><strong>{formatNumber(today.transcribedChars, lang)}</strong><span>{text.transcribedChars}</span></article>
+        <article className="stat-card"><strong>{formatNumber((today.aiEditedChars || 0) + (today.aiCommandChars || 0), lang)}</strong><span>{text.aiEditedChars}</span></article>
+      </div>
+      <section className="settings-group">
+        <div className="setting-row">
+          <div><strong>{lang === "zh" ? "搜索记录" : "Search history"}</strong><span>{lang === "zh" ? "按内容、模式或错误信息快速筛选。" : "Filter by content, mode, or error detail."}</span></div>
+          <input value={historyFilter} onChange={(event) => setHistoryFilter(event.target.value)} placeholder={lang === "zh" ? "搜索转写或 AI 编辑" : "Search transcription or AI edit"} />
+        </div>
+      </section>
+      <div className="history-list">
+        {recent.length ? recent.map((item, index) => (
+          <article className="history-item" key={`${item.ts || index}-${index}`}>
+            <div className="history-meta">
+              <span>{formatTime(item.ts, lang)} · {item.mode || "local"}</span>
+              <span>{item.status === "error" ? (lang === "zh" ? "失败" : "Failed") : (lang === "zh" ? "已保存" : "Saved")}</span>
+            </div>
+            <div className="transcript">{item.text || item.detail || (lang === "zh" ? "空记录" : "Empty record")}</div>
+          </article>
+        )) : <div className="empty-state">{lang === "zh" ? "还没有本机历史。完成一次语音转写后，这里会显示最近记录。" : "No local history yet. Recent records appear here after a transcription."}</div>}
+      </div>
+    </section>
+  );
+}
+
+function PlanHub({ lang, text, auth, plans, accountBusy, onCreateOrder, onAccount }) {
+  return (
+    <section className="hub-panel active">
+      <div className="hub-header">
+        <div>
+          <h1>{lang === "zh" ? "订阅计划" : "Plans"}</h1>
+          <p>{lang === "zh" ? "把免费版和 Pro 的用量边界直接展示出来，避免用户在账号页里寻找限制说明。" : "Show Free and Pro limits directly so users do not need to hunt through account details."}</p>
+        </div>
+        <div className={`status-chip ${auth.authenticated ? "" : "warn"}`}><i />{auth.authenticated ? text.activeSubscription : text.login}</div>
+      </div>
+      <div className="plan-grid">
+        {(plans.length ? plans : [
+          { id: "free", name: "Free", price_cents: 0, currency: "CNY", duration_days: 30 },
+          { id: "pro", name: "Pro", price_cents: 0, currency: "CNY", duration_days: 30, featured: true },
+        ]).map((plan, index) => (
+          <article className={`plan-card ${plan.featured || index === 1 ? "featured" : ""}`} key={plan.id}>
+            <div className="plan-heading">
+              <div><h2>{plan.name}</h2><p>{index === 0 ? (lang === "zh" ? "适合轻量语音输入和基础 AI 编辑。" : "For light voice input and basic AI editing.") : (lang === "zh" ? "面向高频听写、长文整理和持续办公。" : "For frequent dictation, long-form cleanup, and daily work.")}</p></div>
+              <span className="plan-badge">{index === 0 ? (lang === "zh" ? "默认" : "Default") : (lang === "zh" ? "推荐" : "Recommended")}</span>
+            </div>
+            <div className="plan-feature"><strong>{formatMoney(plan.price_cents, plan.currency, lang)}</strong><span>{plan.duration_days}d</span></div>
+            <button className={index === 1 ? "blue-action" : ""} type="button" onClick={plans.length ? () => onCreateOrder(plan.id) : onAccount} disabled={plans.length ? !auth.authenticated || Boolean(accountBusy) : false}>
+              {auth.authenticated ? text.createOrder : text.login}
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function PrivacyHub({ lang, status, usage, onHistory, onAccount, onDeveloper }) {
+  return (
+    <section className="hub-panel active">
+      <div className="hub-header">
+        <div>
+          <h1>{lang === "zh" ? "隐私" : "Privacy"}</h1>
+          <p>{lang === "zh" ? "录音、历史、云端处理和本地保存沿用当前安装包的本地优先架构。" : "Recording, history, cloud processing, and local storage follow the current app's local-first design."}</p>
+        </div>
+        <div className="status-chip"><i />{lang === "zh" ? "本地优先" : "Local first"}</div>
+      </div>
+      <div className="settings-layout">
+        <section className="settings-group">
+          <SettingRow title={lang === "zh" ? "历史保存在本机" : "History stays local"} detail={status.historyPath || usage?.historyPath || (lang === "zh" ? "本机历史文件" : "Local history file")}>
+            <button type="button" onClick={onHistory}>{lang === "zh" ? "查看" : "View"}</button>
+          </SettingRow>
+          <SettingRow title={lang === "zh" ? "云端识别" : "Cloud recognition"} detail={lang === "zh" ? "登录后由后端处理转写和 AI 编辑，令牌保存在本机配置里。" : "After sign-in, transcription and AI editing go through the backend; tokens are stored locally."}>
+            <button type="button" onClick={onAccount}>{lang === "zh" ? "账号" : "Account"}</button>
+          </SettingRow>
+          <SettingRow title={lang === "zh" ? "本地引擎日志" : "Local engine logs"} detail={lang === "zh" ? "用于排查引擎状态，不作为历史内容展示。" : "Used to debug engine state, not displayed as content history."}>
+            <button type="button" onClick={onDeveloper}>{lang === "zh" ? "查看" : "View"}</button>
+          </SettingRow>
+        </section>
+      </div>
+    </section>
+  );
+}
+
+function DeveloperHub({
+  lang,
+  text,
+  status,
+  settings,
+  plans,
+  permissions,
+  devices,
+  logs,
+  apiBase,
+  onStart,
+  onRestart,
+  onStop,
+  onDevices,
+  onMic,
+  onUpdates,
+  onAudioChange,
+  onSaveSettings,
+  saving,
+}) {
+  const logText = logs.length ? logs.map((item) => `${formatTime(item.ts, lang)} ${item.line || ""}`).join("\n") : text.noLogs;
+  return (
+    <section className="hub-panel active">
+      <div className="hub-header">
+        <div>
+          <h1>{lang === "zh" ? "开发者栏目" : "Developer"}</h1>
+          <p>{lang === "zh" ? "把底层能力集中放在这里，方便继续接入而不破坏主界面的轻量体验。" : "Low-level controls live here so the main experience stays calm."}</p>
+        </div>
+        <div className="status-chip muted"><i />{text.backend}</div>
+      </div>
+      <div className="developer-layout">
+        <section className="settings-group">
+          <SettingRow title={text.localEngine} detail={lang === "zh" ? "启动、停止、重启和状态检查。" : "Start, stop, restart, and inspect the local engine."}>
+            <div className="button-row">
+              <button type="button" onClick={onStart} disabled={!apiBase}><Play size={16} />{text.start}</button>
+              <button type="button" onClick={onRestart} disabled={!apiBase}><RefreshCw size={16} />{text.restart}</button>
+              <button type="button" onClick={onStop} disabled={!apiBase}><Square size={16} />{text.stop}</button>
+            </div>
+          </SettingRow>
+          <SettingRow title={lang === "zh" ? "权限与设备" : "Permissions and devices"} detail={lang === "zh" ? "麦克风权限、输入设备列表和平台权限。" : "Microphone permission, input device list, and platform permissions."}>
+            <div className="button-row">
+              <button type="button" onClick={onMic} disabled={!apiBase}>{text.microphone}</button>
+              <button type="button" onClick={onDevices} disabled={!apiBase}>{lang === "zh" ? "设备" : "Devices"}</button>
+            </div>
+          </SettingRow>
+          <SettingRow title={lang === "zh" ? "开发者监听参数" : "Developer listening controls"} detail={lang === "zh" ? "临时保留 VAD 和监听模式，面向调试使用。" : "Temporary VAD and listening-mode controls for debugging."}>
+            <div className="developer-control-stack">
+              <Segmented
+                label={text.listenMode}
+                value={settings.audio?.mode || "ptt"}
+                options={[
+                  ["ptt", text.ptt],
+                  ["vad", text.vad],
+                ]}
+                onChange={(value) => onAudioChange("mode", value)}
+              />
+              <Range label="VAD" value={settings.audio?.vad_aggressiveness ?? 2} onChange={(value) => onAudioChange("vad_aggressiveness", Number(value))} />
+              <button className="save-button" type="button" onClick={onSaveSettings} disabled={saving || !apiBase}>
+                <Save size={18} />
+                {saving ? text.saving : text.saveAndRestart}
+              </button>
+            </div>
+          </SettingRow>
+          <SettingRow title={text.checkUpdate} detail={lang === "zh" ? "保留当前安装包的自动更新入口。" : "Keep the current updater entry point."}>
+            <button type="button" onClick={onUpdates}>{text.checkUpdate}</button>
+          </SettingRow>
+        </section>
+        <aside className="side-stack">
+          <section className="card developer-card">
+            <div className="card-title"><h2>{text.logs}</h2><span>{logs.length}</span></div>
+            <div className="meter"><pre className="developer-log">{logText}</pre></div>
+          </section>
+        </aside>
+      </div>
+      <div className="developer-grid">
+        <DebugTile title={lang === "zh" ? "状态" : "Status"} value={status} />
+        <DebugTile title={lang === "zh" ? "配置" : "Settings"} value={snapshotSettingsFrom(settings)} />
+        <DebugTile title={lang === "zh" ? "后端计划" : "Plans"} value={plans} />
+        <DebugTile title={lang === "zh" ? "权限设备" : "Permissions"} value={{ permissions, devices }} />
+      </div>
+    </section>
+  );
+}
+
+function DebugTile({ title, value }) {
+  return (
+    <article className="developer-tile">
+      <strong>{title}</strong>
+      <span><pre className="json-block">{JSON.stringify(value || {}, null, 2).slice(0, 900)}</pre></span>
+    </article>
+  );
+}
+
+function snapshotSettingsFrom(settings) {
+  if (!settings) return {};
+  return {
+    audio: settings.audio,
+    typing: settings.typing,
+    stt: {
+      provider: settings.stt?.provider,
+      model: settings.stt?.model,
+      api_base_url: settings.stt?.api_base_url,
+    },
+    llm: {
+      provider: settings.llm?.provider,
+      model: settings.llm?.model,
+      api_base_url: settings.llm?.api_base_url,
+    },
+    configPath: settings.configPath,
+  };
 }
 
 function PermissionsPanel({ text, permissions, engineAppPath, onOpen, onRequest, onRequestMic, onRecheck, onRevealTarget, disabled }) {
@@ -1863,105 +2201,6 @@ function AccountPanel({
           </div>
         </div>
       ) : null}
-    </section>
-  );
-}
-
-function CorrectionsPanel({
-  text,
-  corrections,
-  form,
-  setForm,
-  error,
-  onAdd,
-  onToggle,
-  onDelete,
-  lang,
-}) {
-  const query = String(form.search || "").trim().toLowerCase();
-  const records = (corrections.records || []).filter((record) => {
-    if (!query) return true;
-    return `${record.source} ${record.target}`.toLowerCase().includes(query);
-  });
-  const statusLabel = (record) => (
-    Number(record.confidence || 0) >= 2 || Number(record.count || 0) >= 2
-      ? (lang === "zh" ? "已生效" : "Active")
-      : (lang === "zh" ? "候选" : "Candidate")
-  );
-
-  return (
-    <section className="corrections-panel">
-      <div className="panel-heading compact">
-        <div>
-          <p className="eyebrow">{text.correctionsNavDetail}</p>
-          <h2>{text.corrections}</h2>
-        </div>
-        <FileText size={22} />
-      </div>
-
-      <form className="correction-form" onSubmit={onAdd}>
-        <FormInput
-          label={text.correctionsSource}
-          value={form.source}
-          onChange={(value) => setForm((current) => ({ ...current, source: value }))}
-        />
-        <FormInput
-          label={text.correctionsTarget}
-          value={form.target}
-          onChange={(value) => setForm((current) => ({ ...current, target: value }))}
-        />
-        <button className="save-button compact" type="submit">
-          <Save size={18} />
-          {text.correctionsAdd}
-        </button>
-      </form>
-
-      <FormInput
-        label={text.correctionsSearch}
-        value={form.search}
-        onChange={(value) => setForm((current) => ({ ...current, search: value }))}
-      />
-
-      {error ? (
-        <div className="notice danger correction-error">
-          <AlertCircle size={18} />
-          <span>{error}</span>
-        </div>
-      ) : null}
-
-      <div className="corrections-table">
-        <div className="correction-row header">
-          <span>{text.correctionsSource}</span>
-          <span>{text.correctionsTarget}</span>
-          <span>{text.correctionsCount}</span>
-          <span>{text.correctionsConfidence}</span>
-          <span>{lang === "zh" ? "状态" : "Status"}</span>
-          <span>{lang === "zh" ? "最后学习" : "Last Seen"}</span>
-          <span>{text.correctionsEnabled}</span>
-          <span />
-        </div>
-        {records.length ? records.map((record) => (
-          <div className={record.enabled ? "correction-row" : "correction-row disabled"} key={record.id}>
-            <strong>{record.source}</strong>
-            <strong>{record.target}</strong>
-            <span>{formatNumber(record.count, lang)}</span>
-            <span>{record.confidence}</span>
-            <span>{statusLabel(record)}</span>
-            <span>{formatCorrectionTime(record.last_seen_at || record.updated_at, lang)}</span>
-            <button type="button" onClick={() => onToggle(record)}>
-              {record.enabled ? text.correctionsDisable : text.correctionsEnable}
-            </button>
-            <button type="button" onClick={() => onDelete(record)}>
-              <X size={15} />
-              {text.correctionsDelete}
-            </button>
-          </div>
-        )) : (
-          <p className="empty-log">{text.correctionsEmpty}</p>
-        )}
-      </div>
-
-      {corrections.path ? <ReadonlyField label={text.correctionsPath} value={corrections.path} /> : null}
     </section>
   );
 }
@@ -2229,12 +2468,15 @@ async function refreshUsage(apiBase, setUsage) {
   setUsage(data);
 }
 
-async function refreshCorrections(apiBase, setCorrections) {
+async function refreshDeviceInfo(apiBase, setters, fallback) {
   try {
-    const data = await api(apiBase, "/api/corrections");
-    setCorrections(data || EMPTY_CORRECTIONS);
+    const data = await api(apiBase, "/api/devices");
+    const info = normalizeDeviceResult(data);
+    setters.setDeviceInfo(info);
+    setters.setDevices(info.output || fallback);
   } catch (_error) {
-    setCorrections(EMPTY_CORRECTIONS);
+    setters.setDeviceInfo({ items: [], output: "" });
+    setters.setDevices("");
   }
 }
 
@@ -2246,6 +2488,54 @@ async function api(apiBase, path, options) {
     throw new Error(formatApiError(body, response.statusText));
   }
   return body;
+}
+
+function normalizeDeviceResult(result) {
+  const output = String(result?.output || "");
+  const items = Array.isArray(result?.devices) ? result.devices : parseDeviceOutput(output);
+  return { output, items };
+}
+
+function parseDeviceOutput(output) {
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(/^\s*\[\s*(\d+)\]\s+(.+?)(?:\s*(?:←\s*系统默认|<-\s*default))?\s*$/);
+      if (!match) return null;
+      return {
+        id: Number(match[1]),
+        name: match[2].trim(),
+        default: /系统默认|<-\s*default/i.test(line),
+      };
+    })
+    .filter(Boolean);
+}
+
+function deviceOptions(deviceInfo, text, lang) {
+  const items = deviceInfo?.items || [];
+  const defaultDevice = items.find((item) => item.default) || items[0];
+  const autoLabel = defaultDevice
+    ? `${lang === "zh" ? "自动选择" : "Auto-detect"} (${defaultDevice.name})`
+    : `${lang === "zh" ? "自动选择" : "Auto-detect"} (${text.deviceFallback})`;
+  return [
+    { value: "auto", label: autoLabel },
+    ...items.map((item) => ({
+      value: String(item.id),
+      label: `${item.name}${item.default ? (lang === "zh" ? "（系统默认）" : " (system default)") : ""}`,
+    })),
+  ];
+}
+
+function formatCurrentMicrophone(configuredDevice, deviceInfo, text, lang) {
+  const value = String(configuredDevice || "auto");
+  const items = deviceInfo?.items || [];
+  if (!items.length) return text.deviceFallback;
+  if (value === "auto") {
+    const item = items.find((device) => device.default) || items[0];
+    return item ? `${lang === "zh" ? "自动选择" : "Auto-detect"}：${item.name}` : text.deviceFallback;
+  }
+  const configured = items.find((item) => String(item.id) === value || item.name.toLowerCase().includes(value.toLowerCase()));
+  return configured?.name || value || text.deviceFallback;
 }
 
 function setNested(setter, path, value) {
@@ -2262,8 +2552,10 @@ function setNested(setter, path, value) {
 }
 
 function toManagedSettings(settings) {
+  const { toggle_key: _toggleKey, ...audio } = settings.audio || {};
   return {
     ...settings,
+    audio,
     stt: {
       ...(settings.stt || {}),
       provider: "typeup_backend",
@@ -2294,9 +2586,9 @@ function validateAuthForm(form, text) {
 
 function defaultAudioHotkeys(platform = "") {
   if (platform === "darwin") {
-    return { pttKey: "shift_r", aiKey: "alt_r", toggleKey: "" };
+    return { pttKey: "shift_r", aiKey: "alt_r", enableKey: "", disableKey: "" };
   }
-  return { pttKey: "alt", aiKey: ["alt", "space"], toggleKey: ["ctrl", "alt"] };
+  return { pttKey: "alt_r", aiKey: ["alt_r", "shift_r"], enableKey: ["ctrl", "o"], disableKey: ["ctrl", "p"] };
 }
 
 function withDynamicStatusCopy(meta, state, lang, pttKey, platform = "") {
@@ -2308,16 +2600,48 @@ function withDynamicStatusCopy(meta, state, lang, pttKey, platform = "") {
   };
 }
 
-function formatStatusDockHint(lang, pttKey, aiKey, toggleKey, polishKey, platform = "") {
+function getHomeGuidance(state, lang = "zh") {
+  const zh = {
+    stopped: "点击启动后即可用快捷键开始转写",
+    transcription_off: "需要语音输入时点击启动转写",
+    stopping: "正在释放资源，稍后可重新启动",
+    starting: "正在准备本地引擎，请稍候",
+    listening: "现在可以长按快捷键说话",
+    transcribing: "正在转写，松开后会输入到光标处",
+    error: "建议重启本地引擎恢复服务",
+  };
+  const en = {
+    stopped: "Start it, then use the shortcut to dictate",
+    transcription_off: "Start transcription when you need voice input",
+    stopping: "Releasing resources, restart shortly",
+    starting: "Preparing the local engine",
+    listening: "Hold the shortcut to speak now",
+    transcribing: "Transcribing and will type at the cursor",
+    error: "Restart the local engine to recover",
+  };
+  const copy = lang === "zh" ? zh : en;
+  return copy[state] || copy.stopped;
+}
+
+function looksLikeMojibake(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  const questionRuns = (text.match(/\?{4,}/g) || []).join("").length;
+  const replacementChars = (text.match(/\uFFFD/g) || []).length;
+  return questionRuns >= 8 || replacementChars >= 2;
+}
+
+function formatStatusDockHint(lang, pttKey, aiKey, enableKey, disableKey, polishKey, platform = "") {
   const speak = formatHotkey(pttKey, lang, platform);
   const ai = formatHotkey(aiKey, lang, platform);
-  const toggle = toggleKey ? formatHotkey(toggleKey, lang, platform) : "";
+  const enable = enableKey ? formatHotkey(enableKey, lang, platform) : "";
+  const disable = disableKey ? formatHotkey(disableKey, lang, platform) : "";
   if (lang === "zh") {
-    const togglePart = toggle ? `${toggle} 切换转写，` : "";
-    return `${speak} 说话，${togglePart}${ai} 进行 AI 编辑，${polishKey} 切换润色模式`;
+    const switchPart = enable && disable ? `${enable} 启动转写，${disable} 停止转写，` : "";
+    return `${speak} 说话，${switchPart}${ai} 进行 AI 编辑，${polishKey} 切换润色模式`;
   }
-  const togglePart = toggle ? `${toggle} toggles transcription, ` : "";
-  return `${speak} to speak, ${togglePart}${ai} for AI editing, ${polishKey} to switch polish mode`;
+  const switchPart = enable && disable ? `${enable} starts transcription, ${disable} stops transcription, ` : "";
+  return `${speak} to speak, ${switchPart}${ai} for AI editing, ${polishKey} to switch polish mode`;
 }
 
 function formatHotkey(value, lang, platform = "") {
@@ -2330,7 +2654,7 @@ function formatHotkey(value, lang, platform = "") {
       if (text === "alt") return "ALT";
       if (text === "alt_l" || text === "left_alt") return platform === "darwin" ? (lang === "zh" ? "左 OPTION" : "LEFT OPTION") : "ALT";
       if (text === "alt_r" || text === "right_alt") return platform === "darwin" ? (lang === "zh" ? "右 OPTION" : "RIGHT OPTION") : "RIGHT ALT";
-      if (text === "ctrl_l" || text === "ctrl_r" || text === "right_ctrl" || text === "left_ctrl") return "CTRL";
+      if (text === "ctrl" || text === "control" || text === "ctrl_l" || text === "ctrl_r" || text === "right_ctrl" || text === "left_ctrl") return "CTRL";
       if (text === "space") return lang === "zh" ? "SPACE" : "SPACE";
       if (text === "shift_l" || text === "left_shift") return lang === "zh" ? "左 SHIFT" : "LEFT SHIFT";
       if (text === "shift_r" || text === "right_shift") return lang === "zh" ? "右 SHIFT" : "RIGHT SHIFT";
@@ -2370,18 +2694,6 @@ function formatMoney(cents = 0, currency = "CNY", lang = "zh") {
   }).format((cents || 0) / 100);
 }
 
-function formatCorrectionTime(value, lang = "zh") {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat(lang === "zh" ? "zh-CN" : "en-US", {
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
-}
-
 function formatDuration(seconds = 0, lang = "zh") {
   const value = Math.max(0, Number(seconds) || 0);
   if (value < 60) return lang === "zh" ? `${value} 秒` : `${value}s`;
@@ -2401,7 +2713,7 @@ function formatApiError(body, fallback) {
 }
 
 function formatSavedTime(chars = 0, lang = "zh") {
-  const seconds = Math.round((chars || 0) * 0.11);
+  const seconds = Math.round(((chars || 0) / 100) * 60);
   if (seconds < 60) return lang === "zh" ? `${seconds} 秒` : `${seconds}s`;
   if (seconds < 3600) {
     const minutes = Math.floor(seconds / 60);

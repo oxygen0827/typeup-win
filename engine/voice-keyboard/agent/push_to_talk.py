@@ -13,6 +13,7 @@ dictation 模式支持实时分句：按住说话过程中，检测到句子间�
 import threading
 import time
 import sys
+import os
 from typing import Callable, Optional
 
 import sounddevice as sd
@@ -315,6 +316,8 @@ class PushToTalk:
         edit_key:          str = "right_ctrl",
         ai_key:            str = "right_shift",
         toggle_key=None,
+        enable_key=None,
+        disable_key=None,
         device:            Optional[str] = "auto",
         status_window=None,
         kbd_monitor=None,
@@ -327,18 +330,41 @@ class PushToTalk:
         self._ptt_hotkeys       = _parse_hotkeys(ptt_key)
         self._edit_hotkeys      = _parse_hotkeys(edit_key) if on_edit_utterance else []
         self._ai_hotkeys        = _parse_hotkeys(ai_key)   if on_ai_utterance   else []
-        self._toggle_hotkeys    = _parse_hotkeys(toggle_key) if toggle_key else []
+        self._enable_hotkeys    = _parse_hotkeys(enable_key) if enable_key else []
+        self._disable_hotkeys   = _parse_hotkeys(disable_key) if disable_key else []
+        self._toggle_hotkeys    = (
+            _parse_hotkeys(toggle_key)
+            if toggle_key and not (self._enable_hotkeys or self._disable_hotkeys)
+            else []
+        )
+        self._switch_hotkeys    = self._toggle_hotkeys + self._enable_hotkeys + self._disable_hotkeys
         self._ptt_hotkey_tokens = _hotkey_tokens(ptt_key)
         self._edit_hotkey_tokens = _hotkey_tokens(edit_key) if on_edit_utterance else []
         self._ai_hotkey_tokens = _hotkey_tokens(ai_key) if on_ai_utterance else []
-        self._toggle_hotkey_tokens = _hotkey_tokens(toggle_key) if toggle_key else []
+        self._enable_hotkey_tokens = _hotkey_tokens(enable_key) if enable_key else []
+        self._disable_hotkey_tokens = _hotkey_tokens(disable_key) if disable_key else []
+        self._toggle_hotkey_tokens = (
+            _hotkey_tokens(toggle_key)
+            if toggle_key and not (self._enable_hotkey_tokens or self._disable_hotkey_tokens)
+            else []
+        )
+        self._switch_hotkey_tokens = (
+            self._toggle_hotkey_tokens
+            + self._enable_hotkey_tokens
+            + self._disable_hotkey_tokens
+        )
         self._filter_pressed_tokens: set[str] = set()
         self._toggle_hotkey_down = False
         self._toggle_hotkey_release_tokens: set[str] = set()
+        self._toggle_sequence_tokens: set[str] = set()
         self._device_hint       = device
         self._status            = status_window
         self._device_idx        = None
-        self._transcription_enabled = not bool(self._toggle_hotkeys)
+        self._transcription_enabled = (
+            True
+            if os.getenv("TYPEUP_TRANSCRIPTION_ENABLED", "").strip().lower() in {"1", "true", "yes", "on"}
+            else not bool(self._switch_hotkeys)
+        )
         self._active_key        = None   # 当前正在录音用哪个键
         self._active_trigger    = None   # 触发本次录音的具体热键 tuple，用于 release 配对
         self._buf: list[bytes]  = []
@@ -393,7 +419,12 @@ class PushToTalk:
             hints.append(f"{'/'.join(_format_hotkey(h) for h in self._edit_hotkeys)} 语音编辑")
         if self._ai_hotkeys:
             hints.append(f"{'/'.join(_format_hotkey(h) for h in self._ai_hotkeys)} AI编程")
+        if self._enable_hotkeys:
+            hints.append(f"{'/'.join(_format_hotkey(h) for h in self._enable_hotkeys)} 启动转写")
+        if self._disable_hotkeys:
+            hints.append(f"{'/'.join(_format_hotkey(h) for h in self._disable_hotkeys)} 停止转写")
         print(f"[ptt] 按住 {' | '.join(hints)}")
+        print(f"[typeup-transcription] {'enabled' if self._transcription_enabled else 'disabled'}")
 
     def stop(self):
         self._cancel_pending_start()
@@ -426,23 +457,32 @@ class PushToTalk:
 
     # ── 键盘事件 ─────────────────────────────────────────────────
 
-    def _on_press(self, key):
+    def _on_press(self, key, injected=None, track_toggle_sequence: bool = True):
         if _typer.is_simulating():
             return  # 程序自身发出的按键，忽略
-        if self._toggle_hotkey_down and self._key_in_any_hotkey(key, self._toggle_hotkeys):
+        is_toggle_key = self._key_in_any_hotkey(key, self._switch_hotkeys)
+        if self._toggle_hotkey_down and is_toggle_key:
             return
         self._pressed_keys.add(key)
+        if is_toggle_key and track_toggle_sequence:
+            self._mark_toggle_hotkey_key_pressed(key)
 
-        toggle_hotkey = self._matching_hotkey(self._toggle_hotkeys)
-        if toggle_hotkey is not None:
+        switch_match = self._matching_transcription_switch_hotkey() if is_toggle_key else None
+        if switch_match is not None:
+            switch_action, switch_hotkey = switch_match
+            if not self._toggle_sequence_satisfied(switch_hotkey):
+                switch_match = None
+
+        if switch_match is not None:
+            switch_action, switch_hotkey = switch_match
             if self._toggle_hotkey_down:
                 return
             self._toggle_hotkey_down = True
             self._toggle_hotkey_release_tokens = {
                 _modifier_group_token(_key_token(configured_key))
-                for configured_key in toggle_hotkey
+                for configured_key in switch_hotkey
             }
-            self._toggle_transcription_enabled(toggle_hotkey)
+            self._apply_transcription_switch(switch_action, switch_hotkey)
             return
 
         if not self._transcription_enabled:
@@ -491,14 +531,27 @@ class PushToTalk:
         self._start_recording()
 
     def _toggle_transcription_enabled(self, hotkey: tuple):
+        self._set_transcription_enabled(not self._transcription_enabled, hotkey)
+
+    def _apply_transcription_switch(self, action: str, hotkey: tuple):
+        if action == "enable":
+            self._set_transcription_enabled(True, hotkey)
+        elif action == "disable":
+            self._set_transcription_enabled(False, hotkey)
+        else:
+            self._toggle_transcription_enabled(hotkey)
+
+    def _set_transcription_enabled(self, enabled: bool, hotkey: tuple):
         self._cancel_pending_start()
-        self._transcription_enabled = not self._transcription_enabled
+        self._transcription_enabled = enabled
         if not self._transcription_enabled:
             self._cancel_active_recording()
         self._discard_hotkey_pressed_keys(hotkey)
         self._discard_hotkey_filter_tokens(hotkey)
+        self._toggle_sequence_tokens.clear()
         message = "转写功能已启动" if self._transcription_enabled else "转写功能已关闭"
         print(f"[ptt] {message}")
+        print(f"[typeup-transcription] {'enabled' if self._transcription_enabled else 'disabled'}")
         if self._status is not None and hasattr(self._status, "show_message"):
             self._status.show_message(message, seconds=1.2)
 
@@ -534,13 +587,14 @@ class PushToTalk:
         if self._status is not None and hasattr(self._status, "show_message"):
             self._status.show_message(f"润色模式：{mode_name}", seconds=1.2)
 
-    def _on_release(self, key):
+    def _on_release(self, key, injected=None):
         if _typer.is_simulating():
             return
         self._discard_pressed_key(key)
-        if self._toggle_hotkey_down and any(
-            self._key_in_hotkey(key, hotkey) for hotkey in self._toggle_hotkeys
-        ):
+        is_toggle_key = self._key_in_any_hotkey(key, self._switch_hotkeys)
+        if is_toggle_key:
+            self._discard_toggle_sequence_key(key)
+        if self._toggle_hotkey_down and is_toggle_key:
             self._mark_toggle_hotkey_key_released(key)
 
         if self._pending_start is not None:
@@ -581,8 +635,18 @@ class PushToTalk:
             return "edit", edit
         return None
 
+    def _matching_transcription_switch_hotkey(self):
+        candidates = []
+        candidates += [("enable", hotkey) for hotkey in self._enable_hotkeys]
+        candidates += [("disable", hotkey) for hotkey in self._disable_hotkeys]
+        candidates += [("toggle", hotkey) for hotkey in self._toggle_hotkeys]
+        for action, hotkey in sorted(candidates, key=lambda item: len(item[1]), reverse=True):
+            if all(self._pressed_has_key(k) for k in hotkey):
+                return action, hotkey
+        return None
+
     def _has_combo_extension(self, hotkey: tuple) -> bool:
-        for candidate in self._ai_hotkeys + self._edit_hotkeys + self._toggle_hotkeys:
+        for candidate in self._ai_hotkeys + self._edit_hotkeys + self._switch_hotkeys:
             if len(candidate) > len(hotkey) and all(
                 any(_key_matches(candidate_key, base_key) for candidate_key in candidate)
                 for base_key in hotkey
@@ -604,6 +668,26 @@ class PushToTalk:
         self._toggle_hotkey_release_tokens.discard(token)
         if not self._toggle_hotkey_release_tokens:
             self._toggle_hotkey_down = False
+            self._toggle_sequence_tokens.clear()
+
+    def _mark_toggle_hotkey_key_pressed(self, event_key) -> None:
+        self._toggle_sequence_tokens.add(_modifier_group_token(_key_token(event_key)))
+
+    def _mark_toggle_hotkey_token_pressed(self, token: str) -> None:
+        self._toggle_sequence_tokens.add(_modifier_group_token(token))
+
+    def _discard_toggle_sequence_key(self, event_key) -> None:
+        self._discard_toggle_sequence_token(_key_token(event_key))
+
+    def _discard_toggle_sequence_token(self, token: str) -> None:
+        self._toggle_sequence_tokens.discard(_modifier_group_token(token))
+
+    def _toggle_sequence_satisfied(self, hotkey: tuple) -> bool:
+        required = {
+            _modifier_group_token(_key_token(configured_key))
+            for configured_key in hotkey
+        }
+        return required.issubset(self._toggle_sequence_tokens)
 
     def _discard_pressed_key(self, event_key) -> None:
         event_token = _key_token(event_key)
@@ -627,8 +711,14 @@ class PushToTalk:
         for configured_key in hotkey:
             _discard_token_aliases(self._filter_pressed_tokens, _key_token(configured_key))
 
-    def _clear_stale_win32_modifiers(self) -> None:
+    def _clear_stale_win32_modifiers(self, keep_tokens: set[str] | None = None) -> None:
+        keep_groups = {
+            _modifier_group_token(token)
+            for token in (keep_tokens or set())
+        }
         for token in ("alt", "ctrl", "shift"):
+            if token in keep_groups:
+                continue
             if _win32_modifier_token_is_down(token):
                 continue
             _discard_token_aliases(self._filter_pressed_tokens, token)
@@ -732,8 +822,13 @@ class PushToTalk:
             return True
 
         implied_alt_token = _win32_alt_context_token(msg, data)
-        if is_press and not implied_alt_token:
-            self._clear_stale_win32_modifiers()
+        if is_press:
+            if self._token_in_any_hotkey(token, self._switch_hotkey_tokens):
+                self._mark_toggle_hotkey_token_pressed(token)
+            keep_tokens = {implied_alt_token} if implied_alt_token else set()
+            self._clear_stale_win32_modifiers(keep_tokens)
+        elif is_release and self._token_in_any_hotkey(token, self._switch_hotkey_tokens):
+            self._discard_toggle_sequence_token(token)
 
         candidate = set(self._filter_pressed_tokens)
         if implied_alt_token and token != implied_alt_token:
@@ -747,7 +842,7 @@ class PushToTalk:
             if implied_alt_token and token != implied_alt_token:
                 self._filter_pressed_tokens.add(implied_alt_token)
                 if suppress:
-                    self._on_press(_parse_key(implied_alt_token))
+                    self._on_press(_parse_key(implied_alt_token), track_toggle_sequence=False)
             self._filter_pressed_tokens.add(token)
         else:
             _discard_token_aliases(self._filter_pressed_tokens, token)
@@ -756,7 +851,7 @@ class PushToTalk:
 
         if not suppress:
             if is_release and self._toggle_hotkey_down and self._token_in_any_hotkey(
-                token, self._toggle_hotkey_tokens
+                token, self._switch_hotkey_tokens
             ):
                 self._on_release(_parse_key(token))
             return True
@@ -794,7 +889,7 @@ class PushToTalk:
         return any(_token_in_configured_hotkey(token, hotkey) for hotkey in hotkeys)
 
     def _reserved_hotkey_tokens_for_current_state(self) -> list[tuple[str, ...]]:
-        tokens = list(self._toggle_hotkey_tokens)
+        tokens = list(self._switch_hotkey_tokens)
         if self._transcription_enabled:
             tokens += self._ptt_hotkey_tokens
             tokens += self._edit_hotkey_tokens

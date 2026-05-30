@@ -7,11 +7,11 @@ const USER_DIR = path.join(resolveAppDataDir(), "TypeUp", "engine");
 const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
 const TYPEUP_DIR = path.join(resolveAppDataDir(), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");
-const CONFIG_VERSION = 5;
+const CONFIG_VERSION = 7;
 const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
 const DEFAULT_AUDIO_HOTKEYS = process.platform === "darwin"
   ? { ptt_key: "shift_r", ai_key: "alt_r" }
-  : { ptt_key: "alt", ai_key: ["alt", "space"], toggle_key: ["ctrl", "alt"] };
+  : { ptt_key: "alt_r", ai_key: ["alt_r", "shift_r"], enable_key: ["ctrl", "o"], disable_key: ["ctrl", "p"] };
 
 const DEFAULT_CONFIG = {
   stt: {
@@ -68,11 +68,13 @@ function ensureDefaultConfig() {
           mode: DEFAULT_CONFIG.audio.mode,
           ptt_key: DEFAULT_CONFIG.audio.ptt_key,
           ai_key: DEFAULT_CONFIG.audio.ai_key,
-          toggle_key: DEFAULT_CONFIG.audio.toggle_key,
+          enable_key: DEFAULT_CONFIG.audio.enable_key,
+          disable_key: DEFAULT_CONFIG.audio.disable_key,
         },
         typing: current.typing || DEFAULT_CONFIG.typing,
         typeup: { managed: true, version: CONFIG_VERSION },
       });
+      delete next.audio.toggle_key;
       writeYamlConfig(next);
       return;
     }
@@ -85,10 +87,12 @@ function ensureDefaultConfig() {
           mode: DEFAULT_CONFIG.audio.mode,
           ptt_key: DEFAULT_CONFIG.audio.ptt_key,
           ai_key: DEFAULT_CONFIG.audio.ai_key,
-          toggle_key: DEFAULT_CONFIG.audio.toggle_key,
+          enable_key: DEFAULT_CONFIG.audio.enable_key,
+          disable_key: DEFAULT_CONFIG.audio.disable_key,
         },
         typeup: { managed: true, version: CONFIG_VERSION },
       });
+      delete next.audio.toggle_key;
       writeYamlConfig(next);
     }
   } catch (_error) {
@@ -219,7 +223,9 @@ function normalizePatch(patch) {
       vad_aggressiveness: Number(patch.audio.vad_aggressiveness ?? 2),
       ptt_key: hotkeyValue(patch.audio.ptt_key || DEFAULT_CONFIG.audio.ptt_key),
       ai_key: hotkeyValue(patch.audio.ai_key || DEFAULT_CONFIG.audio.ai_key),
-      toggle_key: hotkeyValue(patch.audio.toggle_key || DEFAULT_CONFIG.audio.toggle_key),
+      enable_key: hotkeyValue(patch.audio.enable_key || DEFAULT_CONFIG.audio.enable_key),
+      disable_key: hotkeyValue(patch.audio.disable_key || DEFAULT_CONFIG.audio.disable_key),
+      toggle_key: hotkeyValue(patch.audio.toggle_key),
     };
   }
   if (patch.typing) {

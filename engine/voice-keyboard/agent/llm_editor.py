@@ -29,7 +29,7 @@ _SYSTEM_PROMPT = """你是一个专业的文字编辑助手。
 请严格按照指令修改原文，只返回修改后的结果，不要添加任何解释或标点以外的内容。
 如果指令不清晰，尽量按最合理的方式理解并修改。"""
 
-_REPLACEMENT_PLAN_PROMPT = """你是 Voice Keyboard Engine 的 Replacement Plan 生成器。
+_REPLACEMENT_PLAN_PROMPT = """你是 TypeUp Engine 的 Replacement Plan 生成器。
 用户会给你一个 Operation Window 和一条语音修改/删除指令。
 你只能选择 Operation Window 内已经存在的一段连续原文作为 target_text。
 如果指令要求删除，replacement_text 必须为空字符串。
@@ -120,7 +120,6 @@ class LLMEditor:
     def __init__(self, cfg: dict):
         provider = cfg.get("provider", "openai")
         self.supports_streaming = False
-        self._personal_corrections_hint = str(cfg.get("personal_corrections_hint") or "").strip()
 
         if provider == "openai":
             from openai import OpenAI
@@ -198,7 +197,7 @@ class LLMEditor:
     def chat_stream(self, system_prompt: str, user_message: str):
         """流式调用，逐 token yield 文字片段；非流式 provider 只 yield 一次完整文本。"""
         messages = [
-            {"role": "system", "content": self._with_personal_hint(system_prompt)},
+            {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_message},
         ]
         if hasattr(self, "_backend_client"):
@@ -222,7 +221,7 @@ class LLMEditor:
     def chat(self, system_prompt: str, user_message: str) -> str:
         """通用 LLM 调用，返回模型回复文字。"""
         messages = [
-            {"role": "system", "content": self._with_personal_hint(system_prompt)},
+            {"role": "system", "content": system_prompt},
             {"role": "user",   "content": user_message},
         ]
         if hasattr(self, "_backend_client"):
@@ -247,7 +246,7 @@ class LLMEditor:
         resp = self._client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": self._with_personal_hint(_SYSTEM_PROMPT)},
+                {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user",   "content": f"原文：{original}\n\n修改指令：{instruction}"},
             ],
             temperature=0.1,
@@ -259,7 +258,7 @@ class LLMEditor:
         resp = self._zhipu_client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": self._with_personal_hint(_SYSTEM_PROMPT)},
+                {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user",   "content": f"原文：{original}\n\n修改指令：{instruction}"},
             ],
             temperature=0.1,
@@ -270,18 +269,8 @@ class LLMEditor:
     def _backend_edit(self, original: str, instruction: str) -> str:
         return self._backend_client.chat(
             [
-                {"role": "system", "content": self._with_personal_hint(_SYSTEM_PROMPT)},
+                {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": f"原文：{original}\n\n修改指令：{instruction}"},
             ],
             max_tokens=2000,
-        )
-
-    def _with_personal_hint(self, system_prompt: str) -> str:
-        if not self._personal_corrections_hint:
-            return system_prompt
-        return (
-            system_prompt
-            + "\n\n"
-            + self._personal_corrections_hint
-            + "\nPrefer the target spelling for names, product names, and user-specific terms when relevant."
         )

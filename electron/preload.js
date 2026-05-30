@@ -4,6 +4,11 @@ contextBridge.exposeInMainWorld("typeup", {
   apiBase: () => ipcRenderer.invoke("typeup:api-base"),
   platform: () => ipcRenderer.invoke("typeup:platform"),
   openExternal: (url) => ipcRenderer.invoke("typeup:open-external", url),
+  window: {
+    minimize: () => ipcRenderer.invoke("typeup:window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("typeup:window:toggle-maximize"),
+    close: () => ipcRenderer.invoke("typeup:window:close"),
+  },
   updates: {
     getState: () => ipcRenderer.invoke("typeup:update:get-state"),
     check: () => ipcRenderer.invoke("typeup:update:check"),

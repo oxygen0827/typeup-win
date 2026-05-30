@@ -1,12 +1,12 @@
 {
   "name": "typeup",
-  "version": "0.1.37",
+  "version": "0.3.4",
   "private": true,
   "description": "TypeUp desktop client for always-on voice transcription.",
   "main": "electron/main.js",
   "scripts": {
     "dev": "node node_modules/vite/bin/vite.js --host 127.0.0.1",
-    "electron": "node node_modules/cross-env/dist/bin/cross-env.js NODE_ENV=development node node_modules/electron/cli.js .",
+    "electron": "node node_modules/cross-env/dist/bin/cross-env.js NODE_ENV=development TYPEUP_USE_ENGINE_SOURCE=1 node node_modules/electron/cli.js .",
     "start": "node node_modules/concurrently/dist/bin/concurrently.js -k \"npm run dev\" \"node node_modules/wait-on/bin/wait-on http://127.0.0.1:5173 && npm run electron\"",
     "build": "node node_modules/vite/bin/vite.js build --configLoader native",
     "build:win": "npm run engine:build && npm run build && node node_modules/electron-builder/cli.js --win nsis",

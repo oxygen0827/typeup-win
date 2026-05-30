@@ -3,12 +3,6 @@ const { spawn } = require("node:child_process");
 const express = require("express");
 const cors = require("cors");
 const { AgentManager } = require("./agent-manager");
-const {
-  listCorrections,
-  createCorrection,
-  updateCorrection,
-  deleteCorrection,
-} = require("./corrections-store");
 const { readUsage } = require("./usage-store");
 const {
   readSettings,
@@ -26,6 +20,55 @@ const MAC_PERMISSION_URLS = {
   input_monitoring: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
   microphone: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone",
 };
+
+function parseDeviceOutput(output) {
+  const structured = parseDeviceJsonOutput(output);
+  if (structured) return structured;
+  return String(output || "")
+    .split(/\r?\n/)
+    .map((line) => {
+      const match = line.match(/^\s*\[\s*(\d+)\]\s+(.+?)(?:\s*(?:←\s*系统默认|<-\s*default))?\s*$/);
+      if (!match) return null;
+      return {
+        id: Number(match[1]),
+        name: match[2].trim(),
+        default: /系统默认|<-\s*default/i.test(line),
+      };
+    })
+    .filter(Boolean);
+}
+
+function parseDeviceJsonOutput(output) {
+  const lines = String(output || "").split(/\r?\n/).reverse();
+  for (const line of lines) {
+    const text = line.trim();
+    if (!text || !text.startsWith("{")) continue;
+    try {
+      const payload = JSON.parse(text);
+      const devices = normalizeDevices(payload.devices);
+      if (devices) return devices;
+    } catch (_error) {
+      // Fall back to the legacy human-readable output.
+    }
+  }
+  return null;
+}
+
+function normalizeDevices(value) {
+  if (!Array.isArray(value)) return null;
+  return value
+    .map((item) => {
+      const id = Number(item?.id);
+      const name = String(item?.name || "").trim();
+      if (!Number.isFinite(id) || !name) return null;
+      return {
+        id,
+        name,
+        default: Boolean(item?.default),
+      };
+    })
+    .filter(Boolean);
+}
 
 class BackendRequestError extends Error {
   constructor(status, body) {
@@ -304,7 +347,7 @@ function createLocalServer({ electronApp }) {
   });
 
   app.post("/api/agent/start", async (_req, res) => {
-    await agent.start();
+    await agent.start({ initialTranscriptionEnabled: true });
     res.json(agent.status());
   });
 
@@ -321,7 +364,7 @@ function createLocalServer({ electronApp }) {
   app.get("/api/devices", async (_req, res) => {
     try {
       const output = await agent.listDevices();
-      res.json({ ok: true, output });
+      res.json({ ok: true, output, devices: parseDeviceOutput(output) });
     } catch (error) {
       res.status(500).json({ ok: false, error: error.message });
     }
@@ -388,47 +431,6 @@ function createLocalServer({ electronApp }) {
 
   app.get("/api/usage", (_req, res) => {
     res.json(readUsage());
-  });
-
-  app.get("/api/corrections", (_req, res) => {
-    res.json(listCorrections());
-  });
-
-  app.post("/api/corrections", (req, res) => {
-    try {
-      res.json(createCorrection(req.body || {}));
-    } catch (error) {
-      res.status(400).json({
-        error: { code: "BAD_REQUEST", message: error.message, status: 400 },
-      });
-    }
-  });
-
-  app.patch("/api/corrections/:id", (req, res) => {
-    try {
-      const record = updateCorrection(req.params.id, req.body || {});
-      if (!record) {
-        res.status(404).json({
-          error: { code: "NOT_FOUND", message: "Correction not found", status: 404 },
-        });
-        return;
-      }
-      res.json(record);
-    } catch (error) {
-      res.status(400).json({
-        error: { code: "BAD_REQUEST", message: error.message, status: 400 },
-      });
-    }
-  });
-
-  app.delete("/api/corrections/:id", (req, res) => {
-    if (!deleteCorrection(req.params.id)) {
-      res.status(404).json({
-        error: { code: "NOT_FOUND", message: "Correction not found", status: 404 },
-      });
-      return;
-    }
-    res.json({ ok: true });
   });
 
   app.get("/api/settings", (_req, res) => {
@@ -622,4 +624,4 @@ function revealInFinder(targetPath) {
   });
 }
 
-module.exports = { createLocalServer, isAllowedLocalOrigin };
+module.exports = { createLocalServer, isAllowedLocalOrigin, parseDeviceOutput };

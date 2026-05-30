@@ -182,6 +182,62 @@ class PushToTalkStatusTests(unittest.TestCase):
         self.assertEqual(status.messages[-1][0], "转写功能已关闭")
         self.assertIsNone(ptt._active_key)
 
+    def test_enable_and_disable_hotkeys_control_transcription_separately(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            enable_key=["ctrl", "o"],
+            disable_key=["ctrl", "p"],
+            status_window=status,
+        )
+        started = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+
+        self.assertFalse(ptt._transcription_enabled)
+
+        ptt._on_press(kb.Key.ctrl_l)
+        ptt._on_press(kb.KeyCode.from_char("o"))
+
+        self.assertTrue(ptt._transcription_enabled)
+        self.assertEqual(started, [])
+        self.assertEqual(status.messages[-1][0], "转写功能已启动")
+
+        ptt._on_release(kb.KeyCode.from_char("o"))
+        ptt._on_release(kb.Key.ctrl_l)
+        ptt._on_press(kb.Key.ctrl_l)
+        ptt._on_press(kb.KeyCode.from_char("p"))
+
+        self.assertFalse(ptt._transcription_enabled)
+        self.assertEqual(started, [])
+        self.assertEqual(status.messages[-1][0], "转写功能已关闭")
+
+    def test_desktop_start_can_force_initial_transcription_enabled(self):
+        with mock.patch.dict("os.environ", {"TYPEUP_TRANSCRIPTION_ENABLED": "1"}):
+            ptt = PushToTalk(
+                on_utterance=lambda _pcm: None,
+                ptt_key="alt",
+                enable_key=["ctrl", "o"],
+                disable_key=["ctrl", "p"],
+            )
+
+        self.assertTrue(ptt._transcription_enabled)
+
+    def test_enable_disable_hotkeys_override_legacy_toggle_key(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            toggle_key=["ctrl", "alt"],
+            enable_key=["ctrl", "o"],
+            disable_key=["ctrl", "p"],
+        )
+
+        ptt._on_press(kb.Key.ctrl_l)
+        ptt._on_press(kb.Key.alt_l)
+
+        self.assertFalse(ptt._transcription_enabled)
+        self.assertFalse(ptt._should_suppress_token("alt_l", {"ctrl_l", "alt_l"}))
+
     def test_toggle_hotkey_repeated_keydown_only_toggles_once_until_release(self):
         status = _StatusRecorder()
         ptt = PushToTalk(
@@ -291,8 +347,9 @@ class PushToTalkStatusTests(unittest.TestCase):
         started = []
         ptt._start_recording = lambda: started.append(ptt._active_key)
 
-        ctrl_down = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
-        alt_down = ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0xA4, 0x20))
+        with mock.patch("agent.push_to_talk._win32_async_key_down", side_effect=lambda vk: vk in {0x11, 0x12}):
+            ctrl_down = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
+            alt_down = ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0xA4, 0x20))
 
         self.assertTrue(ctrl_down)
         self.assertFalse(alt_down)
@@ -300,12 +357,13 @@ class PushToTalkStatusTests(unittest.TestCase):
         self.assertEqual(listener.count, 1)
         self.assertEqual(started, [])
 
-        ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0xA4, 0x20))
-        ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0xA2, 0x00))
-        ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
-        ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0xA4, 0x20))
-        ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0xA4, 0x20))
-        ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0xA2, 0x00))
+        with mock.patch("agent.push_to_talk._win32_async_key_down", side_effect=lambda vk: vk in {0x11, 0x12}):
+            ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0xA4, 0x20))
+            ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0xA2, 0x00))
+            ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
+            ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0xA4, 0x20))
+            ptt._win32_event_filter(0x0105, _FakeWin32KeyData(0xA4, 0x20))
+            ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0xA2, 0x00))
         self.assertFalse(ptt._transcription_enabled)
 
         count_after_toggle_release = listener.count
@@ -320,15 +378,106 @@ class PushToTalkStatusTests(unittest.TestCase):
         ptt._listener = listener
         ptt._start_recording = lambda: None
 
-        ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
-        ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0xA4, 0x20))
-        count_after_toggle = listener.count
-        space_down = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0x20, 0x00))
+        with mock.patch("agent.push_to_talk._win32_async_key_down", side_effect=lambda vk: vk in {0x11, 0x12}):
+            ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
+            ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0xA4, 0x20))
+            count_after_toggle = listener.count
+            space_down = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0x20, 0x00))
 
         self.assertTrue(ptt._transcription_enabled)
         self.assertTrue(space_down)
         self.assertEqual(listener.count, count_after_toggle)
         self.assertEqual(ptt._pressed_keys, set())
+
+    def test_win32_enable_and_disable_letter_hotkeys_control_transcription(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            enable_key=["ctrl", "o"],
+            disable_key=["ctrl", "p"],
+            status_window=status,
+        )
+        listener = _SuppressRecorder()
+        ptt._listener = listener
+        ptt._start_recording = lambda: None
+
+        with mock.patch("agent.push_to_talk._win32_async_key_down", side_effect=lambda vk: vk == 0x11):
+            ctrl_down = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
+            o_down = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0x4F, 0x00))
+            ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0x4F, 0x00))
+            ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0xA2, 0x00))
+
+        self.assertTrue(ctrl_down)
+        self.assertFalse(o_down)
+        self.assertTrue(ptt._transcription_enabled)
+        self.assertEqual(status.messages[-1][0], "转写功能已启动")
+
+        with mock.patch("agent.push_to_talk._win32_async_key_down", side_effect=lambda vk: vk == 0x11):
+            ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0xA2, 0x00))
+            p_down = ptt._win32_event_filter(0x0100, _FakeWin32KeyData(0x50, 0x00))
+            ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0x50, 0x00))
+            ptt._win32_event_filter(0x0101, _FakeWin32KeyData(0xA2, 0x00))
+
+        self.assertFalse(p_down)
+        self.assertFalse(ptt._transcription_enabled)
+        self.assertEqual(status.messages[-1][0], "转写功能已关闭")
+
+    def test_right_alt_is_the_only_default_dictation_modifier(self):
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_r")
+        started = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+
+        ptt._on_press(kb.Key.alt_l)
+        self.assertEqual(started, [])
+        self.assertIsNone(ptt._active_key)
+
+        ptt._on_release(kb.Key.alt_l)
+        ptt._on_press(kb.Key.alt_r)
+
+        self.assertEqual(started, ["dictate"])
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt_r,))
+
+    def test_right_alt_right_shift_is_the_default_ai_edit_combo(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt_r",
+            ai_key=["alt_r", "shift_r"],
+        )
+        started = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+
+        ptt._on_press(kb.Key.alt_l)
+        ptt._on_press(kb.Key.shift_r)
+        self.assertEqual(started, [])
+        self.assertIsNone(ptt._active_key)
+
+        ptt._on_release(kb.Key.shift_r)
+        ptt._on_release(kb.Key.alt_l)
+        ptt._on_press(kb.Key.alt_r)
+        ptt._on_press(kb.Key.shift_r)
+
+        self.assertEqual(started, ["ai"])
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt_r, kb.Key.shift_r))
+
+    def test_double_tap_uses_right_alt_not_left_alt(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_r", status_window=status)
+        ptt._start_recording = lambda: None
+
+        ptt._on_press(kb.Key.alt_l)
+        ptt._on_release(kb.Key.alt_l)
+        ptt._on_press(kb.Key.alt_l)
+        ptt._on_release(kb.Key.alt_l)
+        self.assertFalse(ptt._polish_mode)
+
+        ptt._on_press(kb.Key.alt_r)
+        ptt._on_release(kb.Key.alt_r)
+        ptt._on_press(kb.Key.alt_r)
+
+        self.assertTrue(ptt._polish_mode)
+        self.assertEqual(status.messages[-1][0], "润色模式：微润色")
 
     def test_modifier_combo_does_not_suppress_first_toggle_modifier(self):
         ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_r", toggle_key=["ctrl", "alt"])
@@ -440,6 +589,33 @@ class PushToTalkStatusTests(unittest.TestCase):
         self.assertEqual(listener.count, 1)
         self.assertEqual(started, ["ai"])
         self.assertEqual(ptt._active_trigger, (kb.Key.alt, kb.Key.space))
+
+    def test_win32_alt_space_does_not_toggle_off_with_stale_ctrl(self):
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            on_ai_utterance=lambda _pcm: None,
+            ptt_key="alt",
+            ai_key=["alt", "space"],
+            enable_key=["ctrl", "o"],
+            disable_key=["ctrl", "p"],
+        )
+        listener = _SuppressRecorder()
+        ptt._listener = listener
+        ptt._transcription_enabled = True
+        ptt._pressed_keys = {kb.Key.ctrl_l}
+        ptt._filter_pressed_tokens = {"ctrl_l"}
+        started = []
+        ptt._start_recording = lambda: started.append(ptt._active_key)
+
+        with mock.patch("agent.push_to_talk._win32_async_key_down", side_effect=lambda vk: vk in {0x11, 0x12}):
+            result = ptt._win32_event_filter(0x0104, _FakeWin32KeyData(0x20, 0x20))
+
+        self.assertFalse(result)
+        self.assertTrue(ptt._transcription_enabled)
+        self.assertEqual(listener.count, 1)
+        self.assertEqual(started, ["ai"])
+        self.assertEqual(ptt._active_trigger, (kb.Key.alt, kb.Key.space))
+        self.assertNotIn("ctrl", ptt._toggle_sequence_tokens)
 
     def test_win32_synthetic_alt_context_releases_on_physical_alt_up(self):
         ptt = PushToTalk(

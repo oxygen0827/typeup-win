@@ -25,7 +25,7 @@ from agent.text_buffer import TextBuffer
 
 _USER_DIR = Path.home() / ".voice-keyboard"
 _CONFIG = _USER_DIR / "config.yaml"
-_APP_NAME = "Voice Keyboard"
+_APP_NAME = "TypeUp"
 
 
 class WindowsTrayApp:
@@ -44,7 +44,7 @@ class WindowsTrayApp:
         self._start_backend()
 
         self._icon = pystray.Icon(
-            "voice-keyboard",
+            "typeup",
             self._make_icon(),
             _APP_NAME,
             menu=self._menu(),
@@ -53,7 +53,7 @@ class WindowsTrayApp:
 
     def _menu(self):
         return pystray.Menu(
-            pystray.MenuItem("Voice Keyboard 正在运行", lambda: None, enabled=False),
+            pystray.MenuItem("TypeUp 正在运行", lambda: None, enabled=False),
             pystray.Menu.SEPARATOR,
             pystray.MenuItem("打开配置", self._open_config),
             pystray.MenuItem("打开配置目录", self._open_config_dir),
@@ -126,6 +126,12 @@ class WindowsTrayApp:
 
     @staticmethod
     def _make_icon() -> Image.Image:
+        for candidate in (
+            Path(__file__).resolve().parents[3] / "build" / "icon.png",
+            Path(__file__).resolve().parents[2] / "build" / "icon.png",
+        ):
+            if candidate.exists():
+                return Image.open(candidate).convert("RGBA").resize((64, 64))
         img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         d = ImageDraw.Draw(img)
         d.rounded_rectangle((10, 8, 54, 56), radius=18, fill=(37, 99, 235, 255))

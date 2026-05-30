@@ -21,6 +21,7 @@ class AgentManager extends EventEmitter {
     this.logLines = [];
     this._macEngineAppPath = null;
     this._activeLaunch = null;
+    this.transcriptionEnabled = false;
   }
 
   engineDir() {
@@ -82,6 +83,7 @@ class AgentManager extends EventEmitter {
       mode: settings.audio?.mode || "vad",
       provider: settings.stt?.provider || "",
       typingMethod: settings.typing?.method || "unicode",
+      transcriptionEnabled: this.transcriptionEnabled,
     };
   }
 
@@ -89,9 +91,15 @@ class AgentManager extends EventEmitter {
     return [...this.logLines];
   }
 
-  async start() {
-    if (this.child) return this.status();
-    await this.ensureConfig();
+  async start(options = {}) {
+    const initialTranscriptionEnabled = Boolean(options.initialTranscriptionEnabled);
+    if (this.child) {
+      if (initialTranscriptionEnabled && !this.transcriptionEnabled) {
+        await this.restart(options);
+      }
+      return this.status();
+    }
+    const settings = await this.ensureConfig();
 
     const engineDir = this.engineDir();
     if (!fs.existsSync(engineDir)) {
@@ -100,6 +108,7 @@ class AgentManager extends EventEmitter {
     }
 
     const launch = this._resolveLaunch(engineDir);
+    this.transcriptionEnabled = !hasTranscriptionSwitchHotkey(settings.audio);
     this._setState("starting");
     this.lastError = "";
     this.startedAt = Date.now();
@@ -114,6 +123,7 @@ class AgentManager extends EventEmitter {
         PYTHONUTF8: "1",
         TYPEUP_DESKTOP: "1",
         TYPEUP_ENGINE_USER_DIR: this.engineUserDir(),
+        ...(initialTranscriptionEnabled ? { TYPEUP_TRANSCRIPTION_ENABLED: "1" } : {}),
       },
     });
 
@@ -140,6 +150,7 @@ class AgentManager extends EventEmitter {
       this._activeLaunch = null;
       this.pid = null;
       this.exitedAt = Date.now();
+      this.transcriptionEnabled = false;
       if (this.state !== "stopping") {
         this.state = code === 0 ? "stopped" : "error";
         if (code !== 0) this.lastError = `进程退出 code=${code ?? "unknown"}`;
@@ -155,9 +166,11 @@ class AgentManager extends EventEmitter {
 
   async stop() {
     if (!this.child) {
+      this.transcriptionEnabled = false;
       this._setState("stopped");
       return this.status();
     }
+    this.transcriptionEnabled = false;
     this._setState("stopping");
     const child = this.child;
     const launch = this._activeLaunch;
@@ -187,14 +200,14 @@ class AgentManager extends EventEmitter {
     return this.status();
   }
 
-  async restart() {
+  async restart(options = {}) {
     await this.stop();
-    return this.start();
+    return this.start(options);
   }
 
   async listDevices() {
     const engineDir = this.engineDir();
-    const launch = this._resolveLaunch(engineDir, ["--list-devices"]);
+    const launch = this._resolveLaunch(engineDir, ["--list-devices-json"]);
     return new Promise((resolve, reject) => {
       const child = spawn(launch.command, launch.args, {
         cwd: engineDir,
@@ -209,10 +222,10 @@ class AgentManager extends EventEmitter {
       });
       let output = "";
       child.stdout.on("data", (chunk) => {
-        output += chunk.toString("utf8");
+        output += decodeProcessOutput(chunk);
       });
       child.stderr.on("data", (chunk) => {
-        output += chunk.toString("utf8");
+        output += decodeProcessOutput(chunk);
       });
       child.once("error", reject);
       child.once("exit", () => resolve(output.trim()));
@@ -272,10 +285,10 @@ class AgentManager extends EventEmitter {
       });
       let output = "";
       child.stdout.on("data", (chunk) => {
-        output += chunk.toString("utf8");
+        output += decodeProcessOutput(chunk);
       });
       child.stderr.on("data", (chunk) => {
-        output += chunk.toString("utf8");
+        output += decodeProcessOutput(chunk);
       });
       child.once("error", reject);
       child.once("exit", () => resolve(output.trim()));
@@ -343,6 +356,15 @@ class AgentManager extends EventEmitter {
 
       const venvPython = path.join(engineDir, ".venv", "bin", "python");
       const python = fs.existsSync(venvPython) ? venvPython : (process.env.TYPEUP_PYTHON || "python3");
+      return {
+        command: python,
+        args: ["-u", "-m", "agent.main", "--no-serial", "--no-ui", ...extraArgs],
+      };
+    }
+
+    if (!this.electronApp.isPackaged && process.env.TYPEUP_USE_ENGINE_SOURCE === "1") {
+      const venvPython = path.join(engineDir, ".venv", "Scripts", "python.exe");
+      const python = fs.existsSync(venvPython) ? venvPython : (process.env.TYPEUP_PYTHON || "python");
       return {
         command: python,
         args: ["-u", "-m", "agent.main", "--no-serial", "--no-ui", ...extraArgs],
@@ -453,10 +475,21 @@ class AgentManager extends EventEmitter {
   }
 
   _inferState(line, isError) {
+    if (line.includes("[typeup-transcription] enabled")) {
+      this.transcriptionEnabled = true;
+      this._setState("listening", "", true);
+      return;
+    }
+    if (line.includes("[typeup-transcription] disabled")) {
+      this.transcriptionEnabled = false;
+      this._setState("listening", "", true);
+      return;
+    }
     if (
       line.includes("未配置 stt") ||
       line.includes("请编辑填入 API Key") ||
       line.includes("[typeup-auth-required]") ||
+      line.includes("请先登录 Typeless") ||
       line.includes("请先登录 TypeUp")
     ) {
       this._setState("needs_config");
@@ -465,6 +498,7 @@ class AgentManager extends EventEmitter {
     if (
       line.includes("开始监听") ||
       line.includes("等待语音") ||
+      line.includes("Typeless Agent 启动") ||
       line.includes("Voice Keyboard Agent 启动") ||
       line.includes("[typeup] 输入完成")
     ) {
@@ -502,12 +536,25 @@ class AgentManager extends EventEmitter {
     this.emit("log", item);
   }
 
-  _setState(state, error = "") {
+  _setState(state, error = "", force = false) {
     if (error) this.lastError = error;
-    if (this.state === state && !error) return;
+    if (!force && this.state === state && !error) return;
     this.state = state;
     this.emit("status", this.status());
   }
+}
+
+function hasConfiguredHotkey(value) {
+  if (Array.isArray(value)) return value.some((item) => hasConfiguredHotkey(item));
+  return Boolean(String(value || "").trim());
+}
+
+function hasTranscriptionSwitchHotkey(audio = {}) {
+  return (
+    hasConfiguredHotkey(audio?.enable_key)
+    || hasConfiguredHotkey(audio?.disable_key)
+    || hasConfiguredHotkey(audio?.toggle_key)
+  );
 }
 
 function decodeProcessOutput(chunk) {

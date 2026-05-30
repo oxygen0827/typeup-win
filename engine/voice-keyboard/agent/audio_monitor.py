@@ -28,8 +28,38 @@ SILENCE_FRAMES = 12
 MIN_SPEECH_FRAMES = 4
 
 
+def _input_devices():
+    return [
+        (i, d)
+        for i, d in enumerate(sd.query_devices())
+        if d.get("max_input_channels", 0) > 0
+    ]
+
+
+def _default_input_device() -> Optional[int]:
+    default = getattr(sd, "default", None)
+    device = getattr(default, "device", None)
+    if isinstance(device, (list, tuple)) and device:
+        index = device[0]
+    else:
+        index = device
+    try:
+        index = int(index)
+    except (TypeError, ValueError):
+        return None
+    if index < 0:
+        return None
+    try:
+        info = sd.query_devices(index)
+    except Exception:
+        return None
+    if info.get("max_input_channels", 0) <= 0:
+        return None
+    return index
+
+
 def find_device(hint) -> Optional[int]:
-    """按名称片段查找输入设备，找不到返回 None（使用系统默认）。"""
+    """按名称片段查找输入设备，auto 优先使用系统默认输入设备。"""
     if isinstance(hint, int):
         return hint
     if hint and hint != "auto":
@@ -37,19 +67,24 @@ def find_device(hint) -> Optional[int]:
         if hint.isdigit():
             return int(hint)
         # 用户指定设备名称片段
-        for i, d in enumerate(sd.query_devices()):
-            if hint.lower() in d["name"].lower() and d["max_input_channels"] > 0:
+        for i, d in _input_devices():
+            if hint.lower() in d["name"].lower():
                 return i
         return None
 
-    # 自动搜索：优先找 ESP32 / Voice Keyboard UAC 设备
-    keywords = ["esp32", "voice keyboard", "voicekeyboard", "usb audio", "usb mic"]
-    for i, d in enumerate(sd.query_devices()):
-        if d["max_input_channels"] > 0:
-            name = d["name"].lower()
-            if any(k in name for k in keywords):
-                return i
-    return None  # 回退到系统默认麦克风
+    default_device = _default_input_device()
+    if default_device is not None:
+        return default_device
+
+    # 自动搜索兜底：优先找 ESP32 / TypeUp / Voice Keyboard UAC 设备
+    keywords = ["esp32", "typeup", "voice keyboard", "voicekeyboard", "usb audio", "usb mic"]
+    for i, d in _input_devices():
+        name = d["name"].lower()
+        if any(k in name for k in keywords):
+            return i
+
+    devices = _input_devices()
+    return devices[0][0] if devices else None
 
 
 class AudioMonitor:

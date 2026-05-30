@@ -1,11 +1,13 @@
 const path = require("node:path");
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, Menu, globalShortcut, ipcMain, shell } = require("electron");
 const { createLocalServer } = require("./local-server");
 const { setupAutoUpdates } = require("./updater");
+const { registerVoiceConsoleShortcuts } = require("./voice-shortcuts");
 
 let mainWindow;
 let localServer;
 let quittingForUpdate = false;
+let unregisterVoiceShortcuts = () => {};
 
 const isDev = process.env.NODE_ENV === "development";
 const windowIcon = path.join(__dirname, "..", "build", process.platform === "darwin" ? "icon.png" : "icon.ico");
@@ -24,14 +26,19 @@ function focusMainWindow() {
 }
 
 async function createWindow() {
+  Menu.setApplicationMenu(null);
+
   mainWindow = new BrowserWindow({
-    width: 1160,
-    height: 760,
-    minWidth: 980,
+    width: 1280,
+    height: 820,
+    minWidth: 1080,
     minHeight: 640,
     title: "TypeUp",
     icon: windowIcon,
-    backgroundColor: "#f6f8fb",
+    backgroundColor: "#00000000",
+    frame: false,
+    transparent: true,
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -78,6 +85,11 @@ const updates = setupAutoUpdates({
 async function boot() {
   localServer = await createLocalServer({ electronApp: app });
   await localServer.agent.ensureConfig();
+  unregisterVoiceShortcuts = registerVoiceConsoleShortcuts({
+    globalShortcut,
+    getAgent: () => localServer?.agent,
+    platform: process.platform,
+  });
   await localServer.agent.start();
   await createWindow();
   updates.startupCheck();
@@ -100,6 +112,8 @@ if (!singleInstanceLock) {
     if (quittingForUpdate || !localServer) return;
     event.preventDefault();
     try {
+      unregisterVoiceShortcuts();
+      unregisterVoiceShortcuts = () => {};
       await closeLocalServer();
     } finally {
       app.exit(0);
@@ -116,6 +130,28 @@ if (!singleInstanceLock) {
   ipcMain.handle("typeup:open-external", async (_event, url) => {
     if (typeof url !== "string" || !/^https?:\/\//i.test(url)) return false;
     await shell.openExternal(url);
+    return true;
+  });
+
+  ipcMain.handle("typeup:window:minimize", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    mainWindow.minimize();
+    return true;
+  });
+
+  ipcMain.handle("typeup:window:toggle-maximize", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    if (mainWindow.isMaximized()) {
+      mainWindow.unmaximize();
+    } else {
+      mainWindow.maximize();
+    }
+    return true;
+  });
+
+  ipcMain.handle("typeup:window:close", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return false;
+    mainWindow.close();
     return true;
   });
 }

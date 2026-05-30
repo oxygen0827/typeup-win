@@ -645,7 +645,8 @@ function findReleaseAsset(release, version, extension) {
   const assets = Array.isArray(release?.assets) ? release.assets : [];
   const versionedName = `TypeUp-Setup-${version}${extension}`;
   return assets.find((asset) => asset.name === versionedName)
-    || assets.find((asset) => asset.name?.endsWith(extension) && /^TypeUp-Setup-/i.test(asset.name));
+    || assets.find((asset) => asset.name === `TypeUp-Setup-${version}${extension}`)
+    || assets.find((asset) => asset.name?.endsWith(extension) && /^(TypeUp|TypeUp)-Setup-/i.test(asset.name));
 }
 
 function parseLatestYmlVersion(value) {

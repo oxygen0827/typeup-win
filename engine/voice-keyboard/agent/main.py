@@ -1,10 +1,11 @@
 """
-Voice Keyboard Agent —— PC 端后台程序入口。
+TypeUp Agent —— PC 端后台程序入口。
 
 用法：
   python -m agent.main                    # 正常启动
   python -m agent.main --no-serial        # 纯软件模式，不搜索 ESP32 串口
   python -m agent.main --list-devices     # 列出可用麦克风设备
+  python -m agent.main --list-devices-json # 输出可用麦克风设备 JSON
   python -m agent.main --install          # 注册开机自启动
   python -m agent.main --uninstall        # 移除开机自启动
   python -m agent.main --headless         # 不启动悬浮状态窗（TypeUp 嵌入模式）
@@ -53,7 +54,6 @@ import sounddevice as sd
 
 from agent.autostart import install, uninstall
 from agent.config import load as load_config
-from agent.corrections import CorrectionEngine, CorrectionStore
 from agent.history import History
 from agent.serial_reader import SerialReader
 from agent.text_buffer import TextBuffer
@@ -224,9 +224,7 @@ def _select_polished_text(original: str, model_output: str) -> str:
 
 
 def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=None,
-                           status_window=None, history: History | None = None,
-                           correction_engine: CorrectionEngine | None = None,
-                           snapshot_reader=None):
+                           status_window=None, history: History | None = None):
     from agent.typer import type_text
     def on_utterance(
         pcm: bytes,
@@ -252,19 +250,6 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             if status_window is not None and progress_status:
                 status_window.set_state("empty_stt")
             return
-        correction_applied = False
-        if correction_engine is not None:
-            correction_result = correction_engine.apply(text)
-            if correction_result.applied:
-                correction_applied = True
-                print(
-                    "[corrections] applied "
-                    + ", ".join(
-                        f"{item.get('source')!r}->{item.get('target')!r}"
-                        for item in correction_result.applied
-                    )
-                )
-                text = correction_result.text
         print(f"[stt] {text!r}")
         if polish and editor is not None:
             if status_window is not None and progress_status:
@@ -279,14 +264,8 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
                     text = polished
             except Exception as e:
                 print(f"[stt] 润色失败，回退原文: {e}")
-        before_snapshot = None
         if kbd_mon is not None and hasattr(kbd_mon, "prepare_for_voice_output"):
             kbd_mon.prepare_for_voice_output()
-        if snapshot_reader is not None:
-            try:
-                before_snapshot = snapshot_reader.read()
-            except Exception:
-                before_snapshot = None
         try:
             type_text(text)
             buf.push(text)
@@ -297,16 +276,10 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             if history is not None:
                 history.append(mode, text, "error", f"typing: {e}")
             return
-        after_snapshot = None
-        if snapshot_reader is not None:
-            try:
-                after_snapshot = snapshot_reader.read()
-            except Exception:
-                after_snapshot = None
         if history is not None:
-            history.append(mode, text, "ok", "correction_applied" if correction_applied else "")
+            history.append(mode, text, "ok")
         if kbd_mon is not None:
-            kbd_mon.notify_voice_output(text, before_snapshot=before_snapshot, after_snapshot=after_snapshot)
+            kbd_mon.notify_voice_output(text)
         if status_window is not None and clear_status:
             status_window.set_state("idle")
         if clear_status:
@@ -337,28 +310,22 @@ class _Backend:
             setattr(self, attr, None)
 
 
-def build_backend(args, buf: TextBuffer, status_window, history: History, correction_store: CorrectionStore) -> _Backend:
+def build_backend(args, buf: TextBuffer, status_window, history: History) -> _Backend:
     bk = _Backend()
     bk.cfg = load_config()
     from agent.typer import init as typer_init
     typer_init(bk.cfg.get("typing", {}))
-    snapshot_reader = None
-    try:
-        from agent.text_snapshot import TextSnapshotReader
-        snapshot_reader = TextSnapshotReader()
-    except Exception as e:
-        print(f"[agent] text snapshot reader unavailable ({e}); snapshot correction learning disabled")
 
     try:
         from agent.keyboard_monitor import KeyboardMonitor
-        bk.kbd_monitor = KeyboardMonitor(buf, correction_store=correction_store, snapshot_reader=snapshot_reader)
+        bk.kbd_monitor = KeyboardMonitor(buf)
         bk.kbd_monitor.start()
     except Exception as e:
         print(f"[agent] 键盘监听启动失败（{e}），退格同步不可用")
 
     try:
         from agent.mouse_monitor import MouseMonitor
-        bk.mouse_monitor = MouseMonitor(buf, correction_finalizer=bk.kbd_monitor.finalize_correction_session if bk.kbd_monitor else None)
+        bk.mouse_monitor = MouseMonitor(buf)
         bk.mouse_monitor.start()
     except Exception as e:
         print(f"[agent] 鼠标监听启动失败（{e}），行选择模式不可用")
@@ -371,16 +338,12 @@ def build_backend(args, buf: TextBuffer, status_window, history: History, correc
         print("[agent] 串口已禁用（纯软件模式）")
 
     bk.audio = _build_audio(bk.cfg, buf, kbd_monitor=bk.kbd_monitor,
-                            status_window=status_window, history=history,
-                            correction_store=correction_store,
-                            snapshot_reader=snapshot_reader)
+                            status_window=status_window, history=history)
     return bk
 
 
 def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=None,
-                 history: History | None = None,
-                 correction_store: CorrectionStore | None = None,
-                 snapshot_reader=None):
+                 history: History | None = None):
     stt_cfg = cfg.get("stt", {})
     provider = stt_cfg.get("provider", "")
     if provider == "typeup_backend" and not stt_cfg.get("access_token"):
@@ -391,9 +354,6 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
         print("[agent] 未配置 stt.api_key，跳过音频 STT")
         print("[agent] 提示: cp config.yaml.example config.yaml 然后填入 API Key")
         return None
-
-    if correction_store is not None:
-        stt_cfg = _with_personal_hotwords(stt_cfg, correction_store)
 
     try:
         from agent.stt import STTClient
@@ -409,8 +369,6 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
 
     editor = None
     llm_cfg = cfg.get("llm", {})
-    if correction_store is not None:
-        llm_cfg = _with_personal_prompt_hint(llm_cfg, correction_store)
     if _llm_configured(llm_cfg):
         try:
             from agent.llm_editor import LLMEditor
@@ -433,14 +391,12 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
             ai_stt = stt
             ai_stt_cfg = cfg.get("ai_stt", {})
             if ai_stt_cfg:
-                if correction_store is not None:
-                    ai_stt_cfg = _with_personal_hotwords(ai_stt_cfg, correction_store)
                 ai_stt = STTClient(ai_stt_cfg)
                 print(f"[agent] AI 键 STT 使用独立 provider: {ai_stt_cfg.get('provider', 'openai')}")
             memo_store = MemoStore()
             ai_handler = AIHandler(ai_stt, editor, buf, memo_store=memo_store,
                                    status_window=status_window, history=history)
-            ai_key_name = audio_cfg.get("ai_key", ["alt", "space"])
+            ai_key_name = audio_cfg.get("ai_key", ["alt_r", "shift_r"])
             existing = memo_store.keys()
             if existing:
                 print(f"[memo] 已加载 {len(existing)} 条备忘录: {'、'.join(existing)}")
@@ -448,11 +404,8 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
         except Exception as e:
             print(f"[agent] AIHandler 初始化失败: {e}")
 
-    correction_engine = CorrectionEngine(correction_store) if correction_store is not None else None
     on_utterance = make_utterance_handler(stt, buf, kbd_mon=kbd_monitor, editor=editor,
-                                          status_window=status_window, history=history,
-                                          correction_engine=correction_engine,
-                                          snapshot_reader=snapshot_reader)
+                                          status_window=status_window, history=history)
 
     if mode == "ptt":
         try:
@@ -468,9 +421,11 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
             on_utterance=on_utterance,
             on_ai_utterance=on_ai,
             on_ai_key_down=on_ai_key_dwn,
-            ptt_key=audio_cfg.get("ptt_key", "alt"),
-            ai_key=audio_cfg.get("ai_key", ["alt", "space"]),
+            ptt_key=audio_cfg.get("ptt_key", "alt_r"),
+            ai_key=audio_cfg.get("ai_key", ["alt_r", "shift_r"]),
             toggle_key=audio_cfg.get("toggle_key"),
+            enable_key=audio_cfg.get("enable_key"),
+            disable_key=audio_cfg.get("disable_key"),
             device=device,
             status_window=status_window,
             kbd_monitor=kbd_monitor,
@@ -501,42 +456,88 @@ def _llm_configured(llm_cfg: dict) -> bool:
     return bool(llm_cfg.get("api_key"))
 
 
-def _with_personal_hotwords(stt_cfg: dict, correction_store: CorrectionStore) -> dict:
-    cfg = dict(stt_cfg or {})
-    hotwords = cfg.get("hotwords", [])
-    if isinstance(hotwords, str):
-        hotwords = [item.strip() for item in hotwords.split(",") if item.strip()]
-    if not isinstance(hotwords, list):
-        hotwords = []
-    seen = {str(item).lower() for item in hotwords}
-    for word in correction_store.hotwords():
-        key = word.lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        hotwords.append(word)
-        if len(hotwords) >= 100:
-            break
-    cfg["hotwords"] = hotwords[:100]
-    return cfg
-
-
-def _with_personal_prompt_hint(llm_cfg: dict, correction_store: CorrectionStore) -> dict:
-    cfg = dict(llm_cfg or {})
-    hint = correction_store.prompt_hint()
-    if hint:
-        cfg["personal_corrections_hint"] = hint
-    return cfg
-
-
 # ── 入口 ───────────────────────────────────────────────────────────
+
+def collect_input_devices():
+    hostapis = sd.query_hostapis()
+    default_device = sd.default.device
+    default_input = _default_input_index(default_device)
+    devices = []
+    for i, d in enumerate(sd.query_devices()):
+        if d["max_input_channels"] > 0:
+            hostapi = hostapis[d["hostapi"]]["name"]
+            devices.append({
+                "id": i,
+                "name": str(d["name"]),
+                "hostapi": hostapi,
+                "default": i == default_input,
+            })
+    return _preferred_input_devices(devices, default_input)
+
+
+def _preferred_input_devices(devices, default_input):
+    if sys.platform != "win32":
+        return devices
+
+    wrappers = ("Microsoft 声音映射器", "主声音捕获驱动程序", "Primary Sound Capture Driver")
+    candidates = [d for d in devices if not any(str(d["name"]).startswith(prefix) for prefix in wrappers)]
+    if not candidates:
+        candidates = devices
+
+    by_key = {}
+    defaults_by_key = set()
+    for device in candidates:
+        key = _canonical_windows_device_name(device["name"])
+        if device["id"] == default_input:
+            defaults_by_key.add(key)
+        current = by_key.get(key)
+        if current is None or _windows_device_rank(device, default_input) < _windows_device_rank(current, default_input):
+            by_key[key] = device
+    preferred = []
+    for key, device in by_key.items():
+        preferred.append({
+            **device,
+            "default": key in defaults_by_key,
+        })
+    return sorted(preferred, key=lambda d: (not d["default"], d["name"].lower(), d["id"]))
+
+
+def _default_input_index(default_device):
+    try:
+        index = default_device[0] if hasattr(default_device, "__getitem__") else default_device
+        return int(index)
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+def _canonical_windows_device_name(name):
+    text = re.sub(r"\s+", " ", str(name or "")).strip().lower()
+    text = re.sub(r"\s*\((?:\d+-\s*)?", " (", text)
+    text = text.replace("high definitio", "high definition audio")
+    text = text.replace(" hd audio mic input", " high definition audio")
+    text = text.replace(" hd audio line input", " high definition audio")
+    text = text.replace(" stereo input", " high definition audio")
+    if text.startswith("麦克风 (realtek high definition audio") or text.startswith("麦克风 (21- realtek high definition audio"):
+        return "麦克风 (realtek high definition audio)"
+    return text
+
+
+def _windows_device_rank(device, default_input):
+    hostapi = str(device.get("hostapi") or "")
+    priority = {
+        "Windows WASAPI": 0,
+        "Windows DirectSound": 1,
+        "MME": 2,
+        "Windows WDM-KS": 3,
+    }.get(hostapi, 4)
+    return (priority, -len(str(device["name"])))
+
 
 def list_devices():
     print("\n可用麦克风设备：\n")
-    for i, d in enumerate(sd.query_devices()):
-        if d["max_input_channels"] > 0:
-            default = " ← 系统默认" if i == sd.default.device[0] else ""
-            print(f"  [{i:2d}] {d['name']}{default}")
+    for d in collect_input_devices():
+        default = " ← 系统默认" if d["default"] else ""
+        print(f"  [{d['id']:2d}] {d['name']}{default}")
     print(
         "\n在 config.yaml 中填写设备序号或名称片段：\n"
         "  audio:\n"
@@ -545,11 +546,16 @@ def list_devices():
     )
 
 
+def list_devices_json():
+    print(json.dumps({"devices": collect_input_devices()}, ensure_ascii=False))
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Voice Keyboard Agent")
+    parser = argparse.ArgumentParser(description="TypeUp Agent")
     parser.add_argument("--port",         default=None,        help="指定串口路径")
     parser.add_argument("--no-serial",    action="store_true", help="不搜索 ESP32 串口（纯软件模式）")
     parser.add_argument("--list-devices", action="store_true", help="列出可用麦克风设备后退出")
+    parser.add_argument("--list-devices-json", action="store_true", help="输出可用麦克风设备 JSON 后退出")
     parser.add_argument("--result-json",  default=None,        help="把一次性命令的 JSON 结果写入指定文件")
     parser.add_argument("--permissions-json", action="store_true", help="输出 macOS 权限状态 JSON 后退出")
     parser.add_argument("--request-accessibility", action="store_true", help="请求 macOS 辅助功能权限后退出")
@@ -575,6 +581,9 @@ def main():
 
     if args.list_devices:
         list_devices()
+        return
+    if args.list_devices_json:
+        list_devices_json()
         return
     if args.permissions_json:
         from agent import permissions as _perm
@@ -612,7 +621,6 @@ def main():
     buf = TextBuffer()
     history = History()
     history.compact()
-    correction_store = CorrectionStore()
 
     # ── 状态悬浮窗 ───────────────────────────────────────────────
     status_window = None
@@ -626,17 +634,17 @@ def main():
         except Exception as e:
             print(f"[agent] 状态悬浮窗启动失败（{e}），将以无窗口模式运行")
 
-    print("[agent] Voice Keyboard Agent 启动")
+    print("[agent] TypeUp Agent 启动")
 
     # ── 后端 ─────────────────────────────────────────────────────
     backend_lock = threading.Lock()
-    backend = build_backend(args, buf, status_window, history, correction_store)
+    backend = build_backend(args, buf, status_window, history)
 
     def reload_backend():
         with backend_lock:
             print("[agent] === 热重载后端 ===")
             backend.stop()
-            new_bk = build_backend(args, buf, status_window, history, correction_store)
+            new_bk = build_backend(args, buf, status_window, history)
             backend.cfg          = new_bk.cfg
             backend.kbd_monitor  = new_bk.kbd_monitor
             backend.mouse_monitor= new_bk.mouse_monitor

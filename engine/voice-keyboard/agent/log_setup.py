@@ -15,7 +15,7 @@ def _log_path() -> Path:
         user_dir = Path(os.getenv("TYPEUP_ENGINE_USER_DIR", "")).expanduser() if os.getenv("TYPEUP_ENGINE_USER_DIR") else Path.home() / ".typeup" / "engine"
         return user_dir / "agent.log"
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Logs" / "Voice Keyboard" / "agent.log"
+        return Path.home() / "Library" / "Logs" / "TypeUp" / "agent.log"
     return Path.home() / ".voice-keyboard" / "agent.log"
 
 
@@ -85,7 +85,7 @@ def _attach_log_file(path: Path) -> None:
         sys.stdout = _Tee(f, sys.stdout) if sys.stdout else f
         sys.stderr = _Tee(f, sys.stderr) if sys.stderr else f
         os.environ["VK_LOG_PATH"] = str(path)
-        label = "TypeUp Engine" if os.getenv("TYPEUP_DESKTOP") == "1" else "Voice Keyboard"
+        label = "TypeUp Engine" if os.getenv("TYPEUP_DESKTOP") == "1" else "TypeUp"
         print(f"\n[log] === {label} 启动 PID={os.getpid()} ===")
     except Exception:
         if os.environ.get("VK_LOG_PATH") == str(path):

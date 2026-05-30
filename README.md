@@ -6,8 +6,60 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前测试版安装包为 `TypeUp-Setup-0.1.37.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前测试版安装包为 `TypeUp-Setup-0.3.4.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
+
+## 0.3.4 更新重点
+
+- 延续 0.3.3 的麦克风设备 JSON 枚举，确保中文设备名和系统默认设备显示正常。
+- 设置页保持只展示录入设备选择，调试输出留在开发者栏目。
+- 重新打包并发布 Windows 安装包，方便已安装用户通过更新源获取最新优化。
+
+## 0.3.3 更新重点
+
+- 麦克风设备枚举改为结构化 JSON，中文设备名不再因为控制台编码显示成乱码。
+- 设置页移除普通用户可见的黑色设备输出窗口，原始日志仍保留在开发者栏目。
+- Windows 设备列表会过滤系统包装设备和重复项，优先显示更完整的真实输入设备名称。
+
+## 0.3.2 更新重点
+
+- 主界面品牌文案统一为 TypeUp，首页欢迎语改为“您好，欢迎来到 TypeUp”。
+- 订阅计划里的“默认”和“推荐”徽标现在会稳定居中显示在灰色椭圆框内。
+- 今日转写字数统计卡改为白色样式，并且总节约时间不再向用户展示内部计算方式。
+- 设置页只保留录入设备选择，VAD 和监听模式移动到开发者栏目。
+- 麦克风自动选择会优先使用系统默认输入设备，设备列表也会返回结构化信息供界面准确选择。
+- Windows 托盘后端显示 TypeUp，并优先使用应用图标资源。
+
+## 0.3.1 更新重点
+
+- 按新的版本规则发布补丁版：后续版本每累计 20 个补丁位进入下一档版本段。
+- 修复服务器更新源误指向异常快照后，客户端看到不该出现版本的问题。
+- 修复更新说明遇到异常编码内容时显示 `????` 乱码的问题，会自动回退到内置中文说明。
+- 账号页右侧连接信息改为规整的信息行，后端地址会自动换行，不再挤乱标题和标签。
+
+## 0.1.40 更新重点
+
+- 顶部栏移除重复的 `检查更新`、运行状态和语言切换入口，减少首屏干扰。
+- 中英文切换迁移到配置页面，和快捷键、麦克风、输入方式等设置放在一起管理。
+- 首页快捷键说明统一移动到操作项右侧，并更新为“长按 ALT 期间进行转写”“支持精准转录与 AI 润色双模式切换”“下发指令，改写已有内容”。
+- 首页新增状态引导提示，启动、停止和重启按钮层级更清楚，用户能更快判断下一步操作。
+- 总节约时间改为按 `今日转写字数 ÷ 100 × 60` 秒估算，并在统计卡片中展示计算口径。
+
+## 0.1.39 更新重点
+
+- 融合团队优化版 UI/UX：主界面改为侧边导航工作台，首页、历史、词典、设置、订阅计划、账号、隐私和开发者栏目更清晰。
+- 首页保留语音控制台的 `启动`、`停止`、`重启` 按钮，用户打开软件后能直接看到本地引擎控制入口。
+- Electron 主窗口改为透明背景，最外侧四个角跟随圆角窗口显示，不再露出直角底色。
+- 右上角最小化、最大化和关闭按钮改为标准线形图标，不再显示 `-`、`[]`、`x` 这类奇怪文本符号。
+
+## 0.1.38 更新重点
+
+- Windows 语音控制台快捷键改为 `CTRL + O` 启动、`CTRL + P` 停止。Electron 主进程会注册全局快捷键，所以即使本地 Python engine 已停止，`CTRL + O` 仍能重新启动语音控制台。
+- `CTRL + O` 启动时会强制让 engine 以“转写已启用”状态运行；如果 engine 还活着但转写已关闭，会自动重启到可转写状态。
+- Windows 默认语音热键改为右侧修饰键专属：按住 `RIGHT ALT` 转写，双击 `RIGHT ALT` 切换原生/微润色模式，按住 `RIGHT ALT + RIGHT SHIFT` 进入 AI 编辑。左侧 `ALT` 不再触发 TypeUp 转写。
+- 个人词库、本地纠错学习和相关接口已从当前版本移除，计划第二版重新设计后再加入。
+- `npm.cmd run start` 的开发模式默认设置 `TYPEUP_USE_ENGINE_SOURCE=1`，优先运行 `engine/voice-keyboard/agent` 源码，而不是旧的 `dist/TypeUpAgent/TypeUpAgent.exe`。
+- 修复 Windows `pynput` 键盘监听回调签名不兼容的问题，避免启动后出现 `TypeError: PushToTalk._on_press() takes 2 positional arguments but 3 were given`。
 
 ## 0.1.37 更新重点
 
@@ -165,7 +217,6 @@ Local Node server
 - Electron 本地 server 保存登录态并自动刷新 token。
 - 登录态保存在 `%APPDATA%\TypeUp\cloud-bridge.json`。
 - Python engine 配置保存在 `%USERPROFILE%\.voice-keyboard\config.yaml`。
-- 个人纠正记忆保存在 `%APPDATA%\TypeUp\engine\corrections.json`，只在本机使用，不上传后端。
 - 登录成功后，Electron 会把 engine 的 STT/LLM provider 自动切到 `typeup_backend`。
 - 语音识别和 AI 编辑统一走后端代理，并由后端做权益和额度校验。
 
@@ -230,6 +281,8 @@ npm.cmd run start
 
 在 PowerShell 中建议使用 `npm.cmd`。Windows 同时提供 `npm.cmd` 和 `npm.ps1` 两个入口，直接运行 `npm` 时可能命中 `npm.ps1`，被 PowerShell 执行策略拦截；`npm.cmd` 会走 Windows 命令脚本入口，更稳定。
 
+源码开发模式下，`npm.cmd run start` 会通过 `TYPEUP_USE_ENGINE_SOURCE=1` 让 Electron 启动 `engine\voice-keyboard\.venv\Scripts\python.exe -m agent.main`，因此 Python engine 源码改动会直接生效。只有构建安装包或验证打包产物时才需要运行 `npm.cmd run engine:build` 生成 `dist\TypeUpAgent\TypeUpAgent.exe`。
+
 ```powershell
 npm.cmd install
 npm.cmd run engine:setup
@@ -245,9 +298,9 @@ npm.cmd run start
 5. `DEV_MOCK_PAYMENTS=true` 时会打开本地支付链接，后端会把订单标记为 `paid`。
 6. 点击刷新订单或刷新账号，确认权益为 active。
 7. 点击启动本地引擎。
-8. 按住 `ALT` 说话，松开后通过后端 STT 代理转写。
-9. 按一下 `CTRL + ALT` 启用或关闭转写功能；关闭后按住 `ALT` 不会触发转写。
-10. 按住 `ALT + SPACE` 进行 AI 编辑，通过后端 LLM 代理处理。
+8. 按住 `RIGHT ALT` 说话，松开后通过后端 STT 代理转写。
+9. 按 `CTRL + P` 停止语音控制台；按 `CTRL + O` 重新启动并启用转写。
+10. 按住 `RIGHT ALT + RIGHT SHIFT` 进行 AI 编辑，通过后端 LLM 代理处理。
 
 ### 4. 测试版安装包使用
 
@@ -257,7 +310,7 @@ npm.cmd run start
 2. 注册账号，邮箱需要是标准邮箱格式，密码至少 8 位。
 3. 注册成功后会自动获得 `free_trial` 免费权益：30 天、600 分钟语音额度、3000 次 AI 请求额度。
 4. 点击「启动」启动本地引擎。
-5. 按住 `ALT` 说话转写；按一下 `CTRL + ALT` 开启或关闭转写模式；按住 `ALT + SPACE` 使用 AI 编辑。
+5. 按住 `RIGHT ALT` 说话转写；按 `CTRL + P` 停止语音控制台，按 `CTRL + O` 启动语音控制台；按住 `RIGHT ALT + RIGHT SHIFT` 使用 AI 编辑。
 
 如果注册时密码少于 8 位，前端会直接提示「注册密码至少 8 位」；后端也会返回「密码至少 8 位」，不会再只显示笼统的「请求参数不正确」。
 
@@ -275,16 +328,15 @@ npm.cmd run start
 - Python engine 的 STT/LLM provider 会切到 `typeup_backend`，并调用后端 `/v1/stt/transcribe`、`/v1/llm/chat`。
 - engine 启动、STT/LLM 请求遇到 `401`、以及刷新后端 token 后，都会优先同步 `%APPDATA%\TypeUp\cloud-bridge.json` 和 `%USERPROFILE%\.voice-keyboard\config.yaml`，避免 UI 与 engine 登录态分叉导致“刷新凭证无效”。
 - 后端返回 `401` 或 `403` 时，本地 server 会清空登录态，并同步清掉 Python engine 配置里的 access/refresh token。
-- `typeup_backend` 模式下，LLM 会使用后端 token 初始化，因此 `ALT + SPACE` AI 编辑热键会被正确注册和拦截。
-- Windows 默认还提供 `CTRL + ALT` 切换式转写热键；该组合不会在只按下第一枚修饰键时被钩子吞掉，只有组合成立时才拦截。
+- `typeup_backend` 模式下，LLM 会使用后端 token 初始化，因此 `RIGHT ALT + RIGHT SHIFT` AI 编辑热键会被正确注册和拦截。
+- Windows 默认提供 `CTRL + O` 启动语音控制台、`CTRL + P` 停止语音控制台；这两个快捷键由 Electron 主进程注册，即使 engine 已停止也能重新启动。
 - 语音输入会在最终打字前清理 STT/LLM 偶发生成的开头 Markdown/井号标记，例如 `#`、`＃`、`润色结果：`、代码围栏等，避免正文前多出井号。
-- 语音输入后 30 秒内，如果用户删除刚输出的小片段并手动输入替代文本，engine 会把这类 `原识别片段 -> 用户修正片段` 记录为本地候选；同一修正确认两次后会在下一次 STT 后处理里自动生效。
-- Windows 悬浮状态框会在按住 `ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时通过平滑衰减回到静止状态。
+- Windows 悬浮状态框会在按住 `RIGHT ALT` 说话时根据麦克风音量和 VAD 人声检测驱动右侧语音条跳动，安静时通过平滑衰减回到静止状态。
 - Windows 悬浮状态框已改为双缓冲绘制，并禁止音量条刷新时擦除背景，减少透明窗口闪烁；React 底部状态栏也会去重相同状态更新，避免“处理中/就绪”反复重绘。
 - 语音控制台的「启动 / 停止」按钮会按本地 engine 状态互斥高亮：运行时启动按钮为蓝色，停止或异常时停止按钮为蓝色，不需要再只看顶部状态标签判断当前状态。
 - 本地 server 会把启动日志、凭证同步日志和 STT 结果日志区分开：只有“识别中/解析指令”才进入 `transcribing`，避免启动后误停在“处理中”。
 - React UI 的快捷键提示会按当前平台和本地 engine 配置动态显示，避免 Windows 用户看到 macOS 默认的“右 Shift / 右 Option”提示。
-- Windows 默认热键配置为通用 `ALT` / `ALT + SPACE`，底层会兼容 `alt_l`、`alt_r` 和通用 `alt` 事件，减少不同键盘布局或应用场景下的热键穿透。
+- Windows 默认热键配置为 `RIGHT ALT` / `RIGHT ALT + RIGHT SHIFT`，底层使用 `alt_r` 和 `shift_r` 区分左右侧修饰键，避免左侧 `ALT` 误触发转写。
 - AI 编辑热键现在进入 Instruction Mode：语音会先经过 STT，再交给本地意图分类和后端 LLM 代理生成可验证的操作，而不是把模型聊天内容当正文输入。
 - 普通问答类 AI 回复只显示在状态框，不写入当前输入框；需要写入内容时必须被识别为生成、改写或记忆片段召回。
 - 删除类指令采用保守策略：有选区时可删除选区；“清空全文”等明确指令可执行整段删除；没有选区的局部删除不会猜测用户想删哪一段。
@@ -292,21 +344,13 @@ npm.cmd run start
 - 已知可继续优化项：原生 Win32 圆角裁剪仍可能在个别屏幕缩放下出现轻微边缘毛刺，后续可改成 per-pixel alpha layered window 继续打磨。
 - 未登录时启动 engine 会进入 `needs_config` 状态，提示先登录后端账号。
 
-## 个人词库与纠正记忆
+## 个人词库
 
-TypeUp 会在本地学习用户手动修正过的专有名词、人名和产品名，例如把“胡仁远”改成“胡任远”、把“胡少宏”改成“胡少鸿”、把 `claude codecs` 改成 `claude codex`。学习数据保存在 `%APPDATA%\TypeUp\engine\corrections.json`；测试时可以用 `TYPEUP_ENGINE_USER_DIR` 覆盖用户目录。
-
-自动学习只采样短窗口、小范围替换：语音输出前后会用 Windows UI Automation 非侵入式读取当前焦点输入框文本快照；用户在 30 秒内手动改错后，遇到 Enter、下一次语音输入、鼠标点击或超时会再次读取快照，并用前后文本 diff 推断 `原识别片段 -> 用户修正片段`。编辑过程中也会缓存最近一次修正后的快照，因此微信这类按 Enter 发送后会清空输入框的场景，仍可从缓存快照学习用户刚刚改过的人名或词。读不到 UIA 快照时不会扰动输入框，只会跳过快照学习并保留原有键盘事件兜底。整段大改写、多处无关修改、删除后未输入、纯标点、过短片段和与本次语音输出区域无关的修改不会生成规则。
-
-纠正规则字段包括 `id`、`source`、`target`、`count`、`confidence`、`enabled`、`created_at`、`updated_at`、`last_seen_at`。同一个 `source + target` 重复出现会累加次数并提升置信度；同一个 source 出现多个 target 时会保留多条，只应用已启用且置信度最高的规则。
-
-STT 返回后、真正输入前会先应用本地高置信规则。规则需要满足 `confidence >= 2` 或 `count >= 2` 才会自动替换，所以第一次学习先作为候选，第二次确认后生效。替换支持中文连续文本、英文大小写保留，以及简单的英文空格/标点边界。
-
-桌面端新增“个人词库”管理页，可以搜索、手动新增、启用/禁用和删除纠正记忆，并展示候选/已生效状态与最后学习时间；页面打开和停留期间会自动刷新，便于看到 engine 自动学习到的新记录。这些操作只改本机文件。对于本地 `glm_asr_2512` provider，engine 会把已启用 target 合并为最多 100 个 hotwords；`typeup_backend` provider 暂时只做本地后处理，因为后端 `/v1/stt/transcribe` 当前不接收 hotwords。AI 微润色和编辑提示也会带上近期高置信个人词汇，提醒模型优先保留这些写法。
+个人词库和本地纠错学习功能已从当前版本移除，计划在第二版本重新设计后再加入。当前版本不会写入 `%APPDATA%\TypeUp\engine\corrections.json`，也不会在 STT 后处理或 AI 提示词中使用个人纠正规则。
 
 ## AI 编辑与指令模式
 
-`ALT + SPACE` 对应 AI 指令模式。它的目标不是聊天，而是把用户说的话变成一个安全、可验证的本地文本操作：
+`RIGHT ALT + RIGHT SHIFT` 对应 AI 指令模式。它的目标不是聊天，而是把用户说的话变成一个安全、可验证的本地文本操作：
 
 1. 录音结束后，engine 先通过后端 STT 代理获得语音文本。
 2. 本地意图分类器判断这是改写、删除、生成、撤销、打开应用、快捷键、记忆片段操作，还是普通问答。
@@ -343,8 +387,6 @@ npm.cmd run build
 npm.cmd run build:win
 engine\voice-keyboard\.venv\Scripts\python.exe -m unittest discover -s engine\voice-keyboard\test
 engine\voice-keyboard\.venv\Scripts\python.exe -m compileall engine\voice-keyboard\agent engine\voice-keyboard\test
-node scripts\test-corrections-store.cjs
-node --check electron\corrections-store.js
 node --check electron\local-server.js
 node --check electron\settings-store.js
 node --check electron\main.js
@@ -354,10 +396,12 @@ node --check electron\agent-manager.js
 node --check electron\usage-store.js
 ```
 
-本次 `CTRL + ALT` 切换转写最终检查使用：
+本次 `CTRL + O` / `CTRL + P` 语音控制台快捷键最终检查使用：
 
 ```powershell
 git diff --check
+node scripts\test-voice-shortcuts.cjs
+node scripts\test-agent-manager-start-transcription.cjs
 engine\voice-keyboard\.venv\Scripts\python.exe -m unittest discover -s engine\voice-keyboard\test
 engine\voice-keyboard\.venv\Scripts\python.exe -m compileall -q engine\voice-keyboard\agent engine\voice-keyboard\test
 node --check electron\settings-store.js
@@ -395,10 +439,6 @@ GET  /api/usage
 GET  /api/settings
 PUT  /api/settings
 
-GET    /api/corrections
-POST   /api/corrections
-PATCH  /api/corrections/:id
-DELETE /api/corrections/:id
 ```
 
 本地接口会把后端错误保持为统一格式：
@@ -448,30 +488,30 @@ POST /v1/auth/refresh
 
 如果后端返回 `401` 或 `403`，Electron 本地 server 会清空 `cloud-bridge.json` 中的登录态，并把 engine 配置中的 `access_token` / `refresh_token` 清空；用户需要重新登录后端账号。`403` 通常表示账号已被禁用。
 
-个人纠正记忆不改变后端 API contract。`typeup_backend` 模式继续只调用后端 STT/LLM 代理，纠正规则在本地 STT 后处理链路里执行；本地 `glm_asr_2512` provider 才会把个人词库 target 作为 hotwords 传给模型。
 
 ## 快捷键
 
 TypeUp 默认 Windows 快捷键：
 
-- `ALT`：按住说话，松开后转写到当前光标。
-- `CTRL + ALT`：启用或关闭转写功能；关闭后 `ALT` 恢复为普通按键，不触发转写。
-- `ALT + SPACE`：按住进行 AI 编辑。
-- 双击 `ALT`：切换原生/微润色模式。
+- `RIGHT ALT`：按住说话，松开后转写到当前光标。
+- `CTRL + O`：启动语音控制台，并启用后台转写。
+- `CTRL + P`：停止语音控制台；停止后本地 engine 退出，`RIGHT ALT` 恢复为普通按键。
+- `RIGHT ALT + RIGHT SHIFT`：按住进行 AI 编辑。
+- 双击 `RIGHT ALT`：切换原生/微润色模式。
 
-macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双击右 `Shift` 切换润色模式。桌面 UI 会读取当前平台和 `settings.audio.ptt_key` / `settings.audio.toggle_key` / `settings.audio.ai_key` 后再显示提示文案。
+macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双击右 `Shift` 切换润色模式。桌面 UI 会读取当前平台和 `settings.audio.ptt_key` / `settings.audio.enable_key` / `settings.audio.disable_key` / `settings.audio.ai_key` 后再显示提示文案。
 
-按住 `ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。音量条刷新使用平滑衰减和双缓冲绘制，减少闪烁；如果只剩轻微边缘毛刺，属于后续视觉优化项。
+按住 `RIGHT ALT` 录音时，Windows 悬浮状态框右侧语音条会随检测到的人声音量动态变化，用于确认麦克风正在采集到说话声。音量条刷新使用平滑衰减和双缓冲绘制，减少闪烁；如果只剩轻微边缘毛刺，属于后续视觉优化项。
 
 ## 自动更新
 
-桌面端已经接入 `electron-updater`，更新源指向 GitHub Releases：`oxygen0827/typeup-win`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
+桌面端已经接入 `electron-updater`，当前 Windows 更新源指向 TypeUp 自有静态发布目录：`http://150.158.146.192:6052/apps/typeup-win-release/`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
 
-注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.1.37`。
+注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.3.4`。
 
-`0.1.19` 起，点击“立即安装并重启”前会把目标版本、Release 标题、Release notes 和发布页链接写入本地用户数据。新版首次启动时，React 主界面会在顶部显示同风格更新说明卡片；同一版本关闭后只记录为已读，不会重复弹出。发布 GitHub Release 时请把用户能看懂的更新内容写进 Release notes，客户端会优先展示这份说明。使用 TypeUp 自有服务器更新源时，`latest.yml` 默认不携带正文，客户端会回退到内置版本说明；每次发版都要同步更新 `BUILTIN_RELEASE_NOTES`，确保首页显示真实更新内容。
+`0.1.19` 起，点击“立即安装并重启”前会把目标版本、Release 标题、Release notes 和发布页链接写入本地用户数据。新版首次启动时，React 主界面会在顶部显示同风格更新说明卡片；同一版本关闭后只记录为已读，不会重复弹出。TypeUp 自有服务器更新源的 `latest.yml` 默认不携带正文，客户端会回退到内置版本说明；每次发版都要同步更新 `BUILTIN_RELEASE_NOTES`，确保首页显示真实更新内容。
 
-后续计划：增加 TypeUp 自有更新下载源，降低国内网络访问 GitHub Release 时的超时和慢速问题。推荐方案是由后端提供 `GET /v1/desktop/releases/latest?platform=win32&arch=x64&current=<version>` 元数据接口，返回最新版本、更新说明、安装包 URL、size 和 sha256；安装包文件放到对象存储/CDN（例如 COS/OSS/R2 或自有 Nginx 静态目录）。客户端优先请求 TypeUp 后端元数据并从 CDN 下载，失败时再 fallback 到 GitHub API / `latest.yml`；无论下载源来自哪里，都必须继续校验 size 和 sha256 后才允许安装。
+当前发布流程会把 `TypeUp-Setup-<version>.exe`、`.blockmap` 和 `latest.yml` 上传到服务器目录 `/home/wq/static-site-deployer/data/sites/typeup-win-release`，创建 `releases/<timestamp>-v<version>` 快照，并把 `current` 切换到该快照。公网只读取 `current`，所以发布后必须验证 `latest.yml`、安装包和 blockmap 的公网 URL。
 
 发布新版时需要：
 
@@ -481,7 +521,7 @@ npm.cmd version <next-version> --no-git-tag-version
 npm.cmd run build:win
 ```
 
-`build:win` 会先自动重建内嵌 Python engine，再构建 React UI 和 NSIS 安装包。然后在 GitHub 创建对应版本的 Release，例如 `v0.1.20`，上传 `release\` 目录里的安装包和更新元数据：
+`build:win` 会先自动重建内嵌 Python engine，再构建 React UI 和 NSIS 安装包。然后使用 TypeUp 发布脚本上传 `release\` 目录里的安装包和更新元数据：
 
 ```text
 TypeUp-Setup-<version>.exe
@@ -489,7 +529,7 @@ TypeUp-Setup-<version>.exe.blockmap
 latest.yml
 ```
 
-如果以后想让构建命令直接发布到 GitHub Releases，可以在本机设置 `GH_TOKEN` 后使用 electron-builder 的 `--publish always`；这个 token 只给发布者本机使用，不能写进代码或安装包。
+发布完成后检查 `http://150.158.146.192:6052/apps/typeup-win-release/latest.yml` 返回新版本，并用 `curl.exe -I` 确认安装包和 blockmap 都是 `200 OK`。
 
 ## 构建
 
