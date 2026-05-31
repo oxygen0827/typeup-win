@@ -402,6 +402,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.5": {
+    releaseName: "TypeUp 0.3.5",
+    zh: {
+      summary: "本次发布继续打磨设置页和开发者栏目的视觉细节。",
+      items: [
+        "开发者栏目里的启动、重启和停止按钮增加独立间距，避免按钮挤在一起。",
+        "麦克风设置区域把当前设备和录入设备选择拆成更清晰的独立卡片。",
+        "录入设备下拉框的边距、边框和高度统一优化，提升设置页的可读性。",
+      ],
+    },
+    en: {
+      summary: "This release refines Settings and Developer layout details.",
+      items: [
+        "Developer start, restart, and stop controls now have clearer spacing instead of crowding together.",
+        "Microphone settings separate the current device and input-device selector into distinct cards.",
+        "Input-device selector spacing, border treatment, and height are tightened for better readability.",
+      ],
+    },
+  },
   "0.3.4": {
     releaseName: "TypeUp 0.3.4",
     zh: {
@@ -1926,14 +1945,14 @@ function DeveloperHub({
       <div className="developer-layout">
         <section className="settings-group">
           <SettingRow title={text.localEngine} detail={lang === "zh" ? "启动、停止、重启和状态检查。" : "Start, stop, restart, and inspect the local engine."}>
-            <div className="button-row">
-              <button type="button" onClick={onStart} disabled={!apiBase}><Play size={16} />{text.start}</button>
-              <button type="button" onClick={onRestart} disabled={!apiBase}><RefreshCw size={16} />{text.restart}</button>
-              <button type="button" onClick={onStop} disabled={!apiBase}><Square size={16} />{text.stop}</button>
+            <div className="button-row developer-action-row">
+              <button className="developer-action start" type="button" onClick={onStart} disabled={!apiBase}><Play size={16} />{text.start}</button>
+              <button className="developer-action restart" type="button" onClick={onRestart} disabled={!apiBase}><RefreshCw size={16} />{text.restart}</button>
+              <button className="developer-action stop" type="button" onClick={onStop} disabled={!apiBase}><Square size={16} />{text.stop}</button>
             </div>
           </SettingRow>
           <SettingRow title={lang === "zh" ? "权限与设备" : "Permissions and devices"} detail={lang === "zh" ? "麦克风权限、输入设备列表和平台权限。" : "Microphone permission, input device list, and platform permissions."}>
-            <div className="button-row">
+            <div className="button-row developer-secondary-row">
               <button type="button" onClick={onMic} disabled={!apiBase}>{text.microphone}</button>
               <button type="button" onClick={onDevices} disabled={!apiBase}>{lang === "zh" ? "设备" : "Devices"}</button>
             </div>
