@@ -7,8 +7,9 @@ const USER_DIR = path.join(resolveAppDataDir(), "TypeUp", "engine");
 const CONFIG_PATH = path.join(USER_DIR, "config.yaml");
 const TYPEUP_DIR = path.join(resolveAppDataDir(), "TypeUp");
 const CLOUD_PATH = path.join(TYPEUP_DIR, "cloud-bridge.json");
-const CONFIG_VERSION = 7;
+const CONFIG_VERSION = 8;
 const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
+const POLISH_STYLES = new Set(["micro", "prompt", "formal", "concise"]);
 const DEFAULT_AUDIO_HOTKEYS = process.platform === "darwin"
   ? { ptt_key: "shift_r", ai_key: "alt_r" }
   : { ptt_key: "alt_r", ai_key: ["alt_r", "shift_r"], enable_key: ["ctrl", "o"], disable_key: ["ctrl", "p"] };
@@ -26,6 +27,8 @@ const DEFAULT_CONFIG = {
     mode: "ptt",
     device: "auto",
     vad_aggressiveness: 2,
+    polish_style: "micro",
+    polish_style_prompt: "",
     ...DEFAULT_AUDIO_HOTKEYS,
   },
   typing: {
@@ -70,6 +73,8 @@ function ensureDefaultConfig() {
           ai_key: DEFAULT_CONFIG.audio.ai_key,
           enable_key: DEFAULT_CONFIG.audio.enable_key,
           disable_key: DEFAULT_CONFIG.audio.disable_key,
+          polish_style: polishStyleValue(current.audio?.polish_style),
+          polish_style_prompt: stringValue(current.audio?.polish_style_prompt) || DEFAULT_CONFIG.audio.polish_style_prompt,
         },
         typing: current.typing || DEFAULT_CONFIG.typing,
         typeup: { managed: true, version: CONFIG_VERSION },
@@ -89,6 +94,8 @@ function ensureDefaultConfig() {
           ai_key: DEFAULT_CONFIG.audio.ai_key,
           enable_key: DEFAULT_CONFIG.audio.enable_key,
           disable_key: DEFAULT_CONFIG.audio.disable_key,
+          polish_style: polishStyleValue(current.audio?.polish_style),
+          polish_style_prompt: stringValue(current.audio?.polish_style_prompt) || DEFAULT_CONFIG.audio.polish_style_prompt,
         },
         typeup: { managed: true, version: CONFIG_VERSION },
       });
@@ -225,6 +232,8 @@ function normalizePatch(patch) {
       ai_key: hotkeyValue(patch.audio.ai_key || DEFAULT_CONFIG.audio.ai_key),
       enable_key: hotkeyValue(patch.audio.enable_key || DEFAULT_CONFIG.audio.enable_key),
       disable_key: hotkeyValue(patch.audio.disable_key || DEFAULT_CONFIG.audio.disable_key),
+      polish_style: polishStyleValue(patch.audio.polish_style),
+      polish_style_prompt: stringValue(patch.audio.polish_style_prompt) || DEFAULT_CONFIG.audio.polish_style_prompt,
       toggle_key: hotkeyValue(patch.audio.toggle_key),
     };
   }
@@ -318,6 +327,11 @@ function hotkeyValue(value) {
     return tokens.length ? tokens : undefined;
   }
   return stringValue(value);
+}
+
+function polishStyleValue(value) {
+  const style = (stringValue(value) || DEFAULT_CONFIG.audio.polish_style).toLowerCase();
+  return POLISH_STYLES.has(style) ? style : DEFAULT_CONFIG.audio.polish_style;
 }
 
 module.exports = {

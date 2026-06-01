@@ -26,8 +26,10 @@ assert.deepEqual(settings.audio.enable_key, ["ctrl", "o"]);
 assert.deepEqual(settings.audio.disable_key, ["ctrl", "p"]);
 assert.equal(settings.audio.ptt_key, "alt_r");
 assert.deepEqual(settings.audio.ai_key, ["alt_r", "shift_r"]);
+assert.equal(settings.audio.polish_style, "micro");
+assert.equal(settings.audio.polish_style_prompt, "");
 assert.equal(settings.audio.toggle_key, undefined);
-assert.equal(settings.typeup.version, 7);
+assert.equal(settings.typeup.version, 8);
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log("settings hotkeys migration ok");

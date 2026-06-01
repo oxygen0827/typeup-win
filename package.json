@@ -11,6 +11,7 @@
     "build": "node node_modules/vite/bin/vite.js build --configLoader native",
     "build:win": "npm run engine:build && npm run build && node node_modules/electron-builder/cli.js --win nsis",
     "test:release-notes": "node scripts/test-release-notes.mjs",
+    "test:settings-store": "node scripts/test-settings-store-hotkeys.cjs && node scripts/test-settings-store-polish-style.cjs",
     "test:updater": "node scripts/test-updater.cjs",
     "build:mac": "npm run build && node node_modules/cross-env/dist/bin/cross-env.js npm_config_electron_mirror= NPM_CONFIG_ELECTRON_MIRROR= ELECTRON_MIRROR= ELECTRON_BUILDER_BINARIES_MIRROR=https://github.com/electron-userland/electron-builder-binaries/releases/download/ node node_modules/electron-builder/cli.js --mac dmg",
     "engine:setup": "powershell -ExecutionPolicy Bypass -File scripts/setup-engine.ps1",

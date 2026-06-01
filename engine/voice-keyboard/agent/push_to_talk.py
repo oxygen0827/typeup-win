@@ -325,6 +325,7 @@ class PushToTalk:
         device:            Optional[str] = "auto",
         status_window=None,
         kbd_monitor=None,
+        polish_label: Optional[str] = None,
         record_debug_audio: bool = False,
         debug_audio_dir: Optional[str] = None,
     ):
@@ -365,6 +366,7 @@ class PushToTalk:
         self._toggle_sequence_tokens: set[str] = set()
         self._device_hint       = device
         self._status            = status_window
+        self._polish_label      = (polish_label or "微润色").strip() or "微润色"
         self._record_debug_audio = bool(record_debug_audio)
         self._debug_audio_dir    = debug_audio_dir
         self._device_idx        = None
@@ -426,7 +428,7 @@ class PushToTalk:
         self._listener = kb.Listener(**listener_kwargs)
         self._listener.start()
 
-        hints = [f"{'/'.join(_format_hotkey(h) for h in self._ptt_hotkeys)} 说话（双击切换微润色）"]
+        hints = [f"{'/'.join(_format_hotkey(h) for h in self._ptt_hotkeys)} 说话（双击切换{self._polish_label}）"]
         if self._edit_hotkeys:
             hints.append(f"{'/'.join(_format_hotkey(h) for h in self._edit_hotkeys)} 语音编辑")
         if self._ai_hotkeys:
@@ -596,7 +598,7 @@ class PushToTalk:
 
     def _toggle_polish_mode(self):
         self._polish_mode = not self._polish_mode
-        mode_name = "微润色" if self._polish_mode else "原文"
+        mode_name = self._polish_label if self._polish_mode else "原文"
         print(f"[ptt] 切换为「{mode_name}」模式")
         if self._status is not None and hasattr(self._status, "show_message"):
             self._status.show_message(f"润色模式：{mode_name}", seconds=1.2)
@@ -982,7 +984,7 @@ class PushToTalk:
         self._stream.start()
         if self._active_key == "dictate":
             if self._polish_mode:
-                label = "微润色 录音中"
+                label = f"{self._polish_label} 录音中"
             else:
                 label = "录音中"
             self._set_status(self._dictate_recording_state())

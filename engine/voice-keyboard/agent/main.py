@@ -114,6 +114,12 @@ _POLISH_STYLE_PROMPTS = {
     "formal": "测试版风格：在不改变含义的前提下，让文本更正式、更适合邮件、报告和工作沟通。",
     "concise": "测试版风格：在不改变含义的前提下，尽量压缩冗余表达，让文本更短、更直接。",
 }
+_POLISH_STYLE_LABELS = {
+    "micro": "微润色",
+    "prompt": "Prompt 风格",
+    "formal": "正式风格",
+    "concise": "简洁风格",
+}
 
 
 _POLISH_LABEL_RE = re.compile(r"^(?:润色后|润色结果|修改后|修改结果|优化后|优化结果|结果|输出)\s*[:：]\s*")
@@ -197,6 +203,12 @@ def _polish_system_for_style(style: str = "", custom_prompt: str = "") -> str:
     if not style_prompt:
         return _POLISH_SYSTEM
     return f"{_POLISH_SYSTEM}\n\n{style_prompt}"
+
+
+def _polish_label_for_style(style: str = "", custom_prompt: str = "") -> str:
+    if str(custom_prompt or "").strip():
+        return "自定义风格"
+    return _POLISH_STYLE_LABELS.get(str(style or "").strip().lower(), "微润色")
 
 
 def _local_micro_polish(text: str) -> str:
@@ -470,6 +482,7 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
             device=device,
             status_window=status_window,
             kbd_monitor=kbd_monitor,
+            polish_label=_polish_label_for_style(polish_style, polish_style_prompt),
             record_debug_audio=record_debug_audio,
             debug_audio_dir=debug_audio_dir,
         )

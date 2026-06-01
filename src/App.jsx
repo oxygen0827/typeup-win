@@ -125,6 +125,19 @@ const COPY = {
     ptt: "按键",
     original: "原生",
     lightPolish: "微润色",
+    outputStyle: "输出风格",
+    outputStyleHint: "双击说话快捷键切到润色模式后使用",
+    outputStyleMicro: "微润色",
+    outputStylePrompt: "Prompt",
+    outputStyleFormal: "正式",
+    outputStyleConcise: "简洁",
+    outputStyleMicroDetail: "保留原意和语气，只清理口语填充、错别字和轻微表达问题。",
+    outputStylePromptDetail: "把零散口语整理成适合发给 AI 工具的清晰需求。",
+    outputStyleFormalDetail: "更适合邮件、报告和工作沟通。",
+    outputStyleConciseDetail: "压缩冗余表达，让内容更短、更直接。",
+    outputStyleCustom: "自定义要求",
+    outputStyleCustomDetail: "留空则使用所选风格的内置规则",
+    outputStyleCustomPlaceholder: "例如：改成会议纪要风格，保留项目名，最后列出下一步。",
     statusDockReady: "TypeUp 已接管预览页热键",
     statusDockHint: "快捷键会根据当前平台和配置显示。",
     shortcutSpeak: "开始说话",
@@ -233,6 +246,19 @@ const COPY = {
     ptt: "Push",
     original: "Original",
     lightPolish: "Light Polish",
+    outputStyle: "Output Style",
+    outputStyleHint: "Used after double-tapping the speak shortcut into polish mode",
+    outputStyleMicro: "Micro",
+    outputStylePrompt: "Prompt",
+    outputStyleFormal: "Formal",
+    outputStyleConcise: "Concise",
+    outputStyleMicroDetail: "Keep intent and tone while fixing fillers, typos, and minor phrasing.",
+    outputStylePromptDetail: "Turn spoken notes into a clear prompt for AI tools.",
+    outputStyleFormalDetail: "Better suited for email, reports, and work communication.",
+    outputStyleConciseDetail: "Reduce redundancy so the result is shorter and more direct.",
+    outputStyleCustom: "Custom Instructions",
+    outputStyleCustomDetail: "Leave empty to use the built-in rule for the selected style.",
+    outputStyleCustomPlaceholder: "Example: write it like meeting notes, keep product names, and end with next steps.",
     statusDockReady: "TypeUp is using the preview shortcuts",
     statusDockHint: "Shortcuts follow the current platform and settings.",
     shortcutSpeak: "Start Speaking",
@@ -346,10 +372,11 @@ Object.assign(COPY.en, {
 });
 
 const DEFAULT_BACKEND_URL = "http://150.158.146.192:6053";
+const POLISH_STYLE_IDS = ["micro", "prompt", "formal", "concise"];
 
 const EMPTY_SETTINGS = {
   stt: { provider: "typeup_backend", api_base_url: DEFAULT_BACKEND_URL, access_token: "", model: "glm-asr-2512", language: "zh" },
-  audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2 },
+  audio: { mode: "ptt", device: "auto", vad_aggressiveness: 2, polish_style: "micro", polish_style_prompt: "" },
   typing: { method: "unicode" },
   llm: { provider: "typeup_backend", api_base_url: DEFAULT_BACKEND_URL, access_token: "", model: "glm-4-flash" },
 };
@@ -1007,6 +1034,7 @@ export default function App() {
   const enableKey = settings.audio?.enable_key || defaultHotkeys.enableKey;
   const disableKey = settings.audio?.disable_key || defaultHotkeys.disableKey;
   const polishKey = `${lang === "zh" ? "双击" : "Double"} ${formatHotkey(pttKey, lang, platform)}`;
+  const polishStyle = normalizedPolishStyle(settings.audio?.polish_style);
   const statusDockHint = formatStatusDockHint(lang, pttKey, aiKey, enableKey, disableKey, polishKey, platform);
   const engineProcessStopped = ["stopped", "stopping", "error"].includes(status.state);
   const engineAcceptingVoice = ["listening", "transcribing"].includes(status.state);
@@ -1384,6 +1412,9 @@ export default function App() {
                     <SettingRow title={lang === "zh" ? "输出语言" : "Output language"} detail={`${lang === "zh" ? "当前配置" : "Current"}: ${settings.stt?.language || "auto"}`}>
                       <span className="select-pill">{settings.stt?.language || "auto"}</span>
                     </SettingRow>
+                    <SettingRow title={text.outputStyle} detail={polishStyleDetail(polishStyle, text)}>
+                      <span className="select-pill">{polishStyleLabel(polishStyle, text)}</span>
+                    </SettingRow>
                     <SettingRow title={text.typing} detail={settings.typing?.method === "clip" ? text.clipboard : text.unicode}>
                       <Segmented
                         label=""
@@ -1442,6 +1473,29 @@ export default function App() {
                     <SettingRow title={text.shortcutPolish} detail={text.shortcutPolishDetail}>
                       <KeyRow keys={polishKey} />
                     </SettingRow>
+                    <SettingRow title={text.outputStyle} detail={text.outputStyleHint}>
+                      <Segmented
+                        label=""
+                        columns={4}
+                        value={polishStyle}
+                        options={polishStyleOptions(text)}
+                        onChange={(value) => setNested(setSettings, ["audio", "polish_style"], value)}
+                      />
+                    </SettingRow>
+                    <div className="setting-row output-style-editor">
+                      <div>
+                        <strong>{text.outputStyleCustom}</strong>
+                        <span>{text.outputStyleCustomDetail}</span>
+                      </div>
+                      <div className="setting-action">
+                        <textarea
+                          value={settings.audio?.polish_style_prompt || ""}
+                          onChange={(event) => setNested(setSettings, ["audio", "polish_style_prompt"], event.target.value)}
+                          placeholder={text.outputStyleCustomPlaceholder}
+                          rows={4}
+                        />
+                      </div>
+                    </div>
                   </section>
                   <aside className="side-stack">
                     <section className="card meter-card">
@@ -2410,11 +2464,13 @@ function FormSelect({ label, value, onChange, options }) {
   );
 }
 
-function Segmented({ label, value, onChange, options }) {
+function Segmented({ label, value, onChange, options, columns }) {
+  const style = columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
+  const className = columns && columns > 2 ? "field segmented-field-wide" : "field";
   return (
-    <div className="field">
-      <span>{label}</span>
-      <div className="segmented">
+    <div className={className}>
+      {label ? <span>{label}</span> : null}
+      <div className="segmented" style={style}>
         {options.map(([id, labelText]) => (
           <button type="button" key={id} className={value === id ? "selected" : ""} onClick={() => onChange(id)}>
             {labelText}
@@ -2555,6 +2611,35 @@ function formatCurrentMicrophone(configuredDevice, deviceInfo, text, lang) {
   }
   const configured = items.find((item) => String(item.id) === value || item.name.toLowerCase().includes(value.toLowerCase()));
   return configured?.name || value || text.deviceFallback;
+}
+
+function normalizedPolishStyle(value) {
+  const style = String(value || "micro").trim().toLowerCase();
+  return POLISH_STYLE_IDS.includes(style) ? style : "micro";
+}
+
+function polishStyleOptions(text) {
+  return POLISH_STYLE_IDS.map((style) => [style, polishStyleLabel(style, text)]);
+}
+
+function polishStyleLabel(style, text) {
+  const labels = {
+    micro: text.outputStyleMicro,
+    prompt: text.outputStylePrompt,
+    formal: text.outputStyleFormal,
+    concise: text.outputStyleConcise,
+  };
+  return labels[normalizedPolishStyle(style)] || text.outputStyleMicro;
+}
+
+function polishStyleDetail(style, text) {
+  const details = {
+    micro: text.outputStyleMicroDetail,
+    prompt: text.outputStylePromptDetail,
+    formal: text.outputStyleFormalDetail,
+    concise: text.outputStyleConciseDetail,
+  };
+  return details[normalizedPolishStyle(style)] || text.outputStyleMicroDetail;
 }
 
 function setNested(setter, path, value) {

@@ -479,6 +479,20 @@ class PushToTalkStatusTests(unittest.TestCase):
         self.assertTrue(ptt._polish_mode)
         self.assertEqual(status.messages[-1][0], "润色模式：微润色")
 
+    def test_polish_mode_message_uses_configured_label(self):
+        status = _StatusRecorder()
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            ptt_key="alt_r",
+            status_window=status,
+            polish_label="Prompt 风格",
+        )
+
+        ptt._toggle_polish_mode()
+
+        self.assertTrue(ptt._polish_mode)
+        self.assertEqual(status.messages[-1][0], "润色模式：Prompt 风格")
+
     def test_modifier_combo_does_not_suppress_first_toggle_modifier(self):
         ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_r", toggle_key=["ctrl", "alt"])
 

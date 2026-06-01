@@ -1365,15 +1365,27 @@ button:disabled {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   width: 100%;
-  height: 36px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   background: #fff;
   color: var(--ink);
-  padding: 0 10px;
   outline: none;
+}
+
+.field input,
+.field select {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.field textarea {
+  min-height: 96px;
+  padding: 10px;
+  line-height: 1.45;
+  resize: vertical;
 }
 
 .readonly-field strong {
@@ -1390,7 +1402,8 @@ button:disabled {
 }
 
 .field input:focus,
-.field select:focus {
+.field select:focus,
+.field textarea:focus {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
 }
@@ -2267,6 +2280,36 @@ button:disabled {
 .setting-action .field {
   width: 220px;
   margin-bottom: 0;
+}
+
+.setting-action .segmented-field-wide {
+  width: min(100%, 420px);
+}
+
+.output-style-editor {
+  align-items: start;
+}
+
+.output-style-editor .setting-action {
+  width: min(100%, 420px);
+}
+
+.output-style-editor textarea {
+  width: 100%;
+  min-height: 104px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: var(--ink);
+  background: #fff;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.output-style-editor textarea:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(36, 87, 214, 0.12);
+  outline: 0;
 }
 
 .button-row {
