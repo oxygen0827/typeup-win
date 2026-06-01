@@ -2,6 +2,7 @@ import os
 import platform
 import shutil
 import subprocess
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -123,6 +124,8 @@ if _OS == "Windows":
 _erasing: bool = False
 _simulating: bool = False   # 程序自己发 Cmd+C/V 等按键时置 True，让 PTT 监听忽略
 _use_clipboard_mode: bool = False
+_LONG_TEXT_CLIPBOARD_THRESHOLD = 80
+_CLIPBOARD_RESTORE_DELAY_SECONDS = 0.75
 
 
 @dataclass(frozen=True)
@@ -309,7 +312,7 @@ def type_text(text: str) -> None:
     if _OS == "Darwin":
         _type_via_quartz(text)
     elif _OS == "Windows":
-        if _use_clipboard_mode:
+        if _use_clipboard_mode or len(text) >= _LONG_TEXT_CLIPBOARD_THRESHOLD:
             _type_via_clipboard_win(text)
         else:
             _type_via_sendinput(text)
@@ -486,6 +489,7 @@ def _utf16_code_units(text: str):
 
 def _type_via_clipboard_win(text: str) -> None:
     # Windows 剪贴板粘贴模式：适合微信等拦截 SendInput 的应用
+    old_clip = _get_clipboard_win()
     _set_clipboard_win(text)
     time.sleep(0.03)
     _kb.press(Key.ctrl)
@@ -494,6 +498,20 @@ def _type_via_clipboard_win(text: str) -> None:
     finally:
         _kb.release(Key.ctrl)
     time.sleep(0.03)
+    _schedule_clipboard_restore_win(text, old_clip)
+
+
+def _schedule_clipboard_restore_win(inserted_text: str, old_clip: str) -> None:
+    def restore():
+        time.sleep(_CLIPBOARD_RESTORE_DELAY_SECONDS)
+        try:
+            if _get_clipboard_win() == inserted_text:
+                _set_clipboard_win(old_clip)
+        except Exception:
+            pass
+
+    t = threading.Thread(target=restore, daemon=True, name="TypeUpClipboardRestore")
+    t.start()
 
 
 def _type_via_xtest(text: str) -> None:

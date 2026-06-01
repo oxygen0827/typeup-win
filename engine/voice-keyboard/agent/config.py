@@ -182,6 +182,10 @@ def _env_audio() -> dict | None:
         "disable_key":      os.getenv("DISABLE_KEY", "").strip(),
         "device":           os.getenv("AUDIO_DEVICE", "").strip(),
         "vad_aggressiveness": os.getenv("VAD_AGGRESSIVENESS", "").strip(),
+        "polish_style":     os.getenv("TYPEUP_POLISH_STYLE", "").strip(),
+        "polish_style_prompt": os.getenv("TYPEUP_POLISH_STYLE_PROMPT", "").strip(),
+        "record_debug_audio": os.getenv("TYPEUP_RECORD_DEBUG_AUDIO", "").strip(),
+        "debug_audio_dir":  os.getenv("TYPEUP_DEBUG_AUDIO_DIR", "").strip(),
     }
     cfg = {k: v for k, v in fields.items() if v}
     if cfg.get("vad_aggressiveness"):
@@ -189,6 +193,8 @@ def _env_audio() -> dict | None:
             cfg["vad_aggressiveness"] = int(cfg["vad_aggressiveness"])
         except ValueError:
             del cfg["vad_aggressiveness"]
+    if cfg.get("record_debug_audio"):
+        cfg["record_debug_audio"] = cfg["record_debug_audio"].lower() in {"1", "true", "yes", "on"}
     return cfg or None
 
 

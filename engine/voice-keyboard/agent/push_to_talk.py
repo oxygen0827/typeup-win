@@ -14,6 +14,8 @@ import threading
 import time
 import sys
 import os
+import wave
+from pathlib import Path
 from typing import Callable, Optional
 
 import sounddevice as sd
@@ -25,6 +27,8 @@ import agent.typer as _typer
 SAMPLE_RATE = 16000
 _LEVEL_UPDATE_INTERVAL = 0.04
 _SPEECH_LEVEL_THRESHOLD = 0.025
+_CALLBACK_TIMEOUT_SECONDS = 3.0
+_FIRST_CALLBACK_TIMEOUT_SECONDS = 5.0
 
 try:
     import webrtcvad as _webrtcvad
@@ -321,6 +325,8 @@ class PushToTalk:
         device:            Optional[str] = "auto",
         status_window=None,
         kbd_monitor=None,
+        record_debug_audio: bool = False,
+        debug_audio_dir: Optional[str] = None,
     ):
         self._on_utterance      = on_utterance
         self._on_edit_utterance = on_edit_utterance
@@ -359,6 +365,8 @@ class PushToTalk:
         self._toggle_sequence_tokens: set[str] = set()
         self._device_hint       = device
         self._status            = status_window
+        self._record_debug_audio = bool(record_debug_audio)
+        self._debug_audio_dir    = debug_audio_dir
         self._device_idx        = None
         self._transcription_enabled = (
             True
@@ -561,6 +569,10 @@ class PushToTalk:
         self._active_key = None
         self._active_trigger = None
         self._recording_started_at = 0.0
+        self._last_audio_callback_at = 0.0
+        self._saw_audio_callback = False
+        self._watchdog_stop = threading.Event()
+        self._watchdog_thread: Optional[threading.Thread] = None
         self._buf = []
         self._vad_raw = bytearray()
         self._vad_speech_frames = []
@@ -900,6 +912,8 @@ class PushToTalk:
 
     def _audio_callback(self, indata, frames, time_info, status):
         data = bytes(indata)
+        self._last_audio_callback_at = time.monotonic()
+        self._saw_audio_callback = True
         self._buf.append(data)
         if self._active_key == "dictate" and self._vad is not None:
             self._vad_raw.extend(data)
@@ -930,6 +944,7 @@ class PushToTalk:
         """把当前积累的语音帧作为一句话立刻发出去，重置 VAD 状态。"""
         if len(self._vad_speech_frames) >= MIN_SPEECH_FRAMES:
             pcm = b"".join(self._vad_speech_frames)
+            self._archive_pcm_if_enabled(pcm, "dictate")
             self._vad_sent_count += 1
             n = self._vad_sent_count
             print(f"[ptt] 分句{n} 识别中...    ", end="\r", flush=True)
@@ -950,6 +965,9 @@ class PushToTalk:
         self._vad_in_speech     = False
         self._vad_silent_count  = 0
         self._vad_sent_count    = 0
+        self._last_audio_callback_at = time.monotonic()
+        self._saw_audio_callback = False
+        self._start_recording_watchdog()
         self._set_audio_level(0.0)
         self._stream = sd.RawInputStream(
             samplerate=SAMPLE_RATE,
@@ -985,6 +1003,7 @@ class PushToTalk:
             # 松键时若仍在句子中间，把尾巴也发出去
             if self._vad_in_speech and len(self._vad_speech_frames) >= MIN_SPEECH_FRAMES:
                 pcm = b"".join(self._vad_speech_frames)
+                self._archive_pcm_if_enabled(pcm, "dictate")
                 self._vad_sent_count += 1
                 n = self._vad_sent_count
                 print(f"[ptt] 分句{n} 识别中...    ", end="\r", flush=True)
@@ -1002,6 +1021,7 @@ class PushToTalk:
                     print("[ptt] 录音太短，跳过    ")
                     self._set_status("idle")
                 else:
+                    self._archive_pcm_if_enabled(pcm, "dictate")
                     print("[ptt] 识别中...    ", end="\r", flush=True)
                     self._set_status("recognizing")
                     threading.Thread(
@@ -1025,16 +1045,19 @@ class PushToTalk:
             return
 
         if mode == "dictate":
+            self._archive_pcm_if_enabled(pcm, "dictate")
             label    = "识别中"
             callback = self._on_utterance
             args     = (pcm, self._polish_mode)
             self._set_status("recognizing")
         elif mode == "edit":
+            self._archive_pcm_if_enabled(pcm, "edit")
             label    = "解析编辑指令"
             callback = self._on_edit_utterance
             args     = (pcm,)
             self._set_status("recognizing")
         else:
+            self._archive_pcm_if_enabled(pcm, "ai")
             if self._on_ai_key_down:
                 self._on_ai_key_down()
             label    = "解析AI指令"
@@ -1050,6 +1073,7 @@ class PushToTalk:
         ).start()
 
     def _close_stream(self):
+        self._stop_recording_watchdog()
         if self._stream:
             try:
                 self._stream.stop()
@@ -1057,3 +1081,73 @@ class PushToTalk:
             except Exception:
                 pass
             self._stream = None
+
+    def _start_recording_watchdog(self) -> None:
+        self._stop_recording_watchdog()
+        self._watchdog_stop.clear()
+        self._watchdog_thread = threading.Thread(
+            target=self._recording_watchdog_loop,
+            daemon=True,
+            name="PTT-watchdog",
+        )
+        self._watchdog_thread.start()
+
+    def _stop_recording_watchdog(self) -> None:
+        stop_event = getattr(self, "_watchdog_stop", None)
+        if stop_event is None:
+            return
+        stop_event.set()
+        thread = getattr(self, "_watchdog_thread", None)
+        if thread and thread is not threading.current_thread() and thread.is_alive():
+            thread.join(timeout=0.2)
+        if thread is not threading.current_thread():
+            self._watchdog_thread = None
+
+    def _recording_watchdog_loop(self) -> None:
+        started_at = time.monotonic()
+        while not self._watchdog_stop.wait(0.5):
+            if self._active_key is None:
+                return
+            now = time.monotonic()
+            if not self._saw_audio_callback:
+                if (now - started_at) > _FIRST_CALLBACK_TIMEOUT_SECONDS:
+                    self._abort_recording_from_watchdog("录音启动后没有收到麦克风数据")
+                    return
+                continue
+            if (now - self._last_audio_callback_at) > _CALLBACK_TIMEOUT_SECONDS:
+                self._abort_recording_from_watchdog("录音回调静默停止")
+                return
+
+    def _abort_recording_from_watchdog(self, reason: str) -> None:
+        print(f"[ptt] {reason}，已取消本次录音")
+        self._active_key = None
+        self._active_trigger = None
+        self._buf = []
+        self._vad_raw = bytearray()
+        self._vad_speech_frames = []
+        self._vad_in_speech = False
+        self._vad_silent_count = 0
+        self._vad_sent_count = 0
+        self._set_audio_level(0.0)
+        self._set_status("error_stt")
+        self._close_stream()
+
+    def _archive_pcm_if_enabled(self, pcm: bytes, mode: str) -> None:
+        if not getattr(self, "_record_debug_audio", False) or not pcm:
+            return
+        try:
+            debug_audio_dir = getattr(self, "_debug_audio_dir", None)
+            root = Path(debug_audio_dir).expanduser() if debug_audio_dir else (
+                Path.home() / ".voice-keyboard" / "debug-audio"
+            )
+            root.mkdir(parents=True, exist_ok=True)
+            timestamp = time.strftime("%Y%m%d-%H%M%S")
+            path = root / f"typeup-{mode}-{timestamp}-{int(time.time() * 1000) % 1000:03d}.wav"
+            with wave.open(str(path), "wb") as wav_file:
+                wav_file.setnchannels(1)
+                wav_file.setsampwidth(2)
+                wav_file.setframerate(SAMPLE_RATE)
+                wav_file.writeframes(pcm)
+            print(f"[ptt] 调试录音已保存: {path}")
+        except Exception as e:
+            print(f"[ptt] 调试录音保存失败: {e}")

@@ -12,7 +12,7 @@ const {
 } = require("./settings-store");
 
 const DEFAULT_BACKEND_URL = process.env.TYPEUP_BACKEND_URL || "http://150.158.146.192:6053";
-const DEFAULT_BACKEND_TIMEOUT_MS = 30000;
+const DEFAULT_BACKEND_TIMEOUT_MS = 120000;
 const LOCAL_RENDERER_PORTS = new Set(["5173", "4173"]);
 const LOCAL_RENDERER_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const MAC_PERMISSION_URLS = {

@@ -9,6 +9,53 @@ from agent import typer
 
 
 class TyperApplicationLaunchTests(unittest.TestCase):
+    def test_windows_clipboard_paste_restores_original_clipboard(self):
+        class ImmediateThread:
+            def __init__(self, target, daemon=None, name=None):
+                self._target = target
+
+            def start(self):
+                self._target()
+
+        with (
+            patch("agent.typer._get_clipboard_win", side_effect=["old clipboard", "inserted text"]),
+            patch("agent.typer._set_clipboard_win") as set_clipboard,
+            patch("agent.typer._kb"),
+            patch("agent.typer._press_key"),
+            patch("agent.typer.time.sleep"),
+            patch("agent.typer.threading.Thread", ImmediateThread),
+        ):
+            typer._type_via_clipboard_win("inserted text")
+
+        self.assertEqual(
+            [call.args[0] for call in set_clipboard.call_args_list],
+            ["inserted text", "old clipboard"],
+        )
+
+    def test_windows_long_text_uses_clipboard_paste(self):
+        with (
+            patch("agent.typer._OS", "Windows"),
+            patch("agent.typer._use_clipboard_mode", False),
+            patch("agent.typer._type_via_clipboard_win") as clipboard,
+            patch("agent.typer._type_via_sendinput") as sendinput,
+        ):
+            typer.type_text("长" * 80)
+
+        clipboard.assert_called_once_with("长" * 80)
+        sendinput.assert_not_called()
+
+    def test_windows_short_text_keeps_sendinput_path(self):
+        with (
+            patch("agent.typer._OS", "Windows"),
+            patch("agent.typer._use_clipboard_mode", False),
+            patch("agent.typer._type_via_clipboard_win") as clipboard,
+            patch("agent.typer._type_via_sendinput") as sendinput,
+        ):
+            typer.type_text("短文本")
+
+        sendinput.assert_called_once_with("短文本")
+        clipboard.assert_not_called()
+
     def test_resolves_spoken_wechat_name_to_launch_target(self):
         target = typer._application_target_for_name("打开微信。")
 

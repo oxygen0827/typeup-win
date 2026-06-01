@@ -29,6 +29,10 @@ import wave
 import requests
 
 SAMPLE_RATE = 16000
+PCM_BYTES_PER_SECOND = SAMPLE_RATE * 2
+TYPEUP_BACKEND_STT_CHUNK_SECONDS = 30
+TYPEUP_BACKEND_STT_BASE_TIMEOUT_SECONDS = 45
+TYPEUP_BACKEND_STT_TIMEOUT_PER_CHUNK_SECONDS = 100
 
 
 def _pcm_to_wav(pcm: bytes) -> bytes:
@@ -385,22 +389,28 @@ class _TypeUpBackendSTT:
 
     def transcribe(self, pcm: bytes) -> str:
         wav = _pcm_to_wav(pcm)
-        resp = self._post_transcribe(wav)
+        timeout = self._stt_timeout_seconds(len(pcm))
+        resp = self._post_transcribe(wav, timeout)
         if resp.status_code == 401 and self._reload_tokens_from_bridge():
-            resp = self._post_transcribe(wav)
+            resp = self._post_transcribe(wav, timeout)
         if resp.status_code == 401 and self._refresh_token:
             self._refresh_access_token()
-            resp = self._post_transcribe(wav)
+            resp = self._post_transcribe(wav, timeout)
         if not resp.ok:
             raise RuntimeError(self._error_message(resp, "TypeUp 后端 STT 请求失败"))
         return (resp.json().get("text") or "").strip()
 
-    def _post_transcribe(self, wav: bytes):
+    def _stt_timeout_seconds(self, pcm_bytes: int) -> int:
+        audio_seconds = max(1, (pcm_bytes + PCM_BYTES_PER_SECOND - 1) // PCM_BYTES_PER_SECOND)
+        chunks = max(1, (audio_seconds + TYPEUP_BACKEND_STT_CHUNK_SECONDS - 1) // TYPEUP_BACKEND_STT_CHUNK_SECONDS)
+        return TYPEUP_BACKEND_STT_BASE_TIMEOUT_SECONDS + chunks * TYPEUP_BACKEND_STT_TIMEOUT_PER_CHUNK_SECONDS
+
+    def _post_transcribe(self, wav: bytes, timeout: int):
         return requests.post(
             f"{self._api_base_url}/v1/stt/transcribe",
             headers={"Authorization": f"Bearer {self._access_token}"},
             files={"file": ("audio.wav", wav, "audio/wav")},
-            timeout=35,
+            timeout=timeout,
         )
 
     def _refresh_access_token(self) -> None:

@@ -105,6 +105,16 @@ _POLISH_SYSTEM = """你是 TypeUp 的“微润色”引擎。用户会把语音�
 - 不确定时保留原文表达，不要猜测。
 - 只输出最终可输入文本，不要标题、列表、Markdown、解释、前缀或引号。"""
 
+_POLISH_STYLE_PROMPTS = {
+    "micro": "",
+    "prompt": (
+        "测试版风格：把零散口语整理成适合发给 ChatGPT、Claude 或 Cursor 的清晰 prompt。"
+        "可以用短段落或项目符号保留需求、约束和上下文，但不要替用户回答问题。"
+    ),
+    "formal": "测试版风格：在不改变含义的前提下，让文本更正式、更适合邮件、报告和工作沟通。",
+    "concise": "测试版风格：在不改变含义的前提下，尽量压缩冗余表达，让文本更短、更直接。",
+}
+
 
 _POLISH_LABEL_RE = re.compile(r"^(?:润色后|润色结果|修改后|修改结果|优化后|优化结果|结果|输出)\s*[:：]\s*")
 _POLISH_PREAMBLE_RE = re.compile(
@@ -180,6 +190,15 @@ def _build_polish_user_message(text: str) -> str:
     )
 
 
+def _polish_system_for_style(style: str = "", custom_prompt: str = "") -> str:
+    style_prompt = str(custom_prompt or "").strip()
+    if not style_prompt:
+        style_prompt = _POLISH_STYLE_PROMPTS.get(str(style or "").strip().lower(), "")
+    if not style_prompt:
+        return _POLISH_SYSTEM
+    return f"{_POLISH_SYSTEM}\n\n{style_prompt}"
+
+
 def _local_micro_polish(text: str) -> str:
     cleaned = _clean_generated_text(text)
     for source, target in _POLISH_STUTTER_REPLACEMENTS.items():
@@ -224,7 +243,8 @@ def _select_polished_text(original: str, model_output: str) -> str:
 
 
 def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=None,
-                           status_window=None, history: History | None = None):
+                           status_window=None, history: History | None = None,
+                           polish_style: str = "", polish_style_prompt: str = ""):
     from agent.typer import type_text
     def on_utterance(
         pcm: bytes,
@@ -257,7 +277,10 @@ def make_utterance_handler(stt_client, buf: TextBuffer, kbd_mon=None, editor=Non
             try:
                 polished = _select_polished_text(
                     text,
-                    editor.chat(_POLISH_SYSTEM, _build_polish_user_message(text)),
+                    editor.chat(
+                        _polish_system_for_style(polish_style, polish_style_prompt),
+                        _build_polish_user_message(text),
+                    ),
                 )
                 if polished:
                     print(f"[stt] 微润色 → {polished!r}")
@@ -382,6 +405,16 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
     audio_cfg = cfg.get("audio", {})
     mode      = audio_cfg.get("mode", "ptt")
     device    = audio_cfg.get("device", "auto")
+    polish_style = os.getenv("TYPEUP_POLISH_STYLE", "").strip() or audio_cfg.get("polish_style", "")
+    polish_style_prompt = (
+        os.getenv("TYPEUP_POLISH_STYLE_PROMPT", "").strip()
+        or audio_cfg.get("polish_style_prompt", "")
+    )
+    record_debug_audio = _config_bool(
+        os.getenv("TYPEUP_RECORD_DEBUG_AUDIO", ""),
+        default=_config_bool(audio_cfg.get("record_debug_audio"), default=False),
+    )
+    debug_audio_dir = os.getenv("TYPEUP_DEBUG_AUDIO_DIR", "").strip() or audio_cfg.get("debug_audio_dir")
 
     ai_handler = None
     if editor:
@@ -404,8 +437,16 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
         except Exception as e:
             print(f"[agent] AIHandler 初始化失败: {e}")
 
-    on_utterance = make_utterance_handler(stt, buf, kbd_mon=kbd_monitor, editor=editor,
-                                          status_window=status_window, history=history)
+    on_utterance = make_utterance_handler(
+        stt,
+        buf,
+        kbd_mon=kbd_monitor,
+        editor=editor,
+        status_window=status_window,
+        history=history,
+        polish_style=polish_style,
+        polish_style_prompt=polish_style_prompt,
+    )
 
     if mode == "ptt":
         try:
@@ -429,6 +470,8 @@ def _build_audio(cfg: dict, buf: TextBuffer, kbd_monitor=None, status_window=Non
             device=device,
             status_window=status_window,
             kbd_monitor=kbd_monitor,
+            record_debug_audio=record_debug_audio,
+            debug_audio_dir=debug_audio_dir,
         )
         ptt.start()
         return ptt
@@ -454,6 +497,16 @@ def _llm_configured(llm_cfg: dict) -> bool:
     if provider == "typeup_backend":
         return bool((llm_cfg.get("api_base_url") or llm_cfg.get("base_url")) and llm_cfg.get("access_token"))
     return bool(llm_cfg.get("api_key"))
+
+
+def _config_bool(value, default: bool = False) -> bool:
+    if value is None or value == "":
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 # ── 入口 ───────────────────────────────────────────────────────────
