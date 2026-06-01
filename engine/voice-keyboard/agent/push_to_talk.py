@@ -383,6 +383,10 @@ class PushToTalk:
         self._chord_delay       = 0.18   # 左 Alt 单独按下后等待 Space 的时间
         self._chord_upgrade_window = 0.45  # Space 稍晚时，把刚启动的 PTT 升级成 AI
         self._recording_started_at = 0.0
+        self._last_audio_callback_at = 0.0
+        self._saw_audio_callback = False
+        self._watchdog_stop = threading.Event()
+        self._watchdog_thread: Optional[threading.Thread] = None
 
         # 双击 PTT 切换微润色模式
         self._polish_mode             = False
@@ -571,8 +575,6 @@ class PushToTalk:
         self._recording_started_at = 0.0
         self._last_audio_callback_at = 0.0
         self._saw_audio_callback = False
-        self._watchdog_stop = threading.Event()
-        self._watchdog_thread: Optional[threading.Thread] = None
         self._buf = []
         self._vad_raw = bytearray()
         self._vad_speech_frames = []
@@ -1083,6 +1085,7 @@ class PushToTalk:
             self._stream = None
 
     def _start_recording_watchdog(self) -> None:
+        self._ensure_recording_watchdog_fields()
         self._stop_recording_watchdog()
         self._watchdog_stop.clear()
         self._watchdog_thread = threading.Thread(
@@ -1091,6 +1094,16 @@ class PushToTalk:
             name="PTT-watchdog",
         )
         self._watchdog_thread.start()
+
+    def _ensure_recording_watchdog_fields(self) -> None:
+        if not hasattr(self, "_watchdog_stop"):
+            self._watchdog_stop = threading.Event()
+        if not hasattr(self, "_watchdog_thread"):
+            self._watchdog_thread = None
+        if not hasattr(self, "_last_audio_callback_at"):
+            self._last_audio_callback_at = time.monotonic()
+        if not hasattr(self, "_saw_audio_callback"):
+            self._saw_audio_callback = False
 
     def _stop_recording_watchdog(self) -> None:
         stop_event = getattr(self, "_watchdog_stop", None)

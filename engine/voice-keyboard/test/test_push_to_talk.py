@@ -701,6 +701,21 @@ class PushToTalkStatusTests(unittest.TestCase):
         self.assertEqual(status.states[-1], "idle")
         self.assertIn("[typeup] 输入完成", out.getvalue())
 
+    def test_recording_watchdog_initializes_missing_fields(self):
+        ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_l")
+        del ptt._watchdog_stop
+        del ptt._watchdog_thread
+
+        with mock.patch("agent.push_to_talk.threading.Thread") as thread_cls:
+            thread_cls.return_value.start.return_value = None
+
+            ptt._start_recording_watchdog()
+
+        self.assertTrue(hasattr(ptt, "_watchdog_stop"))
+        self.assertTrue(hasattr(ptt, "_watchdog_thread"))
+        thread_cls.return_value.start.assert_called_once()
+        ptt._stop_recording_watchdog()
+
     def test_mid_sentence_worker_outputs_completion_after_key_release(self):
         status = _StatusRecorder()
         ptt = PushToTalk(
