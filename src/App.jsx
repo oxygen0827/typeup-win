@@ -126,7 +126,7 @@ const COPY = {
     original: "原生",
     lightPolish: "微润色",
     outputStyle: "输出风格",
-    outputStyleHint: "双击说话快捷键切到润色模式后使用",
+    outputStyleHint: "点击即保存并重启；双击说话快捷键切到润色模式后使用",
     outputStyleMicro: "微润色",
     outputStylePrompt: "Prompt",
     outputStyleFormal: "正式",
@@ -138,6 +138,7 @@ const COPY = {
     outputStyleCustom: "自定义要求",
     outputStyleCustomDetail: "留空则使用所选风格的内置规则",
     outputStyleCustomPlaceholder: "例如：改成会议纪要风格，保留项目名，最后列出下一步。",
+    outputStyleSaveHint: "风格已保存，正在重启引擎",
     statusDockReady: "TypeUp 已接管预览页热键",
     statusDockHint: "快捷键会根据当前平台和配置显示。",
     shortcutSpeak: "开始说话",
@@ -247,7 +248,7 @@ const COPY = {
     original: "Original",
     lightPolish: "Light Polish",
     outputStyle: "Output Style",
-    outputStyleHint: "Used after double-tapping the speak shortcut into polish mode",
+    outputStyleHint: "Click to save and restart; used after double-tapping the speak shortcut into polish mode",
     outputStyleMicro: "Micro",
     outputStylePrompt: "Prompt",
     outputStyleFormal: "Formal",
@@ -259,6 +260,7 @@ const COPY = {
     outputStyleCustom: "Custom Instructions",
     outputStyleCustomDetail: "Leave empty to use the built-in rule for the selected style.",
     outputStyleCustomPlaceholder: "Example: write it like meeting notes, keep product names, and end with next steps.",
+    outputStyleSaveHint: "Style saved, restarting engine",
     statusDockReady: "TypeUp is using the preview shortcuts",
     statusDockHint: "Shortcuts follow the current platform and settings.",
     shortcutSpeak: "Start Speaking",
@@ -1080,16 +1082,38 @@ export default function App() {
   async function saveSettings() {
     setSaving(true);
     try {
-      const next = await api(apiBase, "/api/settings?restart=1", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(toManagedSettings(settings)),
-      });
+      const next = await persistSettings(settings);
       setSettings(next);
       await refreshStatus(apiBase, setStatus);
     } finally {
       setSaving(false);
     }
+  }
+
+  async function saveSettingsPatch(mutator) {
+    if (!apiBase) return;
+    setSaving(true);
+    try {
+      const patch = structuredClone(settings);
+      mutator(patch);
+      setSettings(patch);
+      const next = await persistSettings(patch, { audioOnly: true });
+      setSettings(next);
+      await refreshStatus(apiBase, setStatus);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function persistSettings(nextSettings, options = {}) {
+    const payload = options.audioOnly
+      ? { audio: nextSettings.audio || {} }
+      : toManagedSettings(nextSettings);
+    return api(apiBase, "/api/settings?restart=1", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
   }
 
   async function submitAuth(event) {
@@ -1479,7 +1503,11 @@ export default function App() {
                         columns={4}
                         value={polishStyle}
                         options={polishStyleOptions(text)}
-                        onChange={(value) => setNested(setSettings, ["audio", "polish_style"], value)}
+                        disabled={saving || !apiBase}
+                        onChange={(value) => saveSettingsPatch((next) => {
+                          next.audio = next.audio || {};
+                          next.audio.polish_style = value;
+                        })}
                       />
                     </SettingRow>
                     <div className="setting-row output-style-editor">
@@ -1492,6 +1520,7 @@ export default function App() {
                           value={settings.audio?.polish_style_prompt || ""}
                           onChange={(event) => setNested(setSettings, ["audio", "polish_style_prompt"], event.target.value)}
                           placeholder={text.outputStyleCustomPlaceholder}
+                          disabled={saving || !apiBase}
                           rows={4}
                         />
                       </div>
@@ -2464,7 +2493,7 @@ function FormSelect({ label, value, onChange, options }) {
   );
 }
 
-function Segmented({ label, value, onChange, options, columns }) {
+function Segmented({ label, value, onChange, options, columns, disabled = false }) {
   const style = columns ? { gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` } : undefined;
   const className = columns && columns > 2 ? "field segmented-field-wide" : "field";
   return (
@@ -2472,7 +2501,7 @@ function Segmented({ label, value, onChange, options, columns }) {
       {label ? <span>{label}</span> : null}
       <div className="segmented" style={style}>
         {options.map(([id, labelText]) => (
-          <button type="button" key={id} className={value === id ? "selected" : ""} onClick={() => onChange(id)}>
+          <button type="button" key={id} className={value === id ? "selected" : ""} onClick={() => onChange(id)} disabled={disabled}>
             {labelText}
           </button>
         ))}
