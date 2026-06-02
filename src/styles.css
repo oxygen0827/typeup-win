@@ -2320,34 +2320,9 @@ button:disabled {
   gap: 10px;
 }
 
-.developer-action-row {
+.developer-engine-actions {
   min-width: 340px;
   justify-content: flex-end;
-  gap: 12px;
-}
-
-.developer-action-row button {
-  min-width: 96px;
-  min-height: 42px;
-  border-radius: 8px;
-}
-
-.developer-action-row .developer-action.start {
-  background: var(--primary);
-  border-color: var(--primary);
-  color: #fff;
-  box-shadow: 0 10px 22px rgba(36, 87, 214, 0.18);
-}
-
-.developer-action-row .developer-action.restart {
-  background: #fff;
-  border-color: #b9c8db;
-}
-
-.developer-action-row .developer-action.stop {
-  color: var(--red);
-  border-color: color-mix(in srgb, var(--red) 28%, var(--line));
-  background: #fff;
 }
 
 .developer-secondary-row {

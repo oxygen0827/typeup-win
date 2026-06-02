@@ -2016,6 +2016,11 @@ function DeveloperHub({
   saving,
 }) {
   const logText = logs.length ? logs.map((item) => `${formatTime(item.ts, lang)} ${item.line || ""}`).join("\n") : text.noLogs;
+  const engineProcessStopped = ["stopped", "stopping", "error"].includes(status.state);
+  const engineAcceptingVoice = ["listening", "transcribing"].includes(status.state);
+  const transcriptionStopped = engineAcceptingVoice && status.transcriptionEnabled === false;
+  const engineStopped = engineProcessStopped || transcriptionStopped;
+  const engineRunning = engineAcceptingVoice && !transcriptionStopped;
   return (
     <section className="hub-panel active">
       <div className="hub-header">
@@ -2028,10 +2033,19 @@ function DeveloperHub({
       <div className="developer-layout">
         <section className="settings-group">
           <SettingRow title={text.localEngine} detail={lang === "zh" ? "启动、停止、重启和状态检查。" : "Start, stop, restart, and inspect the local engine."}>
-            <div className="button-row developer-action-row">
-              <button className="developer-action start" type="button" onClick={onStart} disabled={!apiBase}><Play size={16} />{text.start}</button>
-              <button className="developer-action restart" type="button" onClick={onRestart} disabled={!apiBase}><RefreshCw size={16} />{text.restart}</button>
-              <button className="developer-action stop" type="button" onClick={onStop} disabled={!apiBase}><Square size={16} />{text.stop}</button>
+            <div className="home-engine-actions developer-engine-actions">
+              <button className={`engine-action start-action ${engineRunning ? "state-active" : ""}`} type="button" onClick={onStart} disabled={!apiBase}>
+                <Play size={18} />
+                {text.start}
+              </button>
+              <button className={`engine-action stop-action ${engineStopped ? "state-active" : ""}`} type="button" onClick={onStop} disabled={!apiBase}>
+                <Square size={18} />
+                {text.stop}
+              </button>
+              <button className="engine-action ghost" type="button" onClick={onRestart} disabled={!apiBase}>
+                <RefreshCw size={18} />
+                {text.restart}
+              </button>
             </div>
           </SettingRow>
           <SettingRow title={lang === "zh" ? "权限与设备" : "Permissions and devices"} detail={lang === "zh" ? "麦克风权限、输入设备列表和平台权限。" : "Microphone permission, input device list, and platform permissions."}>
