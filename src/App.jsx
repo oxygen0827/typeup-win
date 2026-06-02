@@ -431,6 +431,48 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.6-beta.2": {
+    releaseName: "TypeUp 0.3.6 Beta 2",
+    zh: {
+      summary: "本次测试版加入输出风格切换，并修复 Prompt 风格和录音异常问题。",
+      items: [
+        "配置页新增输出风格切换：微润色、Prompt、正式和简洁，点击风格会立即保存并重启本地引擎。",
+        "Prompt 风格使用独立整理规则，支持把口语需求整理成结构化 prompt，不再被微润色规则压回普通转写。",
+        "修复录音 watchdog 初始化异常，避免测试版启动后反复报错。",
+        "长语音转写和文本输入链路更稳，长文本优先使用剪贴板粘贴，减少逐字输入卡顿。",
+        "开发者栏目里的启动、停止、重启按钮已与首页保持一致。",
+      ],
+    },
+    en: {
+      summary: "This beta adds output style switching and fixes Prompt style plus recording stability.",
+      items: [
+        "Settings now includes output styles: Micro, Prompt, Formal, and Concise. Selecting a style saves and restarts the local engine.",
+        "Prompt style now uses dedicated prompt-cleanup rules and keeps structured prompt output instead of falling back to light polish.",
+        "Fixed the recording watchdog initialization error that caused repeated beta runtime failures.",
+        "Long dictation and text insertion are more stable, with long text using clipboard paste instead of slow character-by-character input.",
+        "Developer engine controls now match the Home start, stop, and restart interaction.",
+      ],
+    },
+  },
+  "0.3.6-beta.1": {
+    releaseName: "TypeUp 0.3.6 Beta 1",
+    zh: {
+      summary: "本次测试版引入 OpenLess 启发的语音链路稳定性优化。",
+      items: [
+        "后端模型调用和 STT 超时时间对长语音更友好，减少长句处理失败。",
+        "长文本输入改用剪贴板粘贴并自动恢复原剪贴板内容。",
+        "为输出风格配置预留 engine 入口，方便后续测试不同润色风格。",
+      ],
+    },
+    en: {
+      summary: "This beta brings OpenLess-inspired stability work to the voice pipeline.",
+      items: [
+        "Backend and STT timeouts are friendlier to longer dictation.",
+        "Long text insertion uses clipboard paste and restores the previous clipboard afterwards.",
+        "Engine configuration now has hooks for testing multiple polish styles.",
+      ],
+    },
+  },
   "0.3.5": {
     releaseName: "TypeUp 0.3.5",
     zh: {
