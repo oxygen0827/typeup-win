@@ -35,12 +35,22 @@ class PolishStyleTests(unittest.TestCase):
         message = _build_style_user_message("整理一下这个需求", "prompt")
 
         self.assertIn("整理成一个清晰 prompt", message)
+        self.assertIn("不要提到", message)
         self.assertNotIn("请微润色", message)
 
     def test_prompt_style_keeps_structured_output(self):
         structured = "- 目标：整理需求\n- 输出：给出实现步骤"
 
         self.assertEqual(_select_polished_text("整理一下这个需求", structured, "prompt"), structured)
+
+    def test_prompt_style_rejects_internal_instruction_leak(self):
+        original = "请充分了解一下这个文件夹的项目"
+        leaked = (
+            '请将以下 JSON 中的 transcript 字段内容整理成一个清晰 prompt：'
+            '"请提供关于这个文件夹中项目的详细信息。"'
+        )
+
+        self.assertEqual(_select_polished_text(original, leaked, "prompt"), "请充分了解一下这个文件夹的项目。")
 
 
 if __name__ == "__main__":
