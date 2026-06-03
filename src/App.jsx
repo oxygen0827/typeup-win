@@ -431,6 +431,29 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.6": {
+    releaseName: "TypeUp 0.3.6",
+    zh: {
+      summary: "本次正式版加入输出风格切换，并把 Prompt 模式打磨为可直接发给 AI 的结构化需求。",
+      items: [
+        "配置页新增输出风格切换：微润色、Prompt、正式和简洁，点击风格会立即保存并重启本地引擎。",
+        "Prompt 风格会把口语需求整理成结构化 prompt，项目理解类请求会稳定输出任务、关注点和输出要求。",
+        "增强 Prompt 输出安全回退，避免 JSON、transcript 字段或内部处理说明被打进当前应用。",
+        "长语音转写和文本输入链路更稳，长文本优先使用剪贴板粘贴，减少逐字输入卡顿。",
+        "开发者栏目里的启动、停止、重启按钮已与首页保持一致。",
+      ],
+    },
+    en: {
+      summary: "This release adds output style switching and turns Prompt style into structured AI-ready requests.",
+      items: [
+        "Settings now includes output styles: Micro, Prompt, Formal, and Concise. Selecting a style saves and restarts the local engine.",
+        "Prompt style turns spoken requests into structured prompts; project-understanding requests produce a task, focus areas, and output requirements.",
+        "Prompt output now has stronger safety fallbacks so JSON, transcript fields, and internal processing instructions are not typed into the active app.",
+        "Long dictation and text insertion are more stable, with long text using clipboard paste instead of slow character-by-character input.",
+        "Developer engine controls now match the Home start, stop, and restart interaction.",
+      ],
+    },
+  },
   "0.3.6-beta.2": {
     releaseName: "TypeUp 0.3.6 Beta 2",
     zh: {
