@@ -431,6 +431,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.7": {
+    releaseName: "TypeUp 0.3.7",
+    zh: {
+      summary: "本次热修避免 Prompt 风格在用户还没说完时提前输出结构化命令。",
+      items: [
+        "Prompt 风格下会等待本次按住说话结束后，再把整段录音整理成结构化 prompt。",
+        "普通微润色仍保留实时分句提前输出，连续听写体验不受影响。",
+        "新增回归测试，覆盖 Prompt 风格禁用中途分句、微润色保留中途分句两个路径。",
+      ],
+    },
+    en: {
+      summary: "This hotfix prevents Prompt style from emitting structured output before the user finishes speaking.",
+      items: [
+        "Prompt style now waits for the current push-to-talk recording to finish before formatting the full utterance.",
+        "Micro polish keeps mid-sentence dispatch so continuous dictation remains responsive.",
+        "Regression coverage now locks both Prompt-style suppression and Micro-style mid-sentence behavior.",
+      ],
+    },
+  },
   "0.3.6": {
     releaseName: "TypeUp 0.3.6",
     zh: {
