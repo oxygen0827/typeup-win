@@ -337,6 +337,8 @@ def _project_prompt_output_is_weak(original: str, polished: str) -> bool:
     if not _looks_like_project_understanding_request(original):
         return False
     value = str(polished or "")
+    if "\n" not in value and not re.search(r"(?:任务|目标|要求|输出|请重点关注)\s*[:：]", value):
+        return True
     if "保留原始目标、上下文和约束，不要添加未说明的背景" in value:
         return True
     if re.search(r"任务\s*[:：]\s*(?:测试怎么跑|还有|如果|以及)", value):

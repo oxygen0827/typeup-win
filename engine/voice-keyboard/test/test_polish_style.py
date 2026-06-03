@@ -97,6 +97,16 @@ class PolishStyleTests(unittest.TestCase):
         self.assertNotIn("任务：测试怎么跑", selected)
         self.assertNotIn("把这个别人维护", selected)
 
+    def test_prompt_style_rejects_single_sentence_project_prompt(self):
+        original = "请帮我看看这个文件夹里的项目，先了解它是做什么的，然后看一下主要代码结构、启动方式、测试怎么跑，还有如果我要把它交给别人维护，需要注意哪些风险"
+        single_sentence = "请分析文件夹内项目的功能，描述主要代码结构，提供启动和测试运行的方法，并列出将项目转交给他人维护时需要注意的风险。"
+
+        selected = _select_polished_text(original, single_sentence, "prompt")
+
+        self.assertIn("任务：请帮我看看这个文件夹里的项目", selected)
+        self.assertIn("请重点关注", selected)
+        self.assertIn("启动方式、依赖配置和测试/打包流程", selected)
+
 
 if __name__ == "__main__":
     unittest.main()
