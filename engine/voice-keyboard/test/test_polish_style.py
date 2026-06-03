@@ -23,6 +23,7 @@ class PolishStyleTests(unittest.TestCase):
         self.assertEqual(system, _PROMPT_STYLE_SYSTEM)
         self.assertIn("可以直接发给 ChatGPT", system)
         self.assertIn("不要替用户回答问题", system)
+        self.assertIn("不是微润色", system)
         self.assertNotIn("不要标题、列表、Markdown", system)
 
     def test_custom_style_prompt_overrides_builtin_style(self):
@@ -35,6 +36,7 @@ class PolishStyleTests(unittest.TestCase):
         message = _build_style_user_message("整理一下这个需求", "prompt")
 
         self.assertIn("整理成一个清晰 prompt", message)
+        self.assertIn("不要只做微润色", message)
         self.assertIn("不要提到", message)
         self.assertNotIn("请微润色", message)
 
@@ -50,7 +52,21 @@ class PolishStyleTests(unittest.TestCase):
             '"请提供关于这个文件夹中项目的详细信息。"'
         )
 
-        self.assertEqual(_select_polished_text(original, leaked, "prompt"), "请充分了解一下这个文件夹的项目。")
+        selected = _select_polished_text(original, leaked, "prompt")
+
+        self.assertIn("任务：请充分了解一下这个文件夹的项目。", selected)
+        self.assertIn("请重点关注", selected)
+        self.assertNotIn("JSON", selected)
+        self.assertNotIn("transcript", selected)
+
+    def test_prompt_style_upgrades_micro_like_short_output(self):
+        original = "请充分了解一下这个文件夹的项目"
+        weak_output = "请充分了解一下这个文件夹的项目。"
+
+        selected = _select_polished_text(original, weak_output, "prompt")
+
+        self.assertIn("任务：请充分了解一下这个文件夹的项目。", selected)
+        self.assertIn("目录结构、核心模块和关键入口", selected)
 
 
 if __name__ == "__main__":
