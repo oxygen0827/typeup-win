@@ -13,7 +13,7 @@ from ctypes import wintypes
 _STATES: dict[str, tuple[str, str, int]] = {
     "recording": ("正在聆听", "松开 ALT 后开始转写", 0xB19F0F),
     "polish_recording": ("正在聆听 · 微润色", "松开 ALT 后输入润色结果", 0x6B8A1B),
-    "ai_recording": ("AI 编辑中", "按住 ALT + SPACE 处理当前文字", 0xD65676),
+    "ai_recording": ("AI 编辑中", "按住 RIGHT ALT + RIGHT SHIFT 处理当前文字", 0xD65676),
     "recognizing": ("正在转写", "正在整理语句并准备输入", 0xD65724),
     "empty_stt": ("未识别到语句", "请靠近麦克风后重试", 0x225DB8),
     "polishing": ("润色中", "正在优化表达", 0xB19F0F),

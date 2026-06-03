@@ -36,5 +36,16 @@ class StatusWindowWinAudioLevelTests(unittest.TestCase):
         self.assertNotIn("微润色", title)
 
 
+    def test_ai_recording_uses_current_windows_shortcut_hint(self):
+        from agent.status_window_win import _STATES
+
+        _title, detail, _color = _STATES["ai_recording"]
+
+        self.assertIn("RIGHT ALT", detail)
+        self.assertIn("RIGHT SHIFT", detail)
+        self.assertNotIn("ALT + SPACE", detail)
+        self.assertNotIn("右 SHIFT", detail)
+
+
 if __name__ == "__main__":
     unittest.main()

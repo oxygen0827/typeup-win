@@ -75,10 +75,10 @@ audio:
 
   # AI 键（快捷键/编辑/写作/撤回/聊天）
   # macOS:   alt_r                 右 Option（不和系统 Cmd 快捷键冲突）
-  # Windows: [alt, space]           Alt + Space；Space 会被钩子吞掉，避免覆盖选区
+  # Windows: [alt_r, shift_r]       Right Alt + Right Shift
   # Linux:   [ctrl_r]               右 Ctrl
   # 不推荐 cmd / cmd_r：按住的瞬间所有 Cmd+X 系统快捷键都会被劫持
-  ai_key: [alt, space]
+  ai_key: [alt_r, shift_r]
 
   device: auto              # auto = 自动查找 ESP32 UAC 麦克风，找不到用系统默认
                             # 其他示例：

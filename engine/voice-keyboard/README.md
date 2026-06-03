@@ -348,14 +348,14 @@ SSL_CERT_FILE=$(.venv/bin/python -c "import certifi; print(certifi.where())") \
 | 热键 | 默认按键 | 功能 |
 |------|---------|------|
 | `ptt_key` | Windows: Alt / macOS: Option | 按住说话，松开原样转文字打入 |
-| `ai_key` | Windows: Alt + Space / macOS: Option | 按住说话，松开走 AI 智能处理 |
+| `ai_key` | Windows: Right Alt + Right Shift / macOS: Option | 按住说话，松开走 AI 智能处理 |
 
 热键支持**单个键或多个键**，多个键效果相同（左右手都能触发）：
 
 ```yaml
 audio:
   ptt_key: alt             # Windows 端使用通用 ALT，兼容 alt_l / alt_r / alt_gr
-  ai_key: [alt, space]     # Windows 端 AI 编辑热键；SPACE 会被钩子吞掉，避免覆盖选区
+  ai_key: [alt_r, shift_r] # Windows 端 AI 编辑热键：Right Alt + Right Shift
 ```
 
 不确定按键名称时，运行以下命令，按目标键后查看打印的名称：

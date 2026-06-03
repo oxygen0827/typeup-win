@@ -95,7 +95,7 @@ typing:
 audio:
   mode: ptt                 # ptt=按键触发 / vad=自动检测
   ptt_key: alt              # Windows 桌面端默认 ALT，兼容 alt_l / alt_r / alt_gr
-  ai_key: [alt, space]      # Windows 桌面端默认 ALT + SPACE，SPACE 会被钩子吞掉避免覆盖选区
+  ai_key: [alt_r, shift_r]  # Windows 桌面端默认 Right Alt + Right Shift
   device: auto              # 麦克风序号，auto=自动
 ```
 

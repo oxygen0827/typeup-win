@@ -431,6 +431,27 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.9": {
+    releaseName: "TypeUp 0.3.9",
+    zh: {
+      summary: "本次修复 Windows 自动更新下载卡在 0% 的问题，并统一快捷键提示文案。",
+      items: [
+        "Windows 自动更新下载改为优先使用完整安装包直连下载，不再依赖容易卡住的 NSIS 差分下载路径。",
+        "更新下载器现在支持当前 HTTP 更新源的直连下载，并保留安装包大小校验，避免 0 字节临时文件进入安装流程。",
+        "AI 编辑快捷键提示统一显示为 RIGHT ALT + RIGHT SHIFT，配置页、首页和 Windows 悬浮状态窗保持一致。",
+        "同步更新快捷键示例和维护文档，避免后续把旧的 Alt + Space 文案带回软件。",
+      ],
+    },
+    en: {
+      summary: "This update fixes Windows update downloads stuck at 0% and normalizes shortcut labels.",
+      items: [
+        "Windows update downloads now prefer the full installer direct-download path instead of the NSIS differential-download path that could stall.",
+        "The updater supports the current HTTP update feed and keeps installer size verification so zero-byte temp files cannot enter installation.",
+        "AI edit shortcut hints now consistently show RIGHT ALT + RIGHT SHIFT across Settings, Home, and the Windows floating HUD.",
+        "Shortcut examples and maintenance docs were updated so the old Alt + Space wording does not return.",
+      ],
+    },
+  },
   "0.3.8": {
     releaseName: "TypeUp 0.3.8",
     zh: {
@@ -2905,11 +2926,11 @@ function formatHotkey(value, lang, platform = "") {
       const text = String(token || "").toLowerCase();
       if (text === "alt") return "ALT";
       if (text === "alt_l" || text === "left_alt") return platform === "darwin" ? (lang === "zh" ? "左 OPTION" : "LEFT OPTION") : "ALT";
-      if (text === "alt_r" || text === "right_alt") return platform === "darwin" ? (lang === "zh" ? "右 OPTION" : "RIGHT OPTION") : "RIGHT ALT";
+      if (text === "alt_r" || text === "right_alt") return platform === "darwin" ? "RIGHT OPTION" : "RIGHT ALT";
       if (text === "ctrl" || text === "control" || text === "ctrl_l" || text === "ctrl_r" || text === "right_ctrl" || text === "left_ctrl") return "CTRL";
       if (text === "space") return lang === "zh" ? "SPACE" : "SPACE";
       if (text === "shift_l" || text === "left_shift") return lang === "zh" ? "左 SHIFT" : "LEFT SHIFT";
-      if (text === "shift_r" || text === "right_shift") return lang === "zh" ? "右 SHIFT" : "RIGHT SHIFT";
+      if (text === "shift_r" || text === "right_shift") return "RIGHT SHIFT";
       if (text === "cmd_l" || text === "cmd_r") return platform === "darwin" ? "COMMAND" : "WIN";
       return text.toUpperCase();
     })

@@ -6,8 +6,15 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前正式版安装包为 `TypeUp-Setup-0.3.8.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前正式版安装包为 `TypeUp-Setup-0.3.9.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
+
+## 0.3.9 更新重点
+
+- Windows 自动更新下载改为优先使用完整安装包直连下载，不再依赖容易卡住的 NSIS 差分下载路径。
+- 更新下载器支持当前 HTTP 更新源的直连下载，并保留安装包大小校验，避免 0 字节临时文件进入安装流程。
+- AI 编辑快捷键提示统一显示为 `RIGHT ALT + RIGHT SHIFT`，配置页、首页和 Windows 悬浮状态窗保持一致。
+- 同步更新快捷键示例和维护文档，避免旧的 `Alt + Space` 文案回到软件里。
 
 ## 0.3.8 更新重点
 

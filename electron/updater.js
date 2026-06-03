@@ -1,4 +1,5 @@
 const fs = require("node:fs");
+const http = require("node:http");
 const https = require("node:https");
 const os = require("node:os");
 const path = require("node:path");
@@ -10,6 +11,7 @@ const GITHUB_OWNER = "oxygen0827";
 const GITHUB_REPO = "typeup-win";
 const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
 const GITHUB_RELEASE_BASE = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
+const GENERIC_RELEASE_BASE = "http://150.158.146.192:6052/apps/typeup-win-release";
 const USER_AGENT = "TypeUpUpdater/1.0";
 const REQUEST_TIMEOUT_MS = 45000;
 const FALLBACK_INSTALL_ARGS = ["/S", "--updated", "--force-run"];
@@ -76,13 +78,14 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
   if (canUpdate) {
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.disableDifferentialDownload = true;
 
     autoUpdater.on("checking-for-update", () => {
       setState({ status: "checking", error: "", progress: 0 }, { silent: pendingSilentCheck });
     });
 
     autoUpdater.on("update-available", (info = {}) => {
-      fallbackUpdate = null;
+      fallbackUpdate = createDirectInstallerUpdate(info, process.platform);
       fallbackInstallerPath = "";
       setState({
         status: "available",
@@ -238,6 +241,19 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
           error: "",
         });
       } else {
+        const directUpdate = createDirectInstallerUpdate(
+          {
+            version: state.availableVersion,
+            releaseName: state.releaseName,
+            releaseNotes: state.releaseNotes,
+            releaseUrl: state.releaseUrl,
+          },
+          process.platform,
+        );
+        if (directUpdate) {
+          fallbackUpdate = directUpdate;
+          return downloadUpdate();
+        }
         await autoUpdater.downloadUpdate();
       }
     } catch (error) {
@@ -469,6 +485,45 @@ function shouldUseGithubApiUpdates(platform = process.platform) {
   return false;
 }
 
+function shouldUseDirectInstallerDownload(platform = process.platform) {
+  return platform === "win32";
+}
+
+function createDirectInstallerUpdate(info = {}, platform = process.platform) {
+  if (!shouldUseDirectInstallerDownload(platform)) return null;
+  const version = parseVersion(info.version || info.tagName || info.releaseName || "");
+  if (!version) return null;
+  const files = Array.isArray(info.files) ? info.files : [];
+  const installerName = findInstallerFileName(files, version) || `TypeUp-Setup-${version}.exe`;
+  const installerSize = findInstallerFileSize(files, installerName);
+  return {
+    version,
+    releaseName: info.releaseName || `TypeUp ${version}`,
+    releaseNotes: normalizeReleaseNotes(info.releaseNotes || ""),
+    releaseUrl: info.releaseUrl || "",
+    installerAssetId: "",
+    installerUrl: `${GENERIC_RELEASE_BASE}/${encodeURIComponent(installerName)}`,
+    installerName,
+    installerSize,
+    installerDigest: "",
+  };
+}
+
+function findInstallerFileName(files, version) {
+  const expected = `TypeUp-Setup-${version}.exe`;
+  const match = files.find((file) => file?.url === expected || file?.path === expected || file?.name === expected)
+    || files.find((file) => String(file?.url || file?.path || file?.name || "").endsWith(".exe"));
+  return String(match?.url || match?.path || match?.name || "").trim();
+}
+
+function findInstallerFileSize(files, installerName) {
+  const match = files.find((file) => {
+    const name = String(file?.url || file?.path || file?.name || "").trim();
+    return name === installerName;
+  }) || files.find((file) => String(file?.url || file?.path || file?.name || "").endsWith(".exe"));
+  return Number(match?.size || 0);
+}
+
 function shouldRefreshUpdateBeforeDownload(status, hasFallbackUpdate, platform = process.platform) {
   return status !== "available";
 }
@@ -628,7 +683,8 @@ function request(url, options, callback) {
     headers: options.headers || {},
     timeout: REQUEST_TIMEOUT_MS,
   };
-  const req = https.get(url, requestOptions, (response) => {
+  const client = new URL(url).protocol === "http:" ? http : https;
+  const req = client.get(url, requestOptions, (response) => {
     if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
       response.resume();
       const nextUrl = new URL(response.headers.location, url).toString();
@@ -702,12 +758,14 @@ function delay(ms) {
 
 module.exports = {
   setupAutoUpdates,
+  createDirectInstallerUpdate,
   compareVersions,
   isRetryableUpdateError,
   parseVersion,
   parseLatestYmlPath,
   parseLatestYmlSize,
   parseLatestYmlVersion,
+  shouldUseDirectInstallerDownload,
   shouldUseGithubApiUpdates,
   shouldRefreshUpdateBeforeDownload,
   shouldFallbackToPowerShellDownload,

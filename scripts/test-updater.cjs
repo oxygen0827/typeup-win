@@ -1,7 +1,9 @@
 const assert = require("node:assert/strict");
 
 const {
+  createDirectInstallerUpdate,
   shouldUseGithubApiUpdates,
+  shouldUseDirectInstallerDownload,
   windowsFallbackInstallerCommand,
   shouldFallbackToPowerShellDownload,
   shouldRefreshUpdateBeforeDownload,
@@ -14,6 +16,9 @@ const {
 assert.equal(shouldUseGithubApiUpdates("win32"), false);
 assert.equal(shouldUseGithubApiUpdates("darwin"), false);
 assert.equal(shouldUseGithubApiUpdates("linux"), false);
+assert.equal(shouldUseDirectInstallerDownload("win32"), true);
+assert.equal(shouldUseDirectInstallerDownload("darwin"), false);
+assert.equal(shouldUseDirectInstallerDownload("linux"), false);
 assert.equal(shouldRefreshUpdateBeforeDownload("idle", true, "win32"), true);
 assert.equal(shouldRefreshUpdateBeforeDownload("available", false, "win32"), false);
 assert.equal(shouldRefreshUpdateBeforeDownload("available", true, "win32"), false);
@@ -35,6 +40,26 @@ const latestYml = [
 assert.equal(parseLatestYmlVersion(latestYml), "0.1.24");
 assert.equal(parseLatestYmlPath(latestYml), "TypeUp-Setup-0.1.24.exe");
 assert.equal(parseLatestYmlSize(latestYml), 124285748);
+
+const directUpdate = createDirectInstallerUpdate({
+  version: "0.3.8",
+  releaseName: "TypeUp v0.3.8",
+  releaseNotes: "Fix updater download progress.",
+  files: [
+    {
+      url: "TypeUp-Setup-0.3.8.exe",
+      size: 125864316,
+    },
+  ],
+}, "win32");
+assert.equal(directUpdate.version, "0.3.8");
+assert.equal(directUpdate.installerName, "TypeUp-Setup-0.3.8.exe");
+assert.equal(directUpdate.installerSize, 125864316);
+assert.equal(
+  directUpdate.installerUrl,
+  "http://150.158.146.192:6052/apps/typeup-win-release/TypeUp-Setup-0.3.8.exe",
+);
+assert.equal(createDirectInstallerUpdate({ version: "0.3.8" }, "darwin"), null);
 
 const installerPath = "C:\\Users\\TypeUp User\\Downloads\\TypeUp-Setup-0.1.23.exe";
 const command = windowsFallbackInstallerCommand(installerPath, 1234);
