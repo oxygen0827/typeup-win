@@ -17,6 +17,7 @@ class _StatusRecorder:
         self.states = []
         self.levels = []
         self.messages = []
+        self.polish_labels = []
 
     def set_state(self, state: str) -> None:
         self.states.append(state)
@@ -26,6 +27,9 @@ class _StatusRecorder:
 
     def show_message(self, message: str, seconds: float = 1.2) -> None:
         self.messages.append((message, seconds))
+
+    def set_polish_label(self, label: str) -> None:
+        self.polish_labels.append(label)
 
 
 def _pcm(sample: int, count: int = 512) -> bytes:
@@ -534,6 +538,18 @@ class PushToTalkStatusTests(unittest.TestCase):
 
         self.assertTrue(ptt._polish_mode)
         self.assertEqual(status.messages[-1][0], "润色模式：Prompt 风格")
+
+    def test_status_window_receives_configured_polish_label(self):
+        status = _StatusRecorder()
+
+        PushToTalk(
+            on_utterance=lambda _pcm: None,
+            ptt_key="alt_r",
+            status_window=status,
+            polish_label="Prompt 风格",
+        )
+
+        self.assertEqual(status.polish_labels, ["Prompt 风格"])
 
     def test_modifier_combo_does_not_suppress_first_toggle_modifier(self):
         ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_r", toggle_key=["ctrl", "alt"])

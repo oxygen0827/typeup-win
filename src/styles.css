@@ -1409,27 +1409,35 @@ button:disabled {
 }
 
 .segmented {
-  min-height: 36px;
+  min-height: 38px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  overflow: hidden;
-  background: #fff;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 4px;
+  background: #f4f7fb;
 }
 
 .segmented button {
-  min-height: 34px;
+  min-height: 30px;
   border: 0;
-  border-radius: 0;
+  border-radius: 9px;
   background: transparent;
   padding: 0 8px;
   color: var(--muted);
   font-weight: 800;
+  transition: background 0.16s ease, box-shadow 0.16s ease, color 0.16s ease;
+}
+
+.segmented button:not(.selected):hover {
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--ink);
 }
 
 .segmented .selected {
-  background: var(--primary);
+  background: linear-gradient(180deg, #346ce8, var(--primary));
+  box-shadow: 0 6px 16px rgba(36, 87, 214, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.18);
   color: #fff;
 }
 

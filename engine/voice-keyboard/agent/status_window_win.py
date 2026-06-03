@@ -29,6 +29,7 @@ _WM_APP_STATE = 0x8001
 _WM_APP_STOP = 0x8002
 _WM_APP_MESSAGE = 0x8003
 _WM_APP_AUDIO_LEVEL = 0x8004
+_WM_APP_CONFIG = 0x8005
 _WM_ERASEBKGND = 0x0014
 _TIMER_POLL = 1
 _TIMER_HIDE = 2
@@ -262,6 +263,11 @@ def _clamp_level(level: float) -> float:
     return max(0.0, min(1.0, float(level or 0.0)))
 
 
+def _polish_recording_info(label: str) -> tuple[str, str, int]:
+    polish_label = str(label or "").strip() or "微润色"
+    return (f"正在聆听 · {polish_label}", f"松开 ALT 后输入{polish_label}结果", _STATES["polish_recording"][2])
+
+
 def _smooth_audio_level(current: float, target: float) -> float:
     current = _clamp_level(current)
     target = _clamp_level(target)
@@ -317,6 +323,7 @@ class StatusWindow:
         self._audio_level = 0.0
         self._audio_phase = 0
         self._message_token = 0
+        self._polish_label = "微润色"
         self._width_text = ""
         self._visible = False
         self._window_size: tuple[int, int] | None = None
@@ -331,6 +338,11 @@ class StatusWindow:
         self._q.put(("state", state))
         if self._hwnd:
             _user32.PostMessageW(self._hwnd, _WM_APP_STATE, 0, 0)
+
+    def set_polish_label(self, label: str) -> None:
+        self._q.put(("polish_label", str(label or "").strip() or "微润色"))
+        if self._hwnd:
+            _user32.PostMessageW(self._hwnd, _WM_APP_CONFIG, 0, 0)
 
     def set_audio_level(self, level: float) -> None:
         self._q.put(("audio_level", max(0.0, min(1.0, float(level or 0.0)))))
@@ -444,6 +456,9 @@ class StatusWindow:
         if msg == _WM_APP_AUDIO_LEVEL:
             self._poll()
             return 0
+        if msg == _WM_APP_CONFIG:
+            self._poll()
+            return 0
         if msg == _WM_APP_STOP:
             _user32.DestroyWindow(hwnd)
             return 0
@@ -466,6 +481,9 @@ class StatusWindow:
                 elif isinstance(item, tuple) and item and item[0] == "hide_message":
                     _, token = item
                     self._hide_message_now(token)
+                elif isinstance(item, tuple) and item and item[0] == "polish_label":
+                    _, label = item
+                    self._apply_polish_label(label)
                 else:
                     state = item[1] if isinstance(item, tuple) else item
                     self._apply(state)
@@ -475,7 +493,7 @@ class StatusWindow:
     def _apply(self, state: str) -> None:
         if not self._hwnd:
             return
-        info = _STATES.get(state)
+        info = self._state_info(state)
         if info is None or state == "idle":
             self._state = "idle"
             self._width_text = ""
@@ -503,6 +521,17 @@ class StatusWindow:
             self._invalidate()
         if state in _ERROR_STATES:
             _user32.SetTimer(self._hwnd, _TIMER_HIDE, 1700, None)
+
+    def _state_info(self, state: str) -> tuple[str, str, int] | None:
+        info = _STATES.get(state)
+        if state == "polish_recording" and info is not None:
+            return _polish_recording_info(self._polish_label)
+        return info
+
+    def _apply_polish_label(self, label: str) -> None:
+        self._polish_label = str(label or "").strip() or "微润色"
+        if self._state == "polish_recording":
+            self._apply("polish_recording")
 
     def _apply_message(self, text: str, token: int, width_text: str | None = None) -> None:
         if not self._hwnd or token != self._message_token:

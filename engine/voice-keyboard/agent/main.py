@@ -155,6 +155,7 @@ _PROMPT_INTERNAL_INSTRUCTION_RE = re.compile(
     re.I,
 )
 _POLISH_FILLER_RE = re.compile(r"(?:嗯+|呃+|啊+|那个|就是说|然后呢)")
+_PROMPT_TRAILING_PARTICLE_RE = re.compile(r"(?:哦|哈|呀|呢|啊)+$")
 _POLISH_STUTTER_REPLACEMENTS = {
     "现现在": "现在",
     "就就是": "就是",
@@ -277,19 +278,60 @@ def _looks_like_project_understanding_request(text: str) -> bool:
     return has_scope and has_intent
 
 
+def _contains_any(text: str, tokens: tuple[str, ...]) -> bool:
+    return any(token in text for token in tokens)
+
+
+def _project_focus_items_from_text(text: str) -> list[str]:
+    value = str(text or "")
+    items: list[str] = []
+    if _contains_any(value, ("做什么", "功能", "用途", "使用场景", "场景", "目标")):
+        items.append("项目的主要功能、使用场景和目标。")
+    if _contains_any(value, ("代码结构", "目录结构", "主要代码", "核心模块", "关键入口", "架构", "结构")):
+        items.append("目录结构、核心模块和关键入口。")
+    if _contains_any(value, ("启动", "运行", "怎么跑", "如何跑", "依赖", "配置", "环境")):
+        items.append("启动方式、运行依赖和必要配置。")
+    if _contains_any(value, ("测试", "单测", "怎么测", "测试怎么跑")):
+        items.append("测试运行方法。")
+    if _contains_any(value, ("打包", "构建")):
+        items.append("构建或打包流程。")
+    if _contains_any(value, ("交给别人", "交接", "维护", "风险", "注意", "坑", "隐患")):
+        items.append("交接维护时需要注意的风险。")
+    if not items:
+        items.append("项目的整体功能和代码脉络。")
+    return items
+
+
+def _project_output_requirement_from_text(text: str) -> str:
+    value = str(text or "")
+    parts = ["先给出整体理解"]
+    if _contains_any(value, ("代码结构", "目录结构", "主要代码", "核心模块", "关键入口", "架构", "结构")):
+        parts.append("再说明关键模块")
+    if _contains_any(value, ("启动", "运行", "怎么跑", "如何跑", "依赖", "配置", "环境")):
+        parts.append("列出运行方式")
+    if _contains_any(value, ("测试", "单测", "怎么测", "测试怎么跑")):
+        parts.append("写清楚测试方法")
+    if _contains_any(value, ("打包", "构建")):
+        parts.append("补充打包流程")
+    if _contains_any(value, ("交给别人", "交接", "维护", "风险", "注意", "坑", "隐患")):
+        parts.append("最后列出维护风险")
+    if len(parts) == 1:
+        parts.append("再按你实际看到的内容列出关键发现")
+    return "输出要求：" + "，".join(parts) + "。"
+
+
 def _local_prompt_style_polish(text: str) -> str:
     cleaned = re.sub(r"[。！？!?]+$", "", _local_micro_polish(text)).strip()
+    cleaned = _PROMPT_TRAILING_PARTICLE_RE.sub("", cleaned).strip()
     if not cleaned:
         return ""
     if _looks_like_project_understanding_request(cleaned):
+        focus_items = "\n".join(f"- {item}" for item in _project_focus_items_from_text(cleaned))
         return (
             f"任务：{cleaned}。\n\n"
             "请重点关注：\n"
-            "- 项目的主要功能和使用场景。\n"
-            "- 目录结构、核心模块和关键入口。\n"
-            "- 启动方式、依赖配置和测试/打包流程。\n"
-            "- 当前代码中值得注意的风险或可改进点。\n\n"
-            "输出要求：先给出整体理解，再列出关键模块、运行方式和后续建议。"
+            f"{focus_items}\n\n"
+            f"{_project_output_requirement_from_text(cleaned)}"
         )
     return (
         f"任务：{cleaned}。\n\n"
@@ -339,14 +381,32 @@ def _project_prompt_output_is_weak(original: str, polished: str) -> bool:
     value = str(polished or "")
     if "\n" not in value and not re.search(r"(?:任务|目标|要求|输出|请重点关注)\s*[:：]", value):
         return True
+    if re.search(r"请重点关注\s*[:：]\s*[-*]", value):
+        return True
+    if "请重点关注" in value and "输出要求" in value and "\n" not in value:
+        return True
     if "保留原始目标、上下文和约束，不要添加未说明的背景" in value:
         return True
     if re.search(r"任务\s*[:：]\s*(?:测试怎么跑|还有|如果|以及)", value):
         return True
     if "把这个别人维护" in value:
         return True
-    required_topics = ("功能", "代码结构", "启动", "测试", "风险")
-    return sum(1 for topic in required_topics if topic in value) < 3
+    expected_topics: list[tuple[str, ...]] = []
+    if _contains_any(original, ("做什么", "功能", "用途", "使用场景", "场景", "目标")):
+        expected_topics.append(("做什么", "功能", "用途", "使用场景", "目标"))
+    if _contains_any(original, ("代码结构", "目录结构", "主要代码", "核心模块", "关键入口", "架构", "结构")):
+        expected_topics.append(("代码结构", "目录结构", "核心模块", "关键入口", "结构"))
+    if _contains_any(original, ("启动", "运行", "怎么跑", "如何跑", "依赖", "配置", "环境")):
+        expected_topics.append(("启动", "运行", "依赖", "配置"))
+    if _contains_any(original, ("测试", "单测", "怎么测", "测试怎么跑")):
+        expected_topics.append(("测试", "单测"))
+    if _contains_any(original, ("打包", "构建")):
+        expected_topics.append(("打包", "构建"))
+    if _contains_any(original, ("交给别人", "交接", "维护", "风险", "注意", "坑", "隐患")):
+        expected_topics.append(("交接", "维护", "风险", "注意"))
+    if not expected_topics:
+        expected_topics.append(("项目", "功能", "代码", "脉络", "整体"))
+    return any(not _contains_any(value, topic) for topic in expected_topics)
 
 
 def _select_polished_text(original: str, model_output: str, style: str = "", custom_prompt: str = "") -> str:

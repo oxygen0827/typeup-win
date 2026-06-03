@@ -66,7 +66,8 @@ class PolishStyleTests(unittest.TestCase):
         selected = _select_polished_text(original, leaked, "prompt")
 
         self.assertIn("任务：请帮我看看这个文件夹里的项目", selected)
-        self.assertIn("启动方式、依赖配置和测试/打包流程", selected)
+        self.assertIn("启动方式、运行依赖和必要配置", selected)
+        self.assertIn("测试运行方法", selected)
         self.assertNotIn("JSON", selected)
         self.assertNotIn("transcript", selected)
 
@@ -77,7 +78,35 @@ class PolishStyleTests(unittest.TestCase):
         selected = _select_polished_text(original, weak_output, "prompt")
 
         self.assertIn("任务：请充分了解一下这个文件夹的项目。", selected)
+        self.assertIn("项目的整体功能和代码脉络", selected)
+        self.assertNotIn("启动方式", selected)
+        self.assertNotIn("测试", selected)
+        self.assertNotIn("维护风险", selected)
+
+    def test_prompt_style_rejects_flattened_project_prompt_and_trims_particles(self):
+        original = "充分了解一下这个文件夹的项目哦"
+        flattened = "任务：充分了解一下这个文件夹的项目哦。请重点关注：- 项目的整体功能和代码脉络。输出要求：先给出整体理解，再按你实际看到的内容列出关键发现。"
+
+        selected = _select_polished_text(original, flattened, "prompt")
+
+        self.assertIn("任务：充分了解一下这个文件夹的项目。", selected)
+        self.assertIn("\n\n请重点关注：\n- 项目的整体功能和代码脉络。", selected)
+        self.assertNotIn("项目哦", selected)
+
+    def test_prompt_style_fallback_derives_project_focus_from_original_request(self):
+        original = "请帮我看看这个文件夹里的项目，先了解它是做什么的，然后看一下主要代码结构、启动方式、测试怎么跑，还有如果我要把它交给别人维护，需要注意哪些风险"
+        weak_output = "请分析文件夹内项目的功能，描述主要代码结构，提供启动和测试运行的方法，并列出将项目转交给他人维护时需要注意的风险。"
+
+        selected = _select_polished_text(original, weak_output, "prompt")
+
+        self.assertIn("项目的主要功能、使用场景和目标", selected)
         self.assertIn("目录结构、核心模块和关键入口", selected)
+        self.assertIn("启动方式、运行依赖和必要配置", selected)
+        self.assertIn("测试运行方法", selected)
+        self.assertNotIn("构建或打包流程", selected)
+        self.assertIn("交接维护时需要注意的风险", selected)
+        self.assertIn("写清楚测试方法", selected)
+        self.assertIn("最后列出维护风险", selected)
 
     def test_prompt_style_rejects_fragmented_project_prompt(self):
         original = "请帮我看看这个文件夹里的项目，先了解它是做什么的，然后看一下主要代码结构、启动方式、测试怎么跑，还有如果我要把它交给别人维护，需要注意哪些风险"
@@ -93,7 +122,8 @@ class PolishStyleTests(unittest.TestCase):
         selected = _select_polished_text(original, fragmented, "prompt")
 
         self.assertIn("任务：请帮我看看这个文件夹里的项目", selected)
-        self.assertIn("启动方式、依赖配置和测试/打包流程", selected)
+        self.assertIn("启动方式、运行依赖和必要配置", selected)
+        self.assertIn("测试运行方法", selected)
         self.assertNotIn("任务：测试怎么跑", selected)
         self.assertNotIn("把这个别人维护", selected)
 
@@ -105,7 +135,8 @@ class PolishStyleTests(unittest.TestCase):
 
         self.assertIn("任务：请帮我看看这个文件夹里的项目", selected)
         self.assertIn("请重点关注", selected)
-        self.assertIn("启动方式、依赖配置和测试/打包流程", selected)
+        self.assertIn("启动方式、运行依赖和必要配置", selected)
+        self.assertIn("测试运行方法", selected)
 
 
 if __name__ == "__main__":

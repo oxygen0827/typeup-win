@@ -367,6 +367,8 @@ class PushToTalk:
         self._device_hint       = device
         self._status            = status_window
         self._polish_label      = (polish_label or "微润色").strip() or "微润色"
+        if self._status is not None and hasattr(self._status, "set_polish_label"):
+            self._status.set_polish_label(self._polish_label)
         self._record_debug_audio = bool(record_debug_audio)
         self._debug_audio_dir    = debug_audio_dir
         self._device_idx        = None

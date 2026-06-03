@@ -26,6 +26,15 @@ class StatusWindowWinAudioLevelTests(unittest.TestCase):
         self.assertGreater(dropped, 0.2)
         self.assertLess(dropped, 0.8)
 
+    def test_prompt_polish_label_changes_recording_title(self):
+        from agent.status_window_win import _polish_recording_info
+
+        title, detail, _color = _polish_recording_info("Prompt 风格")
+
+        self.assertEqual(title, "正在聆听 · Prompt 风格")
+        self.assertEqual(detail, "松开 ALT 后输入Prompt 风格结果")
+        self.assertNotIn("微润色", title)
+
 
 if __name__ == "__main__":
     unittest.main()

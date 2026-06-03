@@ -1,5 +1,6 @@
 import os
 import platform
+import re
 import shutil
 import subprocess
 import threading
@@ -312,12 +313,20 @@ def type_text(text: str) -> None:
     if _OS == "Darwin":
         _type_via_quartz(text)
     elif _OS == "Windows":
-        if _use_clipboard_mode or len(text) >= _LONG_TEXT_CLIPBOARD_THRESHOLD:
+        if _use_clipboard_mode or _has_line_break(text) or len(text) >= _LONG_TEXT_CLIPBOARD_THRESHOLD:
             _type_via_clipboard_win(text)
         else:
             _type_via_sendinput(text)
     else:
         _type_via_xtest(text)  # Linux
+
+
+def _has_line_break(text: str) -> bool:
+    return "\n" in str(text or "") or "\r" in str(text or "")
+
+
+def _windows_clipboard_text(text: str) -> str:
+    return re.sub(r"(?<!\r)\n", "\r\n", str(text or ""))
 
 
 def paste_text(text: str) -> None:
@@ -489,6 +498,7 @@ def _utf16_code_units(text: str):
 
 def _type_via_clipboard_win(text: str) -> None:
     # Windows 剪贴板粘贴模式：适合微信等拦截 SendInput 的应用
+    text = _windows_clipboard_text(text)
     old_clip = _get_clipboard_win()
     _set_clipboard_win(text)
     time.sleep(0.03)
@@ -649,6 +659,8 @@ def get_caret_text_window(max_chars: int = 600) -> CaretTextWindow | None:
 def replace_selection(text: str, original: str = "") -> None:
     """将 text 写入剪贴板并粘贴，替换当前选中内容（选区失效时在光标处插入）。"""
     global _simulating
+    if _OS == "Windows":
+        text = _windows_clipboard_text(text)
     _set_clipboard(text)
     time.sleep(0.03)
     _simulating = True

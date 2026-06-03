@@ -6,8 +6,15 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前正式版安装包为 `TypeUp-Setup-0.3.7.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前正式版安装包为 `TypeUp-Setup-0.3.8.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
+
+## 0.3.8 更新重点
+
+- Prompt 风格会从原始语音里提取实际关注点，不再给项目理解类请求固定补全启动、测试或维护风险。
+- 短 Prompt 的结构化结果会保留换行，Windows 下多行文本会强制走剪贴板粘贴，避免被目标输入框压成一行。
+- 按住 Alt 使用 Prompt 风格时，悬浮状态窗会显示 Prompt 风格，不再误显示为微润色。
+- 配置页输出风格选择器改成更柔和的圆角胶囊选中态，更贴近当前 TypeUp UI。
 
 ## 0.3.7 更新重点
 

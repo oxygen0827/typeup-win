@@ -431,6 +431,27 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.8": {
+    releaseName: "TypeUp 0.3.8",
+    zh: {
+      summary: "本次正式版优化 Prompt 风格输出、录音状态提示和输出风格选择体验。",
+      items: [
+        "Prompt 风格会从原始语音里提取实际关注点，不再给项目理解类请求固定补全启动、测试或维护风险。",
+        "短 Prompt 的结构化结果会保留换行，Windows 下多行文本会强制走剪贴板粘贴，避免被目标输入框压成一行。",
+        "按住 Alt 使用 Prompt 风格时，悬浮状态窗会显示 Prompt 风格，不再误显示为微润色。",
+        "配置页输出风格选择器改成更柔和的圆角胶囊选中态，更贴近当前 TypeUp UI。",
+      ],
+    },
+    en: {
+      summary: "This release improves Prompt style output, recording status labels, and the output-style picker.",
+      items: [
+        "Prompt style now derives focus areas from the spoken request instead of adding fixed project-review topics such as startup, tests, or maintenance risk.",
+        "Short structured prompts keep their line breaks; multiline Windows output uses clipboard paste so target fields do not flatten it into one line.",
+        "Holding Alt in Prompt style now shows Prompt style in the floating status HUD instead of Micro polish.",
+        "The Settings output-style selector now uses a softer rounded pill selection state that better matches the TypeUp UI.",
+      ],
+    },
+  },
   "0.3.7": {
     releaseName: "TypeUp 0.3.7",
     zh: {

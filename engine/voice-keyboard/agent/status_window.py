@@ -81,6 +81,7 @@ class _Controller(NSObject):
         self._state = "idle"
         self._message_token = 0
         self._message_width_text = ""
+        self._polish_label = "微润色"
         self._build()
         return self
 
@@ -167,6 +168,9 @@ class _Controller(NSObject):
                 elif isinstance(item, tuple) and item and item[0] == "hide_message":
                     _, token = item
                     self._hide_message_now(token)
+                elif isinstance(item, tuple) and item and item[0] == "polish_label":
+                    _, label = item
+                    self._apply_polish_label(label)
                 else:
                     state = item[1] if isinstance(item, tuple) else item
                     self._apply(state)
@@ -177,7 +181,7 @@ class _Controller(NSObject):
     def _apply(self, state: str):
         if self._panel is None:
             return
-        info = _STATES.get(state)
+        info = self._state_info(state)
         if info is None or state == "idle":
             self._state = "idle"
             self._message_width_text = ""
@@ -193,6 +197,19 @@ class _Controller(NSObject):
             NSTimer.scheduledTimerWithTimeInterval_target_selector_userInfo_repeats_(
                 1.5, self, b"hide:", None, False,
             )
+
+    @objc.python_method
+    def _state_info(self, state: str):
+        info = _STATES.get(state)
+        if state == "polish_recording" and info is not None:
+            return (f"录音中 · {self._polish_label}", info[1])
+        return info
+
+    @objc.python_method
+    def _apply_polish_label(self, label: str) -> None:
+        self._polish_label = str(label or "").strip() or "微润色"
+        if self._state == "polish_recording":
+            self._apply("polish_recording")
 
     @objc.python_method
     def _layout(self, text: str, rgb, width_text: str):
@@ -262,6 +279,9 @@ class StatusWindow:
     def set_state(self, state: str) -> None:
         """线程安全，从任意线程调用。"""
         self._q.put(state)
+
+    def set_polish_label(self, label: str) -> None:
+        self._q.put(("polish_label", str(label or "").strip() or "微润色"))
 
     def show_message(self, text: str, seconds: float = 6.0) -> None:
         self._message_token += 1
