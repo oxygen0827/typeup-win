@@ -808,6 +808,12 @@ class PushToTalk:
         if self._active_key == "dictate":
             self._set_status(self._dictate_recording_state())
 
+    def _is_prompt_polish_mode(self) -> bool:
+        return self._polish_mode and "prompt" in self._polish_label.lower()
+
+    def _mid_sentence_enabled(self) -> bool:
+        return not self._is_prompt_polish_mode()
+
     def _run_mid_sentence_utterance(self, pcm: bytes, polish: bool) -> None:
         try:
             self._on_utterance(pcm, polish, False, False)
@@ -919,7 +925,7 @@ class PushToTalk:
         self._last_audio_callback_at = time.monotonic()
         self._saw_audio_callback = True
         self._buf.append(data)
-        if self._active_key == "dictate" and self._vad is not None:
+        if self._active_key == "dictate" and self._vad is not None and self._mid_sentence_enabled():
             self._vad_raw.extend(data)
             self._process_vad()
         else:
@@ -1001,7 +1007,7 @@ class PushToTalk:
         self._set_audio_level(0.0)
         self._close_stream()
 
-        if mode == "dictate" and self._vad is not None:
+        if mode == "dictate" and self._vad is not None and self._mid_sentence_enabled():
             self._process_vad()  # 处理流关闭前残留的音频字节
 
             # 松键时若仍在句子中间，把尾巴也发出去

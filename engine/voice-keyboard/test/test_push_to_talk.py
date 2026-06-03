@@ -136,6 +136,48 @@ class PushToTalkStatusTests(unittest.TestCase):
 
         self.assertEqual(status.levels[-1], 0.0)
 
+    def test_prompt_polish_disables_mid_sentence_vad_dispatch(self):
+        dispatched = []
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            ptt_key="alt_l",
+            polish_label="Prompt 风格",
+        )
+        ptt._active_key = "dictate"
+        ptt._polish_mode = True
+        ptt._vad = _FakeVad(False)
+        ptt._vad_in_speech = True
+        ptt._vad_speech_frames = [_pcm(5000, count=480)] * 4
+        ptt._vad_silent_count = 11
+        ptt._last_level_update_at = -999.0
+        ptt._dispatch_mid_sentence = lambda: dispatched.append("mid")
+
+        ptt._audio_callback(_pcm(0, count=480), 480, None, None)
+
+        self.assertEqual(dispatched, [])
+        self.assertEqual(ptt._vad_sent_count, 0)
+        self.assertEqual(len(ptt._buf), 1)
+
+    def test_micro_polish_keeps_mid_sentence_vad_dispatch(self):
+        dispatched = []
+        ptt = PushToTalk(
+            on_utterance=lambda _pcm: None,
+            ptt_key="alt_l",
+            polish_label="微润色",
+        )
+        ptt._active_key = "dictate"
+        ptt._polish_mode = True
+        ptt._vad = _FakeVad(False)
+        ptt._vad_in_speech = True
+        ptt._vad_speech_frames = [_pcm(5000, count=480)] * 4
+        ptt._vad_silent_count = 11
+        ptt._last_level_update_at = -999.0
+        ptt._dispatch_mid_sentence = lambda: dispatched.append("mid")
+
+        ptt._audio_callback(_pcm(0, count=480), 480, None, None)
+
+        self.assertEqual(dispatched, ["mid"])
+
     def test_combo_recording_stops_only_after_all_trigger_keys_release(self):
         ptt = PushToTalk(on_utterance=lambda _pcm: None, ptt_key="alt_l", ai_key=["alt_l", "space"])
         stopped = []
