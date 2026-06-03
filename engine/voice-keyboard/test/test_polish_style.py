@@ -59,6 +59,17 @@ class PolishStyleTests(unittest.TestCase):
         self.assertNotIn("JSON", selected)
         self.assertNotIn("transcript", selected)
 
+    def test_prompt_style_rejects_json_analysis_instruction_leak(self):
+        original = "请帮我看看这个文件夹里的项目，了解功能、主要代码结构、启动和测试方法，以及交接维护风险"
+        leaked = "请分析以下 JSON 中的 transcript 字段内容，了解文件夹内项目功能、主要代码结构、启动和测试方法，以及交接维护时需要注意的风险。"
+
+        selected = _select_polished_text(original, leaked, "prompt")
+
+        self.assertIn("任务：请帮我看看这个文件夹里的项目", selected)
+        self.assertIn("启动方式、依赖配置和测试/打包流程", selected)
+        self.assertNotIn("JSON", selected)
+        self.assertNotIn("transcript", selected)
+
     def test_prompt_style_upgrades_micro_like_short_output(self):
         original = "请充分了解一下这个文件夹的项目"
         weak_output = "请充分了解一下这个文件夹的项目。"
@@ -67,6 +78,24 @@ class PolishStyleTests(unittest.TestCase):
 
         self.assertIn("任务：请充分了解一下这个文件夹的项目。", selected)
         self.assertIn("目录结构、核心模块和关键入口", selected)
+
+    def test_prompt_style_rejects_fragmented_project_prompt(self):
+        original = "请帮我看看这个文件夹里的项目，先了解它是做什么的，然后看一下主要代码结构、启动方式、测试怎么跑，还有如果我要把它交给别人维护，需要注意哪些风险"
+        fragmented = (
+            "请查看指定文件夹中的项目，了解其功能，分析主要代码结构和启动方式。"
+            "任务：测试怎么跑？还有，如果我要把这个别人维护，需要注意哪些风险。\n\n"
+            "要求：\n"
+            "- 保留原始目标、上下文和约束，不要添加未说明的背景。\n"
+            "- 需要时先确认关键信息，再给出可执行结果。\n\n"
+            "输出要求：结构清晰，便于直接使用。"
+        )
+
+        selected = _select_polished_text(original, fragmented, "prompt")
+
+        self.assertIn("任务：请帮我看看这个文件夹里的项目", selected)
+        self.assertIn("启动方式、依赖配置和测试/打包流程", selected)
+        self.assertNotIn("任务：测试怎么跑", selected)
+        self.assertNotIn("把这个别人维护", selected)
 
 
 if __name__ == "__main__":

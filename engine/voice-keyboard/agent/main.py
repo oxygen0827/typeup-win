@@ -333,6 +333,20 @@ def _prompt_output_is_too_close_to_micro(original: str, polished: str) -> bool:
     return False
 
 
+def _project_prompt_output_is_weak(original: str, polished: str) -> bool:
+    if not _looks_like_project_understanding_request(original):
+        return False
+    value = str(polished or "")
+    if "保留原始目标、上下文和约束，不要添加未说明的背景" in value:
+        return True
+    if re.search(r"任务\s*[:：]\s*(?:测试怎么跑|还有|如果|以及)", value):
+        return True
+    if "把这个别人维护" in value:
+        return True
+    required_topics = ("功能", "代码结构", "启动", "测试", "风险")
+    return sum(1 for topic in required_topics if topic in value) < 3
+
+
 def _select_polished_text(original: str, model_output: str, style: str = "", custom_prompt: str = "") -> str:
     normalized_style = str(style or "").strip().lower()
     is_prompt_style = normalized_style == "prompt"
@@ -343,6 +357,8 @@ def _select_polished_text(original: str, model_output: str, style: str = "", cus
         if _prompt_output_leaks_internal_instruction(polished):
             return fallback
         if is_prompt_style and _prompt_output_is_too_close_to_micro(original, polished):
+            return fallback
+        if is_prompt_style and _project_prompt_output_is_weak(original, polished):
             return fallback
         return polished or fallback
     if _polished_text_is_suspicious(original, polished):
