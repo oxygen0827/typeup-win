@@ -438,6 +438,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.15": {
+    releaseName: "TypeUp 0.3.15",
+    zh: {
+      summary: "远程更新安装流程验证测试版，用于确认 0.3.14 之后可以自动安装并重启。",
+      items: [
+        "用于测试从 0.3.14 点击“立即安装并重启”是否能自动完成安装。",
+        "更新说明会显示 0.3.15，方便确认远程更新结果。",
+        "不改变语音输入、AI 编辑、账号订阅和本地引擎逻辑。",
+      ],
+    },
+    en: {
+      summary: "Remote update install-flow test build for confirming automatic install and relaunch after 0.3.14.",
+      items: [
+        "Tests whether Install and restart from 0.3.14 can complete automatically.",
+        "Release notes show 0.3.15 so the update result is easy to confirm.",
+        "Voice input, AI editing, account, subscription, and local engine behavior are unchanged.",
+      ],
+    },
+  },
   "0.3.14": {
     releaseName: "TypeUp 0.3.14",
     zh: {
