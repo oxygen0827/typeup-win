@@ -1,3 +1,10 @@
+!macro customInit
+  ${if} ${Silent}
+  ${andIf} ${isUpdated}
+    !insertmacro setInstallModePerUser
+  ${endIf}
+!macroend
+
 !macro customCheckAppRunning
   DetailPrint "Closing running TypeUp processes before install..."
   ExecWait 'taskkill /IM "TypeUp.exe" /T /F' $0

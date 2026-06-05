@@ -438,6 +438,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.13": {
+    releaseName: "TypeUp 0.3.13",
+    zh: {
+      summary: "修复远程更新点击“立即安装并重启”后安装器没有继续安装的问题。",
+      items: [
+        "静默更新时强制使用当前用户安装目录，避免安装器跑偏或无声退出。",
+        "启动安装器时显式传入当前用户安装参数，后续更新更稳定。",
+        "增加安装器启动日志，方便排查极少数机器上的安装失败。",
+      ],
+    },
+    en: {
+      summary: "Fixes the remote update flow where Install and restart could close the app without continuing installation.",
+      items: [
+        "Forces silent update installs to use the current-user install directory.",
+        "Passes the current-user install flag when launching the fallback installer.",
+        "Adds installer launch logging for diagnosing rare Windows install failures.",
+      ],
+    },
+  },
   "0.3.12": {
     releaseName: "TypeUp 0.3.12",
     zh: {

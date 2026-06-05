@@ -97,7 +97,8 @@ assert.equal(createDirectInstallerUpdate({ version: "0.3.8" }, "darwin"), null);
   ]);
 
 const installerPath = "C:\\Users\\TypeUp User\\Downloads\\TypeUp-Setup-0.1.23.exe";
-const command = windowsFallbackInstallerCommand(installerPath, 1234);
+const launchLogPath = "C:\\Users\\TypeUp User\\AppData\\Local\\Temp\\typeup-updater-fallback\\install-launch.log";
+const command = windowsFallbackInstallerCommand(installerPath, 1234, launchLogPath);
 
 assert.equal(command.command, "cmd.exe");
 assert.equal(command.options.detached, true);
@@ -108,9 +109,11 @@ const encodedScript = command.args.at(-1);
 const script = Buffer.from(encodedScript, "base64").toString("utf16le");
 assert.match(script, /Wait-Process -Id \$pidToWait/);
 assert.match(script, /Start-Process -FilePath \$installer/);
+assert.match(script, /\/currentuser/);
 assert.match(script, /--updated/);
 assert.match(script, /1234/);
 assert.match(script, /TypeUp-Setup-0\.1\.23/);
+assert.match(script, /install-launch\.log/);
 assert.doesNotMatch(command.args.join(" "), /TypeUp-Setup-0\.1\.23/);
 
   await testRangeResumeDownload();

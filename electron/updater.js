@@ -15,7 +15,7 @@ const GENERIC_RELEASE_BASE = "http://150.158.146.192:6052/apps/typeup-win-releas
 const UPDATE_MANIFEST_URL = `${GENERIC_RELEASE_BASE}/typeup-update.json`;
 const USER_AGENT = "TypeUpUpdater/1.0";
 const REQUEST_TIMEOUT_MS = 45000;
-const FALLBACK_INSTALL_ARGS = ["/S", "--updated", "--force-run"];
+const FALLBACK_INSTALL_ARGS = ["/currentuser", "/S", "--updated", "--force-run"];
 const RETRYABLE_ERROR_CODES = new Set([
   "ECONNRESET",
   "ETIMEDOUT",
@@ -823,18 +823,27 @@ function launchFallbackInstaller(app, installerPath) {
 }
 
 function spawnWindowsFallbackInstaller(installerPath, waitForPid = process.pid) {
-  const command = windowsFallbackInstallerCommand(installerPath, waitForPid);
+  const logPath = path.join(os.tmpdir(), "typeup-updater-fallback", "install-launch.log");
+  const command = windowsFallbackInstallerCommand(installerPath, waitForPid, logPath);
   return spawn(command.command, command.args, command.options);
 }
 
-function windowsFallbackInstallerCommand(installerPath, waitForPid = process.pid) {
+function windowsFallbackInstallerCommand(installerPath, waitForPid = process.pid, logPath = "") {
+  const installArgs = FALLBACK_INSTALL_ARGS.map(powerShellStringLiteral).join(", ");
   const script = [
     "$ErrorActionPreference = 'Stop'",
     `$pidToWait = ${Number(waitForPid) || 0}`,
     `$installer = ${powerShellStringLiteral(installerPath)}`,
+    `$logPath = ${powerShellStringLiteral(logPath)}`,
+    "$logDir = Split-Path -Parent $logPath",
+    "if ($logDir) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }",
+    "function Write-TypeUpUpdateLog([string] $message) { if ($logPath) { Add-Content -Path $logPath -Value ((Get-Date).ToString('s') + ' ' + $message) } }",
+    "Write-TypeUpUpdateLog ('waiting for TypeUp pid ' + $pidToWait)",
     "Wait-Process -Id $pidToWait -ErrorAction SilentlyContinue",
     "Start-Sleep -Milliseconds 500",
-    "Start-Process -FilePath $installer -ArgumentList @('/S', '--updated', '--force-run')",
+    "Write-TypeUpUpdateLog ('starting installer ' + $installer)",
+    `$process = Start-Process -FilePath $installer -ArgumentList @(${installArgs}) -PassThru`,
+    "Write-TypeUpUpdateLog ('started installer pid ' + $process.Id)",
   ].join("; ");
   return {
     command: "cmd.exe",
