@@ -6,8 +6,16 @@ TypeUp 是 Windows 桌面端语音输入与 AI 编辑客户端。Electron 壳启
 
 给测试用户分发安装包时，优先发送简洁版说明：[docs/tester-quickstart.md](docs/tester-quickstart.md)。
 
-当前正式版安装包为 `TypeUp-Setup-0.3.9.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
+当前正式版安装包为 `TypeUp-Setup-0.3.10.exe`，默认连接公网后端 `http://150.158.146.192:6053`。本地开发联调时可以通过 `TYPEUP_BACKEND_URL` 覆盖为 `http://localhost:8000`。
 `0.1.8` 起桌面端接入 GitHub Releases 自动更新；更旧的测试版需要手动安装一次 `0.1.8` 或更新版本，后续版本才会在软件内提示下载和重启安装。
+
+## 0.3.10 更新重点
+
+- Windows 更新器优先读取 `typeup-update.json`，继续保留 `latest.yml` 兼容旧更新源。
+- 安装包下载支持 HTTP Range 断点续传、`.part` 临时文件、失败重试和备用下载源。
+- 安装前会同时校验安装包大小和 sha256，避免半包或缓存污染进入安装流程。
+- 更新进度会区分连接下载源、下载中、校验安装包和安装准备中，避免用户看到 `0%` 却不知道发生了什么。
+- 发布脚本改为上传到 release 快照后再切 `current`，并在发布后检查 `latest.yml`、`typeup-update.json`、HEAD、Range `206` 和公网 sha256。
 
 ## 0.3.9 更新重点
 
@@ -554,13 +562,13 @@ macOS 默认快捷键为右 `Shift` 说话、右 `Option` 进行 AI 编辑、双
 
 ## 自动更新
 
-桌面端已经接入 `electron-updater`，当前 Windows 更新源指向 TypeUp 自有静态发布目录：`http://150.158.146.192:6052/apps/typeup-win-release/`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成下载，并在下载完成后点击“重启安装”。
+桌面端保留 `electron-updater` 的 `latest.yml` 兼容入口，同时 Windows 打包版会优先读取 TypeUp 自有静态发布目录里的 `typeup-update.json`：`http://150.158.146.192:6052/apps/typeup-win-release/`。用户打开 TypeUp 后会自动静默检查新版；如果发现新版本，界面顶部会提示“已有新版本，请更新”，用户可以在软件内完成断点续传下载，并在下载完成后点击“重启安装”。
 
 注意：只有安装了带自动更新能力的版本后，后续版本才能自动更新。`0.1.8` 是自动更新起点，已经安装更旧版本的测试用户需要手动安装一次 `0.1.8` 或更新版本安装包。当前可分发测试版是 `0.3.5`。
 
 `0.1.19` 起，点击“立即安装并重启”前会把目标版本、Release 标题、Release notes 和发布页链接写入本地用户数据。新版首次启动时，React 主界面会在顶部显示同风格更新说明卡片；同一版本关闭后只记录为已读，不会重复弹出。TypeUp 自有服务器更新源的 `latest.yml` 默认不携带正文，客户端会回退到内置版本说明；每次发版都要同步更新 `BUILTIN_RELEASE_NOTES`，确保首页显示真实更新内容。
 
-当前发布流程会把 `TypeUp-Setup-<version>.exe`、`.blockmap` 和 `latest.yml` 上传到服务器目录 `/home/wq/static-site-deployer/data/sites/typeup-win-release`，创建 `releases/<timestamp>-v<version>` 快照，并把 `current` 切换到该快照。公网只读取 `current`，所以发布后必须验证 `latest.yml`、安装包和 blockmap 的公网 URL。
+当前发布流程会先在本地生成 `typeup-update.json`，其中包含版本、安装包 URL、大小、sha256、发布时间和备用下载地址；然后把 `TypeUp-Setup-<version>.exe`、`.blockmap`、`latest.yml` 和 `typeup-update.json` 上传到服务器的 `releases/<timestamp>-v<version>` 快照目录，校验远端 sha256 后再把 `current` 切换到该快照。公网只读取 `current`，所以发布后必须验证 `latest.yml`、`typeup-update.json`、安装包和 blockmap 的公网 URL。
 
 发布新版时需要：
 
@@ -576,9 +584,17 @@ npm.cmd run build:win
 TypeUp-Setup-<version>.exe
 TypeUp-Setup-<version>.exe.blockmap
 latest.yml
+typeup-update.json
 ```
 
-发布完成后检查 `http://150.158.146.192:6052/apps/typeup-win-release/latest.yml` 返回新版本，并用 `curl.exe -I` 确认安装包和 blockmap 都是 `200 OK`。
+发布脚本入口：
+
+```powershell
+$env:TYPEUP_SSH_PASS = "<ssh-password>"
+python scripts\publish-typeup-release.py --repo C:\Users\Administrator\Desktop\ai_deploy\typeup-win --version <next-version>
+```
+
+发布完成后脚本会自动检查 `latest.yml` 和 `typeup-update.json` 返回新版本，用 `HEAD` 确认安装包和 blockmap 的 `Content-Length`，用 `Range` 请求确认安装包返回 `206`，并重新下载公网安装包做 sha256 校验；任何一步失败都不会提示发布成功。
 
 ## 构建
 

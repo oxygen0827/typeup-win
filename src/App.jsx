@@ -170,11 +170,13 @@ const COPY = {
     restartAfterGrant: "授权后请重启本地引擎。",
     checkUpdate: "检查更新",
     updateChecking: "正在检查更新",
+    updateConnecting: "正在连接下载源",
     updateLatest: "已是最新版本",
     updateAvailable: "已有新版本，请更新",
     updateAvailableDetail: "TypeUp {version} 已发布，下载后可一键静默安装并自动重启。",
     updateDownload: "下载更新",
     updateDownloading: "正在下载",
+    updateVerifying: "正在校验安装包",
     updateDownloaded: "更新已下载",
     updateDownloadedDetail: "点击后 TypeUp 会关闭窗口、静默安装新版并自动重新打开。",
     updateInstall: "立即安装并重启",
@@ -292,11 +294,13 @@ const COPY = {
     restartAfterGrant: "Restart the local engine after granting permissions.",
     checkUpdate: "Check Updates",
     updateChecking: "Checking for updates",
+    updateConnecting: "Connecting to download source",
     updateLatest: "TypeUp is up to date",
     updateAvailable: "A new version is available",
     updateAvailableDetail: "TypeUp {version} is ready. Download it, then install silently and restart automatically.",
     updateDownload: "Download",
     updateDownloading: "Downloading",
+    updateVerifying: "Verifying installer",
     updateDownloaded: "Update downloaded",
     updateDownloadedDetail: "TypeUp will close, install silently, and reopen automatically.",
     updateInstall: "Install and Restart",
@@ -425,12 +429,38 @@ const DEFAULT_UPDATE_STATE = {
   releaseNotes: "",
   releaseUrl: "",
   progress: 0,
+  bytesReceived: 0,
+  bytesTotal: 0,
+  phase: "",
   error: "",
 };
 
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.10": {
+    releaseName: "TypeUp 0.3.10",
+    zh: {
+      summary: "本次升级远程更新链路，下载更可恢复、发布更可验证，失败状态也更清楚。",
+      items: [
+        "Windows 更新器优先读取 typeup-update.json，继续保留 latest.yml 兼容旧更新源。",
+        "安装包下载支持 HTTP Range 断点续传、.part 临时文件、失败重试和备用下载源。",
+        "安装前会同时校验安装包大小和 sha256，避免半包或缓存污染进入安装流程。",
+        "更新进度会区分连接下载源、下载中、校验安装包和安装准备中，避免用户看到 0% 却不知道发生了什么。",
+        "发布脚本改为上传到 release 快照后再切 current，并在发布后检查 latest.yml、typeup-update.json、HEAD、Range 206 和公网 sha256。",
+      ],
+    },
+    en: {
+      summary: "This update hardens the remote update path with resumable downloads, stronger publish checks, and clearer failure states.",
+      items: [
+        "The Windows updater now prefers typeup-update.json while keeping latest.yml compatibility for the existing feed.",
+        "Installer downloads support HTTP Range resume, .part temporary files, retries, and backup download URLs.",
+        "Before installation, TypeUp verifies both installer size and sha256 so partial downloads or stale cache files cannot install.",
+        "Update progress now separates connecting, downloading, verifying, and preparing-to-install states instead of leaving users staring at 0%.",
+        "The publisher uploads to a release snapshot before switching current, then checks latest.yml, typeup-update.json, HEAD, Range 206, and public sha256.",
+      ],
+    },
+  },
   "0.3.9": {
     releaseName: "TypeUp 0.3.9",
     zh: {
@@ -1782,11 +1812,13 @@ export default function App() {
 
 function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
   const status = updateState?.status || "disabled";
-  const visibleStatuses = new Set(["checking", "latest", "available", "downloading", "downloaded", "installing", "error"]);
+  const visibleStatuses = new Set(["checking", "latest", "available", "connecting", "downloading", "verifying", "downloaded", "installing", "error"]);
   if (!visibleStatuses.has(status)) return null;
 
   const version = updateState.availableVersion || "";
   const progress = Math.max(0, Math.min(100, Number(updateState.progress || 0)));
+  const bytesReceived = Number(updateState.bytesReceived || 0);
+  const bytesTotal = Number(updateState.bytesTotal || 0);
   let tone = "info";
   let title = text.checkUpdate;
   let detail = "";
@@ -1818,10 +1850,20 @@ function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
         {text.updateDownload}
       </button>
     );
-  } else if (status === "downloading") {
-    title = `${text.updateDownloading} ${Math.round(progress)}%`;
+  } else if (status === "connecting") {
+    title = text.updateConnecting;
     detail = formatUpdateDetail(text.updateAvailableDetail, version);
     icon = <Download size={18} />;
+  } else if (status === "downloading") {
+    title = `${text.updateDownloading} ${Math.round(progress)}%`;
+    detail = bytesTotal > 0
+      ? `${formatBytesCompact(bytesReceived)} / ${formatBytesCompact(bytesTotal)}`
+      : formatUpdateDetail(text.updateAvailableDetail, version);
+    icon = <Download size={18} />;
+  } else if (status === "verifying") {
+    title = text.updateVerifying;
+    detail = bytesTotal > 0 ? formatBytesCompact(bytesTotal) : formatUpdateDetail(text.updateAvailableDetail, version);
+    icon = <CheckCircle2 size={18} />;
   } else if (status === "downloaded") {
     tone = "ok";
     title = text.updateDownloaded;
@@ -1858,7 +1900,7 @@ function UpdateBanner({ text, updateState, onCheck, onDownload, onInstall }) {
           {detail ? <span>{detail}</span> : null}
         </div>
       </div>
-      {status === "downloading" ? (
+      {["connecting", "downloading", "verifying"].includes(status) ? (
         <div className="update-progress" aria-label={title}>
           <span style={{ width: `${progress}%` }} />
         </div>
@@ -2958,6 +3000,14 @@ function sameStatus(left, right) {
 
 function formatNumber(value = 0, lang = "zh") {
   return new Intl.NumberFormat(lang === "zh" ? "zh-CN" : "en-US").format(value || 0);
+}
+
+function formatBytesCompact(value = 0) {
+  const bytes = Math.max(0, Number(value || 0));
+  if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${bytes} B`;
 }
 
 function formatMoney(cents = 0, currency = "CNY", lang = "zh") {

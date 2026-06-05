@@ -12,6 +12,7 @@ const GITHUB_REPO = "typeup-win";
 const GITHUB_API_BASE = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
 const GITHUB_RELEASE_BASE = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`;
 const GENERIC_RELEASE_BASE = "http://150.158.146.192:6052/apps/typeup-win-release";
+const UPDATE_MANIFEST_URL = `${GENERIC_RELEASE_BASE}/typeup-update.json`;
 const USER_AGENT = "TypeUpUpdater/1.0";
 const REQUEST_TIMEOUT_MS = 45000;
 const FALLBACK_INSTALL_ARGS = ["/S", "--updated", "--force-run"];
@@ -39,6 +40,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     releaseNotes: "",
     releaseUrl: "",
     progress: 0,
+    bytesReceived: 0,
+    bytesTotal: 0,
+    phase: "",
     error: "",
   };
 
@@ -94,6 +98,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
         releaseNotes: normalizeReleaseNotes(info.releaseNotes),
         releaseUrl: info.releaseUrl || "",
         progress: 0,
+        bytesReceived: 0,
+        bytesTotal: 0,
+        phase: "",
         error: "",
       });
     });
@@ -109,6 +116,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
           releaseNotes: "",
           releaseUrl: "",
           progress: 0,
+          bytesReceived: 0,
+          bytesTotal: 0,
+          phase: "",
           error: "",
         },
         { silent: pendingSilentCheck },
@@ -119,6 +129,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
       setState({
         status: "downloading",
         progress: Math.max(0, Math.min(100, Number(progress.percent || 0))),
+        bytesReceived: Number(progress.transferred || 0),
+        bytesTotal: Number(progress.total || 0),
+        phase: "downloading",
         error: "",
       });
     });
@@ -131,6 +144,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
         releaseNotes: normalizeReleaseNotes(info.releaseNotes) || state.releaseNotes,
         releaseUrl: info.releaseUrl || state.releaseUrl,
         progress: 100,
+        bytesReceived: state.bytesTotal || state.bytesReceived,
+        bytesTotal: state.bytesTotal,
+        phase: "",
         error: "",
       });
     });
@@ -147,8 +163,10 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     pendingSilentCheck = Boolean(options.silent);
     fallbackUpdate = null;
     fallbackInstallerPath = "";
-    setState({ status: "checking", error: "", progress: 0 }, { silent: pendingSilentCheck });
+    setState({ status: "checking", error: "", progress: 0, bytesReceived: 0, bytesTotal: 0, phase: "" }, { silent: pendingSilentCheck });
     try {
+      const manifestHandled = await checkForUpdatesViaManifest({ silent: pendingSilentCheck });
+      if (manifestHandled) return getState();
       await autoUpdater.checkForUpdates();
       if (state.status === "error" && isRetryableUpdateError(state.error)) {
         await checkForUpdatesViaGithubApi({ silent: pendingSilentCheck });
@@ -166,6 +184,50 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     return getState();
   }
 
+  async function checkForUpdatesViaManifest(options = {}) {
+    const manifest = await fetchUpdateManifest();
+    if (!manifest) return false;
+    const manifestUpdate = createManifestInstallerUpdate(manifest, process.platform);
+    if (!manifestUpdate) {
+      throw new Error("TypeUp update manifest does not include a Windows installer");
+    }
+    if (compareVersions(manifestUpdate.version, app.getVersion()) <= 0) {
+      fallbackUpdate = null;
+      fallbackInstallerPath = "";
+      setState(
+        {
+          status: options.silent ? "idle" : "latest",
+          availableVersion: "",
+          progress: 0,
+          bytesReceived: 0,
+          bytesTotal: 0,
+          phase: "",
+          error: "",
+        },
+        { silent: options.silent },
+      );
+      return true;
+    }
+    fallbackUpdate = manifestUpdate;
+    fallbackInstallerPath = "";
+    setState(
+      {
+        status: "available",
+        availableVersion: manifestUpdate.version,
+        releaseName: manifestUpdate.releaseName,
+        releaseNotes: manifestUpdate.releaseNotes,
+        releaseUrl: manifestUpdate.releaseUrl,
+        progress: 0,
+        bytesReceived: 0,
+        bytesTotal: manifestUpdate.installerSize,
+        phase: "",
+        error: "",
+      },
+      { silent: options.silent },
+    );
+    return true;
+  }
+
   async function checkForUpdatesViaGithubApi(options = {}) {
     try {
       const release = await findLatestGithubRelease();
@@ -181,6 +243,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
             status: options.silent ? "idle" : "latest",
             availableVersion: "",
             progress: 0,
+            bytesReceived: 0,
+            bytesTotal: 0,
+            phase: "",
             error: "",
           },
           { silent: options.silent },
@@ -212,6 +277,9 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
           releaseNotes: fallbackUpdate.releaseNotes,
           releaseUrl: fallbackUpdate.releaseUrl,
           progress: 0,
+          bytesReceived: 0,
+          bytesTotal: fallbackUpdate.installerSize,
+          phase: "",
           error: "",
         },
         { silent: options.silent },
@@ -228,16 +296,27 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
       await checkForUpdates({ silent: false });
       if (state.status !== "available") return getState();
     }
-    setState({ status: "downloading", progress: 0, error: "" });
+    setState({ status: "connecting", progress: 0, bytesReceived: 0, bytesTotal: fallbackUpdate?.installerSize || 0, phase: "connecting", error: "" });
     try {
       if (fallbackUpdate) {
-        fallbackInstallerPath = await downloadFallbackInstaller(fallbackUpdate, (percent) => {
-          setState({ status: "downloading", progress: percent, error: "" });
+        fallbackInstallerPath = await downloadFallbackInstaller(fallbackUpdate, (progress) => {
+          const phase = progress.phase || "downloading";
+          setState({
+            status: phase === "verifying" ? "verifying" : phase === "connecting" ? "connecting" : "downloading",
+            progress: progress.percent,
+            bytesReceived: progress.received,
+            bytesTotal: progress.total,
+            phase,
+            error: "",
+          });
         });
         setState({
           status: "downloaded",
           availableVersion: fallbackUpdate.version,
           progress: 100,
+          bytesReceived: fallbackUpdate.installerSize || state.bytesReceived,
+          bytesTotal: fallbackUpdate.installerSize || state.bytesTotal,
+          phase: "",
           error: "",
         });
       } else {
@@ -271,12 +350,13 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
   async function installUpdate() {
     if (!canUpdate || state.status !== "downloaded") return getState();
     try {
-      setState({ status: "installing", error: "" });
+      setState({ status: "installing", phase: "preparing", error: "" });
       await writePendingReleaseNotes().catch(() => {});
       if (typeof beforeInstall === "function") {
         await beforeInstall();
       }
       if (fallbackInstallerPath) {
+        await verifyDownloadedFile(fallbackInstallerPath, fallbackUpdate);
         launchFallbackInstaller(app, fallbackInstallerPath);
       } else {
         autoUpdater.quitAndInstall(true, true);
@@ -361,6 +441,152 @@ function requestJson(url) {
   }).then((buffer) => JSON.parse(buffer.toString("utf8")));
 }
 
+async function fetchUpdateManifest(url = UPDATE_MANIFEST_URL) {
+  try {
+    const buffer = await requestBufferWithRetry(url, {
+      headers: {
+        Accept: "application/json",
+        "User-Agent": USER_AGENT,
+      },
+    });
+    return JSON.parse(buffer.toString("utf8"));
+  } catch (error) {
+    if (isHttpStatus(error, 404)) return null;
+    throw error;
+  }
+}
+
+function createManifestInstallerUpdate(manifest = {}, platform = process.platform, releaseBase = GENERIC_RELEASE_BASE) {
+  const version = parseVersion(manifest.version || manifest.tagName || manifest.tag_name || manifest.releaseName || "");
+  if (!version || !shouldUseDirectInstallerDownload(platform)) return null;
+  const installer = findManifestInstaller(manifest, platform, version);
+  const installerName = String(
+    installer.name || installer.fileName || installer.path || manifest.installerName || `TypeUp-Setup-${version}.exe`,
+  ).trim();
+  const installerUrls = normalizeDownloadUrls(
+    [
+      installer.url,
+      installer.downloadUrl,
+      installer.installerUrl,
+      manifest.installerUrl,
+      manifest.downloadUrl,
+      manifest.url,
+      ...(asArray(installer.alternateUrls)),
+      ...(asArray(installer.backupUrls)),
+      ...(asArray(installer.mirrors)),
+      ...(asArray(manifest.alternateUrls)),
+      ...(asArray(manifest.backupUrls)),
+      ...(asArray(manifest.mirrors)),
+    ],
+    installerName,
+    releaseBase,
+  );
+  if (!installerUrls.length) return null;
+  return {
+    version,
+    releaseName: manifest.releaseName || manifest.name || `TypeUp ${version}`,
+    releaseNotes: normalizeReleaseNotes(manifest.releaseNotes || manifest.notes || ""),
+    releaseUrl: String(manifest.releaseUrl || manifest.htmlUrl || ""),
+    publishedAt: String(manifest.publishedAt || manifest.releaseDate || ""),
+    installerAssetId: "",
+    installerUrl: installerUrls[0],
+    installerUrls,
+    installerName,
+    installerSize: Number(installer.size || installer.bytes || manifest.size || manifest.installerSize || 0),
+    installerDigest: normalizeInstallerDigest(installer.sha256 || manifest.sha256 || installer.digest || manifest.digest || ""),
+    blockmapUrl: resolveDownloadUrl(installer.blockmapUrl || manifest.blockmapUrl || "", releaseBase),
+  };
+}
+
+function findManifestInstaller(manifest = {}, platform = process.platform, version = "") {
+  const platformKeys = platform === "win32"
+    ? ["win32", "windows", "win", "nsis"]
+    : [platform];
+  const candidates = [];
+  if (manifest.installer && typeof manifest.installer === "object") candidates.push(manifest.installer);
+  if (Array.isArray(manifest.files)) {
+    candidates.push(...manifest.files);
+  } else if (manifest.files && typeof manifest.files === "object") {
+    for (const key of platformKeys) {
+      const value = manifest.files[key];
+      collectManifestFileCandidates(candidates, value);
+    }
+    candidates.push(...Object.values(manifest.files).filter((value) => value && typeof value === "object" && !Array.isArray(value)));
+  }
+  if (manifest.platforms && typeof manifest.platforms === "object") {
+    for (const key of platformKeys) {
+      const platformManifest = manifest.platforms[key];
+      if (!platformManifest || typeof platformManifest !== "object") continue;
+      collectManifestFileCandidates(candidates, platformManifest.installer);
+      collectManifestFileCandidates(candidates, platformManifest.files);
+    }
+  }
+  candidates.push(manifest);
+  const expectedName = `TypeUp-Setup-${version}.exe`;
+  return candidates.find((item) => manifestFileName(item) === expectedName)
+    || candidates.find((item) => /\.exe(?:$|\?)/i.test(manifestFileName(item) || String(item?.url || item?.downloadUrl || "")))
+    || candidates[0]
+    || {};
+}
+
+function collectManifestFileCandidates(candidates, value) {
+  if (!value) return;
+  if (Array.isArray(value)) {
+    candidates.push(...value);
+    return;
+  }
+  if (typeof value !== "object") return;
+  if (value.installer) collectManifestFileCandidates(candidates, value.installer);
+  if (value.files) collectManifestFileCandidates(candidates, value.files);
+  candidates.push(value);
+}
+
+function manifestFileName(item = {}) {
+  const value = String(item.name || item.fileName || item.path || item.url || item.downloadUrl || item.installerUrl || "").trim();
+  if (!value) return "";
+  try {
+    return path.basename(new URL(value).pathname);
+  } catch (_error) {
+    return path.basename(value);
+  }
+}
+
+function normalizeDownloadUrls(values, installerName, releaseBase = GENERIC_RELEASE_BASE) {
+  const urls = values
+    .flatMap((value) => asArray(value))
+    .map((value) => resolveDownloadUrl(String(value || "").trim(), releaseBase))
+    .filter(Boolean);
+  if (!urls.length && installerName) {
+    urls.push(`${releaseBase}/${encodeURIComponent(installerName)}`);
+  }
+  return unique(urls);
+}
+
+function resolveDownloadUrl(value, releaseBase = GENERIC_RELEASE_BASE) {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${releaseBase.replace(/\/+$/, "")}/${String(value).replace(/^\/+/, "").split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function normalizeInstallerDigest(value) {
+  const text = String(value || "").trim();
+  const prefixed = text.match(/^sha256:([0-9a-f]{64})$/i);
+  if (prefixed) return `sha256:${prefixed[1].toLowerCase()}`;
+  const raw = text.match(/^[0-9a-f]{64}$/i);
+  if (raw) return `sha256:${text.toLowerCase()}`;
+  return text;
+}
+
+function asArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null || value === "") return [];
+  return [value];
+}
+
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+
 async function findLatestGithubRelease() {
   try {
     return await requestJson(`${GITHUB_API_BASE}/releases/latest`);
@@ -406,34 +632,73 @@ async function downloadFallbackInstaller(update, onProgress) {
   const cacheDir = path.join(os.tmpdir(), "typeup-updater-fallback");
   await fs.promises.mkdir(cacheDir, { recursive: true });
   const destination = path.join(cacheDir, update.installerName);
-  const url = update.installerAssetId
-    ? `${GITHUB_API_BASE}/releases/assets/${update.installerAssetId}`
-    : update.installerUrl;
+  const urls = getDownloadCandidates(update);
+  if (!urls.length) {
+    throw new Error("TypeUp update manifest does not include an installer URL");
+  }
   try {
-    await requestFileWithRetry(url, destination, {
-      expectedSize: update.installerSize,
-      onProgress,
-      headers: {
-        Accept: "application/octet-stream",
-        "User-Agent": USER_AGENT,
-      },
-    });
     await verifyDownloadedFile(destination, update);
+    if (typeof onProgress === "function") {
+      onProgress({ phase: "verifying", percent: 100, received: update.installerSize || 0, total: update.installerSize || 0 });
+    }
     return destination;
-  } catch (error) {
+  } catch (_error) {
     await fs.promises.unlink(destination).catch(() => {});
-    if (!shouldFallbackToPowerShellDownload(error, process.platform, update.installerUrl)) {
-      throw error;
+  }
+  let lastError = null;
+  for (let index = 0; index < urls.length; index += 1) {
+    const url = urls[index];
+    const headers = update.installerAssetId && url.includes("/releases/assets/")
+      ? { Accept: "application/octet-stream", "User-Agent": USER_AGENT }
+      : { "User-Agent": USER_AGENT };
+    try {
+      if (typeof onProgress === "function") {
+        onProgress({ phase: "connecting", percent: 0, received: 0, total: update.installerSize || 0, sourceIndex: index });
+      }
+      await requestFileWithRetry(url, destination, {
+        expectedSize: update.installerSize,
+        onProgress: (progress) => {
+          if (typeof onProgress === "function") {
+            onProgress({ ...progress, phase: progress.phase || "downloading", sourceIndex: index });
+          }
+        },
+        headers,
+      });
+      if (typeof onProgress === "function") {
+        onProgress({ phase: "verifying", percent: 99, received: update.installerSize || 0, total: update.installerSize || 0, sourceIndex: index });
+      }
+      await verifyDownloadedFile(destination, update);
+      if (typeof onProgress === "function") {
+        onProgress({ phase: "verifying", percent: 100, received: update.installerSize || 0, total: update.installerSize || 0, sourceIndex: index });
+      }
+      return destination;
+    } catch (error) {
+      lastError = error;
+      await fs.promises.unlink(destination).catch(() => {});
+      await fs.promises.unlink(`${destination}.part`).catch(() => {});
+      if (index < urls.length - 1) continue;
     }
   }
+  if (!shouldFallbackToPowerShellDownload(lastError, process.platform, update.installerUrl)) {
+    throw lastError || new Error("TypeUp update download failed");
+  }
   if (process.platform === "win32" && update.installerUrl) {
-    if (typeof onProgress === "function") onProgress(5);
+    if (typeof onProgress === "function") {
+      onProgress({ phase: "connecting", percent: 5, received: 0, total: update.installerSize || 0 });
+    }
     await downloadWithPowerShell(update.installerUrl, destination);
     await verifyDownloadedFile(destination, update);
-    if (typeof onProgress === "function") onProgress(100);
+    if (typeof onProgress === "function") {
+      onProgress({ phase: "verifying", percent: 100, received: update.installerSize || 0, total: update.installerSize || 0 });
+    }
     return destination;
   }
-  throw new Error("TypeUp update download failed");
+  throw lastError || new Error("TypeUp update download failed");
+}
+
+function getDownloadCandidates(update = {}) {
+  const assetUrl = update.installerAssetId ? `${GITHUB_API_BASE}/releases/assets/${update.installerAssetId}` : "";
+  return unique([assetUrl, update.installerUrl, ...(asArray(update.installerUrls))]);
 }
 
 function downloadWithPowerShell(url, destination) {
@@ -472,7 +737,7 @@ async function verifyDownloadedFile(destination, update) {
   if (expectedSize && stat.size !== expectedSize) {
     throw new Error(`Downloaded installer size mismatch: expected ${expectedSize}, got ${stat.size}`);
   }
-  const digest = String(update?.installerDigest || "");
+  const digest = normalizeInstallerDigest(update?.installerDigest || update?.sha256 || "");
   const match = digest.match(/^sha256:([0-9a-f]{64})$/i);
   if (!match) return;
   const actual = await hashFile(destination, "sha256");
@@ -496,16 +761,18 @@ function createDirectInstallerUpdate(info = {}, platform = process.platform) {
   const files = Array.isArray(info.files) ? info.files : [];
   const installerName = findInstallerFileName(files, version) || `TypeUp-Setup-${version}.exe`;
   const installerSize = findInstallerFileSize(files, installerName);
+  const installerUrl = `${GENERIC_RELEASE_BASE}/${encodeURIComponent(installerName)}`;
   return {
     version,
     releaseName: info.releaseName || `TypeUp ${version}`,
     releaseNotes: normalizeReleaseNotes(info.releaseNotes || ""),
     releaseUrl: info.releaseUrl || "",
     installerAssetId: "",
-    installerUrl: `${GENERIC_RELEASE_BASE}/${encodeURIComponent(installerName)}`,
+    installerUrl,
+    installerUrls: [installerUrl],
     installerName,
     installerSize,
-    installerDigest: "",
+    installerDigest: findInstallerFileDigest(files, installerName),
   };
 }
 
@@ -522,6 +789,14 @@ function findInstallerFileSize(files, installerName) {
     return name === installerName;
   }) || files.find((file) => String(file?.url || file?.path || file?.name || "").endsWith(".exe"));
   return Number(match?.size || 0);
+}
+
+function findInstallerFileDigest(files, installerName) {
+  const match = files.find((file) => {
+    const name = String(file?.url || file?.path || file?.name || "").trim();
+    return name === installerName;
+  }) || files.find((file) => String(file?.url || file?.path || file?.name || "").endsWith(".exe"));
+  return normalizeInstallerDigest(match?.sha256 || match?.digest || "");
 }
 
 function shouldRefreshUpdateBeforeDownload(status, hasFallbackUpdate, platform = process.platform) {
@@ -623,43 +898,123 @@ async function requestTextWithRetry(url, options = {}) {
   return buffer.toString("utf8");
 }
 
-function requestFile(url, destination, options = {}) {
+async function requestFile(url, destination, options = {}) {
+  await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+  const part = `${destination}.part`;
+  const expectedSize = Number(options.expectedSize || 0);
+  let resumeFrom = await getResumeOffset(part, expectedSize);
+  if (expectedSize && resumeFrom === expectedSize) {
+    await moveFile(part, destination);
+    return destination;
+  }
   return new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(destination);
     let settled = false;
+    let output = null;
 
     function fail(error) {
       if (settled) return;
       settled = true;
-      output.destroy();
-      fs.promises.unlink(destination).catch(() => {}).finally(() => reject(error));
+      if (output) output.destroy();
+      reject(error);
     }
 
-    request(url, options, (response) => {
+    const requestOptions = {
+      ...options,
+      headers: {
+        ...(options.headers || {}),
+        ...(resumeFrom > 0 ? { Range: `bytes=${resumeFrom}-` } : {}),
+      },
+    };
+    request(url, requestOptions, (response) => {
+      if (response.statusCode === 416 && expectedSize && resumeFrom === expectedSize) {
+        response.resume();
+        moveFile(part, destination).then(() => {
+          if (!settled) {
+            settled = true;
+            resolve(destination);
+          }
+        }).catch(fail);
+        return;
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        fail(new Error(`GitHub asset download failed: HTTP ${response.statusCode}`));
+        fail(httpError(`Update asset download failed: HTTP ${response.statusCode}`, response.statusCode));
         response.resume();
         return;
       }
 
-      const total = Number(response.headers["content-length"] || options.expectedSize || 0);
-      let received = 0;
+      const append = resumeFrom > 0 && response.statusCode === 206;
+      if (resumeFrom > 0 && !append) resumeFrom = 0;
+      output = fs.createWriteStream(part, { flags: append ? "a" : "w" });
+      const total = getResponseTotalSize(response, resumeFrom, expectedSize);
+      let received = resumeFrom;
+      if (typeof options.onProgress === "function") {
+        options.onProgress({
+          phase: "downloading",
+          percent: total > 0 ? Math.max(0, Math.min(100, (received / total) * 100)) : 0,
+          received,
+          total,
+        });
+      }
       response.on("data", (chunk) => {
         received += chunk.length;
         if (total > 0 && typeof options.onProgress === "function") {
-          options.onProgress(Math.max(0, Math.min(100, (received / total) * 100)));
+          options.onProgress({
+            phase: "downloading",
+            percent: Math.max(0, Math.min(100, (received / total) * 100)),
+            received,
+            total,
+          });
         }
       });
       response.on("error", fail);
       output.on("error", fail);
       output.on("finish", () => {
         if (settled) return;
-        settled = true;
-        resolve(destination);
+        if (expectedSize && received !== expectedSize) {
+          fail(new Error(`Downloaded installer size mismatch: expected ${expectedSize}, got ${received}`));
+          return;
+        }
+        moveFile(part, destination).then(() => {
+          if (!settled) {
+            settled = true;
+            resolve(destination);
+          }
+        }).catch(fail);
       });
       response.pipe(output);
     }).on("error", fail);
   });
+}
+
+async function getResumeOffset(part, expectedSize = 0) {
+  try {
+    const stat = await fs.promises.stat(part);
+    if (expectedSize && stat.size > expectedSize) {
+      await fs.promises.unlink(part).catch(() => {});
+      return 0;
+    }
+    return stat.size;
+  } catch (_error) {
+    return 0;
+  }
+}
+
+async function moveFile(source, destination) {
+  await fs.promises.unlink(destination).catch(() => {});
+  await fs.promises.rename(source, destination);
+}
+
+function getResponseTotalSize(response, resumeFrom = 0, expectedSize = 0) {
+  const contentRangeTotal = parseContentRangeTotal(response.headers["content-range"]);
+  if (contentRangeTotal) return contentRangeTotal;
+  const contentLength = Number(response.headers["content-length"] || 0);
+  if (response.statusCode === 206 && contentLength) return resumeFrom + contentLength;
+  return contentLength || expectedSize || 0;
+}
+
+function parseContentRangeTotal(value) {
+  const match = String(value || "").match(/\/(\d+)\s*$/);
+  return match ? Number(match[1]) : 0;
 }
 
 function requestBuffer(url, options = {}) {
@@ -667,7 +1022,7 @@ function requestBuffer(url, options = {}) {
     request(url, options, (response) => {
       if (response.statusCode < 200 || response.statusCode >= 300) {
         response.resume();
-        reject(new Error(`GitHub request failed: HTTP ${response.statusCode}`));
+        reject(httpError(`Update request failed: HTTP ${response.statusCode}`, response.statusCode));
         return;
       }
       const chunks = [];
@@ -695,6 +1050,17 @@ function request(url, options, callback) {
   });
   req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("GitHub request timed out")));
   return req;
+}
+
+function httpError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = Number(statusCode || 0);
+  error.code = `HTTP_${error.statusCode}`;
+  return error;
+}
+
+function isHttpStatus(error, statusCode) {
+  return Number(error?.statusCode || 0) === Number(statusCode);
 }
 
 function findReleaseAsset(release, version, extension) {
@@ -748,7 +1114,11 @@ function compareVersions(left, right) {
 function isRetryableUpdateError(error) {
   const text = error?.message || String(error || "");
   const code = error?.code || "";
+  const statusCode = Number(error?.statusCode || 0);
   return RETRYABLE_ERROR_CODES.has(code)
+    || statusCode === 408
+    || statusCode === 429
+    || statusCode >= 500
     || /ERR_CONNECTION_RESET|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|socket hang up|network|timed out|timeout/i.test(text);
 }
 
@@ -758,13 +1128,18 @@ function delay(ms) {
 
 module.exports = {
   setupAutoUpdates,
+  createManifestInstallerUpdate,
   createDirectInstallerUpdate,
   compareVersions,
+  getDownloadCandidates,
   isRetryableUpdateError,
+  normalizeInstallerDigest,
   parseVersion,
+  parseContentRangeTotal,
   parseLatestYmlPath,
   parseLatestYmlSize,
   parseLatestYmlVersion,
+  requestFileWithRetry,
   shouldUseDirectInstallerDownload,
   shouldUseGithubApiUpdates,
   shouldRefreshUpdateBeforeDownload,
