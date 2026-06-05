@@ -438,6 +438,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.11": {
+    releaseName: "TypeUp 0.3.11",
+    zh: {
+      summary: "本次修复下载完成后点击立即安装只关闭应用、不自动安装重启的问题。",
+      items: [
+        "Windows fallback 安装器改用独立的隐藏启动器，应用退出后仍会继续启动 NSIS 安装包。",
+        "安装启动脚本继续等待旧 TypeUp 进程退出，再静默安装并触发更新后的自动重启。",
+        "新增回归测试，确保安装启动链路不再依赖会被 Electron 退出带掉的子进程。",
+      ],
+    },
+    en: {
+      summary: "This hotfix fixes update installs that closed TypeUp but did not continue installing or restarting.",
+      items: [
+        "The Windows fallback installer now uses an independent hidden launcher so the NSIS installer still starts after TypeUp exits.",
+        "The install launcher still waits for the old TypeUp process to exit, then performs the silent install and update relaunch.",
+        "Regression coverage now locks the install launcher path so it no longer depends on a child process that Electron can tear down.",
+      ],
+    },
+  },
   "0.3.10": {
     releaseName: "TypeUp 0.3.10",
     zh: {

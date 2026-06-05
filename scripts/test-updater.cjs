@@ -99,16 +99,19 @@ assert.equal(createDirectInstallerUpdate({ version: "0.3.8" }, "darwin"), null);
 const installerPath = "C:\\Users\\TypeUp User\\Downloads\\TypeUp-Setup-0.1.23.exe";
 const command = windowsFallbackInstallerCommand(installerPath, 1234);
 
-assert.equal(command.command, "powershell.exe");
+assert.equal(command.command, "cmd.exe");
 assert.equal(command.options.detached, true);
 assert.equal(command.options.windowsHide, true);
-assert.equal(command.args.at(-2), "1234");
-assert.equal(command.args.at(-1), installerPath);
-const script = command.args[4];
+assert.deepEqual(command.args.slice(0, 6), ["/d", "/s", "/c", "start", "\"\"", "/min"]);
+assert.equal(command.args.includes("-EncodedCommand"), true);
+const encodedScript = command.args.at(-1);
+const script = Buffer.from(encodedScript, "base64").toString("utf16le");
 assert.match(script, /Wait-Process -Id \$pidToWait/);
 assert.match(script, /Start-Process -FilePath \$installer/);
 assert.match(script, /--updated/);
-assert.doesNotMatch(script, /TypeUp-Setup-0\.1\.23/);
+assert.match(script, /1234/);
+assert.match(script, /TypeUp-Setup-0\.1\.23/);
+assert.doesNotMatch(command.args.join(" "), /TypeUp-Setup-0\.1\.23/);
 
   await testRangeResumeDownload();
 

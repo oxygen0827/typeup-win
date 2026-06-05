@@ -830,22 +830,29 @@ function spawnWindowsFallbackInstaller(installerPath, waitForPid = process.pid) 
 function windowsFallbackInstallerCommand(installerPath, waitForPid = process.pid) {
   const script = [
     "$ErrorActionPreference = 'Stop'",
-    "$pidToWait = [int]$args[0]",
-    "$installer = $args[1]",
+    `$pidToWait = ${Number(waitForPid) || 0}`,
+    `$installer = ${powerShellStringLiteral(installerPath)}`,
     "Wait-Process -Id $pidToWait -ErrorAction SilentlyContinue",
     "Start-Sleep -Milliseconds 500",
     "Start-Process -FilePath $installer -ArgumentList @('/S', '--updated', '--force-run')",
   ].join("; ");
   return {
-    command: "powershell.exe",
+    command: "cmd.exe",
     args: [
+      "/d",
+      "/s",
+      "/c",
+      "start",
+      "\"\"",
+      "/min",
+      "powershell.exe",
       "-NoProfile",
       "-ExecutionPolicy",
       "Bypass",
-      "-Command",
-      script,
-      String(waitForPid),
-      installerPath,
+      "-WindowStyle",
+      "Hidden",
+      "-EncodedCommand",
+      encodePowerShellCommand(script),
     ],
     options: {
       detached: true,
@@ -853,6 +860,14 @@ function windowsFallbackInstallerCommand(installerPath, waitForPid = process.pid
       windowsHide: true,
     },
   };
+}
+
+function powerShellStringLiteral(value) {
+  return `'${String(value || "").replace(/'/g, "''")}'`;
+}
+
+function encodePowerShellCommand(script) {
+  return Buffer.from(script, "utf16le").toString("base64");
 }
 
 function hashFile(filePath, algorithm) {
