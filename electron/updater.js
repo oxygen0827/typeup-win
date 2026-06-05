@@ -352,13 +352,13 @@ function setupAutoUpdates({ app, ipcMain, getMainWindow, isDev, beforeInstall })
     try {
       setState({ status: "installing", phase: "preparing", error: "" });
       await writePendingReleaseNotes().catch(() => {});
-      if (typeof beforeInstall === "function") {
-        await beforeInstall();
-      }
       if (fallbackInstallerPath) {
         await verifyDownloadedFile(fallbackInstallerPath, fallbackUpdate);
         launchFallbackInstaller(app, fallbackInstallerPath);
       } else {
+        if (typeof beforeInstall === "function") {
+          await beforeInstall();
+        }
         autoUpdater.quitAndInstall(true, true);
       }
     } catch (error) {
@@ -815,10 +815,17 @@ function launchFallbackInstaller(app, installerPath) {
       stdio: "ignore",
     });
   child.unref();
+  const exitApp = () => {
+    if (typeof app.exit === "function") {
+      app.exit(0);
+    } else {
+      app.quit();
+    }
+  };
   if (typeof app.exit === "function") {
-    app.exit(0);
+    setTimeout(exitApp, 250);
   } else {
-    app.quit();
+    exitApp();
   }
 }
 

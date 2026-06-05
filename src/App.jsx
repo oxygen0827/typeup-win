@@ -438,6 +438,25 @@ const DEFAULT_UPDATE_STATE = {
 const RELEASE_NOTES_SEEN_KEY = "typeup.releaseNotes.seen";
 
 const BUILTIN_RELEASE_NOTES = {
+  "0.3.14": {
+    releaseName: "TypeUp 0.3.14",
+    zh: {
+      summary: "修复点击“立即安装并重启”后应用先退出、安装器没有机会启动的问题。",
+      items: [
+        "远程更新安装器会先启动外部安装脚本，再退出当前 TypeUp。",
+        "保留当前用户安装目录兜底，避免静默更新安装到错误位置。",
+        "继续保留安装器启动日志，便于确认安装动作已经发生。",
+      ],
+    },
+    en: {
+      summary: "Fixes the flow where Install and restart could exit TypeUp before the installer had a chance to launch.",
+      items: [
+        "Starts the external installer script before exiting the current TypeUp process.",
+        "Keeps the current-user install fallback for silent updates.",
+        "Keeps installer launch logging so install attempts are observable.",
+      ],
+    },
+  },
   "0.3.13": {
     releaseName: "TypeUp 0.3.13",
     zh: {
